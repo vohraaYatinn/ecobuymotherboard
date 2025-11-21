@@ -1,0 +1,17 @@
+/ecommerce/node_modules
+/ecommerce/package-lock.json
+/ecommerce/pnpm-lock.yaml
+/ecommerce/pnpm-workspace.yaml
+/ecommerce/pnpm-workspace.yaml
+
+/vendor/node_modules
+/vendor/package-lock.json
+/vendor/pnpm-lock.yaml
+/vendor/pnpm-workspace.yaml
+/vendor/pnpm-workspace.yaml
+
+node_modules/
+**/node_modules/
+.next/
+dist/
+build/
