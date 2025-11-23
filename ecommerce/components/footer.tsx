@@ -12,7 +12,7 @@ export function Footer() {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
                 <span className="text-lg font-bold text-primary-foreground">E</span>
               </div>
-              <span className="text-xl font-bold text-secondary-foreground">EcoBuy</span>
+              <span className="text-xl font-bold text-secondary-foreground">Elecobuy</span>
             </Link>
             <p className="text-sm text-muted-foreground leading-relaxed mb-4">
               Your trusted partner for premium television PCB boards and motherboards. Quality products, reliable
@@ -97,7 +97,7 @@ export function Footer() {
 
         <div className="mt-12 border-t border-border pt-8">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-            <p className="text-sm text-muted-foreground">© 2025 EcoBuy. All rights reserved.</p>
+            <p className="text-sm text-muted-foreground">© 2025 Elecobuy. All rights reserved.</p>
             <div className="flex gap-6 text-sm">
               <Link href="/terms" className="text-muted-foreground transition-colors hover:text-primary">
                 Privacy Policy

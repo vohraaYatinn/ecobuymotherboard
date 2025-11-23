@@ -1,27 +1,127 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { API_URL } from "@/lib/api-config"
 
 export default function LoginPage() {
   const router = useRouter()
-  const [countryCode, setCountryCode] = useState("+91")
+  const countryCode = "+91" // Fixed to India - no dropdown needed
   const [phone, setPhone] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem("vendorToken")
+      
+      if (!token) {
+        setIsCheckingAuth(false)
+        return
+      }
+
+      try {
+        // Verify token by fetching profile
+        const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        const data = await response.json()
+
+        if (response.ok && data.success) {
+          // Token is valid, redirect to dashboard
+          router.push("/dashboard")
+        } else {
+          // Token is invalid, clear it
+          localStorage.removeItem("vendorToken")
+          localStorage.removeItem("vendorData")
+          setIsCheckingAuth(false)
+        }
+      } catch (error) {
+        // Error checking auth, clear token and show login
+        console.error("Error checking auth:", error)
+        localStorage.removeItem("vendorToken")
+        localStorage.removeItem("vendorData")
+        setIsCheckingAuth(false)
+      }
+    }
+
+    checkAuth()
+  }, [router])
 
   const handleGetOTP = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    router.push(`/otp?phone=${encodeURIComponent(countryCode + phone)}`)
+    setError("")
+
+    try {
+      const countryCodeNum = countryCode.replace("+", "")
+      const response = await fetch(`${API_URL}/api/vendor-auth/send-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mobile: phone,
+          countryCode: countryCodeNum,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.message || "Failed to send OTP. Please try again.")
+        setIsLoading(false)
+        return
+      }
+
+      // Store verification ID in sessionStorage
+      sessionStorage.setItem("vendorVerificationId", data.verificationId)
+      sessionStorage.setItem("vendorMobile", data.mobile)
+
+      // Redirect to OTP page
+      router.push(`/otp?phone=${encodeURIComponent(data.mobile)}`)
+    } catch (err) {
+      console.error("Error sending OTP:", err)
+      setError("Network error. Please check if the server is running.")
+      setIsLoading(false)
+    }
+  }
+
+  // Show loading while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div
+        className="flex h-screen flex-col items-center justify-center bg-background"
+        style={{
+          paddingTop: `calc(1.5rem + env(safe-area-inset-top, 0px))`,
+          paddingBottom: `calc(1.5rem + env(safe-area-inset-bottom, 0px))`,
+        }}
+      >
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+          <p className="mt-4 text-sm text-muted-foreground">Checking authentication...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background px-6 pt-6 pb-6">
+    <div
+      className="flex h-screen flex-col bg-background px-6"
+      style={{
+        paddingTop: `calc(1.5rem + env(safe-area-inset-top, 0px))`,
+        paddingBottom: `calc(1.5rem + env(safe-area-inset-bottom, 0px))`,
+      }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <button className="text-muted-foreground">
@@ -49,7 +149,7 @@ export default function LoginPage() {
               />
             </svg>
           </div>
-          <span className="text-xl font-bold text-primary">VendorHub</span>
+          <span className="text-xl font-bold text-primary">Elecobuy Seller</span>
         </div>
       </div>
 
@@ -106,20 +206,23 @@ export default function LoginPage() {
         <p className="mt-1 text-sm text-muted-foreground">Hey, You haven't login a minute!</p>
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <div className="mb-4 rounded-md bg-destructive/10 border border-destructive/20 p-3">
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
+
       {/* Phone Input Form */}
       <form onSubmit={handleGetOTP} className="space-y-4">
         <div className="flex gap-2">
-          <Select value={countryCode} onValueChange={setCountryCode}>
-            <SelectTrigger className="w-24 h-14 bg-muted/50 border-border">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="+91">+91</SelectItem>
-              <SelectItem value="+1">+1</SelectItem>
-              <SelectItem value="+44">+44</SelectItem>
-              <SelectItem value="+86">+86</SelectItem>
-            </SelectContent>
-          </Select>
+          <Input
+            type="text"
+            value={countryCode}
+            disabled
+            className="w-24 h-14 bg-muted/50 border-border text-base text-center cursor-not-allowed"
+            readOnly
+          />
           <div className="relative flex-1">
             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground">
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -139,6 +242,7 @@ export default function LoginPage() {
               maxLength={10}
               className="h-14 pl-12 bg-muted/50 border-border text-base"
               required
+              disabled={isLoading}
             />
           </div>
         </div>
@@ -146,7 +250,7 @@ export default function LoginPage() {
         <Button
           type="submit"
           disabled={isLoading || phone.length < 10}
-          className="w-full h-14 bg-primary hover:bg-primary/90 text-white text-base font-semibold shadow-lg shadow-primary/30 transition-all hover:shadow-xl"
+          className="w-full h-14 bg-primary hover:bg-primary/90 text-white text-base font-semibold shadow-lg shadow-primary/30 transition-all hover:shadow-xl disabled:opacity-50"
         >
           {isLoading ? (
             <span className="flex items-center gap-2">

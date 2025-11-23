@@ -1,35 +1,282 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import { API_URL } from "@/lib/api-config"
+
+interface VendorUserData {
+  id: string
+  mobile: string
+  name: string
+  email: string
+  vendorId: string | null
+  isActive: boolean
+}
+
+interface VendorData {
+  id: string
+  name: string
+  username: string
+  phone: string
+  email: string
+  status: string
+  address: {
+    firstName: string
+    lastName: string
+    address1: string
+    address2?: string
+    city: string
+    state: string
+    postcode: string
+    country: string
+  }
+  formattedAddress: string
+  totalProducts: number
+  ordersFulfilled: number
+  isActive: boolean
+}
 
 export default function ProfilePage() {
+  const router = useRouter()
+  const { toast } = useToast()
   const [isEditing, setIsEditing] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [vendorUser, setVendorUser] = useState<VendorUserData | null>(null)
+  const [vendor, setVendor] = useState<VendorData | null>(null)
 
-  const vendor = {
-    name: "Arjun Malhotra",
-    email: "arjun@vendorhub.in",
-    phone: "+91 98765 43210",
-    businessName: "Malhotra Electronics",
-    storeName: "Premium Tech Store",
-    address: "Shop 12, MG Road, Bangalore, Karnataka 560001",
+  // Form state
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    businessName: "",
+    phone: "",
+    address1: "",
+    address2: "",
+    city: "",
+    state: "",
+    postcode: "",
+    country: "india",
+  })
+
+  useEffect(() => {
+    fetchProfile()
+  }, [])
+
+  const fetchProfile = async () => {
+    try {
+      setLoading(true)
+      setError("")
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        if (response.status === 401) {
+          localStorage.removeItem("vendorToken")
+          localStorage.removeItem("vendorData")
+          router.push("/login")
+          return
+        }
+        setError(data.message || "Failed to load profile")
+        return
+      }
+
+      setVendorUser(data.data.vendorUser)
+      if (data.data.vendor) {
+        setVendor(data.data.vendor)
+        // Populate form with vendor data
+        setFormData({
+          name: data.data.vendorUser.name || "",
+          email: data.data.vendorUser.email || "",
+          businessName: data.data.vendor.name || "",
+          phone: data.data.vendor.phone || "",
+          address1: data.data.vendor.address?.address1 || "",
+          address2: data.data.vendor.address?.address2 || "",
+          city: data.data.vendor.address?.city || "",
+          state: data.data.vendor.address?.state || "",
+          postcode: data.data.vendor.address?.postcode || "",
+          country: data.data.vendor.address?.country || "india",
+        })
+      } else {
+        // No vendor linked, just set vendor user data
+        setFormData({
+          name: data.data.vendorUser.name || "",
+          email: data.data.vendorUser.email || "",
+          businessName: "",
+          phone: "",
+          address1: "",
+          address2: "",
+          city: "",
+          state: "",
+          postcode: "",
+          country: "india",
+        })
+      }
+    } catch (err) {
+      console.error("Error fetching profile:", err)
+      setError("Network error. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      setError("")
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      // Update vendor user profile (name, email)
+      const userUpdateResponse = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+        }),
+      })
+
+      const userUpdateData = await userUpdateResponse.json()
+
+      if (!userUpdateResponse.ok || !userUpdateData.success) {
+        throw new Error(userUpdateData.message || "Failed to update profile")
+      }
+
+      // Update vendor business info if vendor is linked
+      if (vendor) {
+        const vendorUpdateResponse = await fetch(`${API_URL}/api/vendor-auth/profile/vendor`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: formData.businessName,
+            phone: formData.phone,
+            address: {
+              firstName: formData.name.split(" ")[0] || "",
+              lastName: formData.name.split(" ").slice(1).join(" ") || "",
+              address1: formData.address1,
+              address2: formData.address2,
+              city: formData.city,
+              state: formData.state,
+              postcode: formData.postcode,
+              country: formData.country,
+            },
+          }),
+        })
+
+        const vendorUpdateData = await vendorUpdateResponse.json()
+
+        if (!vendorUpdateResponse.ok || !vendorUpdateData.success) {
+          throw new Error(vendorUpdateData.message || "Failed to update business information")
+        }
+      }
+
+      setIsEditing(false)
+      toast({
+        title: "Success",
+        description: "Profile updated successfully",
+      })
+
+      // Refresh profile data
+      await fetchProfile()
+    } catch (err: any) {
+      console.error("Error saving profile:", err)
+      setError(err.message || "Failed to save changes")
+      toast({
+        title: "Error",
+        description: err.message || "Failed to save changes",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleLogout = async () => {
+    try {
+      localStorage.removeItem("vendorToken")
+      localStorage.removeItem("vendorData")
+      router.push("/login")
+    } catch (err) {
+      console.error("Logout error:", err)
+      router.push("/login")
+    }
+  }
+
+  const getInitials = (name: string) => {
+    if (!name) return "N/A"
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  if (loading) {
+    return (
+      <div className="h-screen flex flex-col bg-gradient-to-br from-primary/10 via-primary/5 to-background">
+        <div className="flex-none bg-white shadow-md safe-top" style={{ paddingTop: `calc(1rem + env(safe-area-inset-top, 0px))` }}>
+          <div className="px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-bold tracking-tight text-foreground">Profile</h1>
+                <p className="text-xs text-muted-foreground mt-0.5">Manage your account settings</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+        <BottomNav />
+      </div>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <div className="sticky top-0 z-10 border-b-2 border-border/50 bg-card/98 backdrop-blur-xl shadow-sm">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-primary/10 via-primary/5 to-background">
+      {/* Header - Fixed at top */}
+      <div className="flex-none bg-white shadow-md safe-top sticky top-0 z-10" style={{ paddingTop: `calc(1rem + env(safe-area-inset-top, 0px))` }}>
         <div className="px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">Profile</h1>
+              <h1 className="text-xl font-bold tracking-tight text-foreground">Profile</h1>
               <p className="text-xs text-muted-foreground mt-0.5">Manage your account settings</p>
             </div>
-            <button className="flex h-11 w-11 items-center justify-center rounded-xl bg-destructive/10 text-destructive hover:bg-destructive/20 transition-all hover:scale-105 border-2 border-destructive/20 shadow-sm">
+            <button
+              onClick={handleLogout}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-destructive/10 to-destructive/5 text-destructive hover:from-destructive/20 hover:to-destructive/10 transition-all hover:scale-105 border-2 border-destructive/20 shadow-sm"
+            >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
@@ -43,18 +290,30 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      <div className="px-4 py-6 space-y-4">
-        <Card className="border-2 border-border/50 bg-gradient-to-br from-card to-primary/5 shadow-lg animate-fade-in">
-          <CardContent className="p-6">
+      <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8 space-y-5" style={{ paddingBottom: `calc(7rem + env(safe-area-inset-bottom, 0px))` }}>
+        {error && (
+          <div className="rounded-3xl bg-gradient-to-br from-destructive/10 to-destructive/5 border-2 border-destructive/20 shadow-xl p-4">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
+              <p className="text-sm text-destructive flex-1">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Profile Header Card */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-card via-card to-card/95 shadow-xl border border-border/30">
+          {/* Decorative gradient overlay */}
+          <div className="absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl opacity-20 bg-primary/20"></div>
+          <CardContent className="p-6 relative z-10">
             <div className="flex items-start gap-4 mb-6">
-              <div className="relative animate-float">
-                <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-primary/80 text-white text-3xl font-bold shadow-xl shadow-primary/40">
-                  {vendor.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
+              <div className="relative flex-shrink-0">
+                <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/80 text-white text-3xl font-bold shadow-xl shadow-primary/40">
+                  {getInitials(formData.name || vendorUser?.name || "N/A")}
                 </div>
-                <button className="absolute -bottom-2 -right-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white border-2 border-primary text-primary shadow-lg hover:scale-110 transition-transform">
+                <button
+                  disabled={!isEditing}
+                  className="absolute -bottom-2 -right-2 flex h-10 w-10 items-center justify-center rounded-xl bg-white border-2 border-primary text-primary shadow-lg hover:scale-110 transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"
@@ -72,96 +331,236 @@ export default function ProfilePage() {
                 </button>
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-bold text-foreground">{vendor.name}</h2>
-                <p className="text-sm font-medium text-primary mt-1">{vendor.businessName}</p>
-                <p className="text-xs text-muted-foreground mt-1">{vendor.email}</p>
+                <h2 className="text-xl font-bold text-foreground truncate">{formData.name || vendorUser?.name || "N/A"}</h2>
+                <p className="text-sm font-medium text-primary mt-1 truncate">{formData.businessName || vendor?.name || "No business linked"}</p>
+                <p className="text-xs text-muted-foreground mt-1 truncate">{formData.email || vendorUser?.email || "N/A"}</p>
                 <div className="mt-3 flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-chart-3 animate-pulse" />
-                  <span className="text-xs font-medium text-chart-3">Active</span>
+                  <span className="text-xs font-medium text-chart-3">
+                    {vendor?.status === "approved" ? "Active" : vendor?.status || "Pending"}
+                  </span>
                 </div>
               </div>
             </div>
             <Button
-              onClick={() => setIsEditing(!isEditing)}
-              className="w-full h-12 bg-gradient-to-r from-primary to-primary/90 hover:shadow-lg transition-all text-base font-semibold"
+              onClick={isEditing ? handleSave : () => setIsEditing(true)}
+              disabled={saving}
+              className="w-full h-12 bg-gradient-to-r from-primary via-primary/90 to-primary/80 hover:shadow-xl transition-all text-base font-semibold rounded-2xl"
             >
-              <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                />
-              </svg>
-              {isEditing ? "Save Changes" : "Edit Profile"}
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Saving...
+                </>
+              ) : isEditing ? (
+                <>
+                  <CheckCircle2 className="mr-2 h-5 w-5" />
+                  Save Changes
+                </>
+              ) : (
+                <>
+                  <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                  Edit Profile
+                </>
+              )}
             </Button>
           </CardContent>
-        </Card>
+        </div>
 
-        {/* Business Information */}
-        <Card
-          className="border-2 border-border/50 bg-card shadow-md animate-fade-in"
-          style={{ animationDelay: "100ms" }}
-        >
+        {/* Personal Information */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-card via-card to-card/95 shadow-xl border border-border/30">
           <CardContent className="p-5">
             <div className="flex items-center gap-2 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/10">
                 <svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                   />
                 </svg>
               </div>
-              <h3 className="text-base font-bold text-foreground">Business Information</h3>
+              <h3 className="text-base font-bold text-foreground">Personal Information</h3>
             </div>
             <div className="space-y-4">
               <div>
-                <Label
-                  htmlFor="store-name"
-                  className="text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                >
-                  Store Name
+                <Label htmlFor="name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Full Name
                 </Label>
                 <Input
-                  id="store-name"
-                  value={vendor.storeName}
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   disabled={!isEditing}
-                  className="mt-2 h-11 bg-muted/50 border-border"
+                  className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
                 />
               </div>
               <div>
-                <Label htmlFor="phone" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Phone Number
+                <Label htmlFor="email" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Email Address
                 </Label>
                 <Input
-                  id="phone"
-                  value={vendor.phone}
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   disabled={!isEditing}
-                  className="mt-2 h-11 bg-muted/50 border-border"
-                />
-              </div>
-              <div>
-                <Label
-                  htmlFor="address"
-                  className="text-xs font-semibold text-muted-foreground uppercase tracking-wide"
-                >
-                  Business Address
-                </Label>
-                <Input
-                  id="address"
-                  value={vendor.address}
-                  disabled={!isEditing}
-                  className="mt-2 h-11 bg-muted/50 border-border"
+                  className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
                 />
               </div>
             </div>
           </CardContent>
-        </Card>
+        </div>
 
-        {/* Settings - keeping existing structure */}
+        {/* Business Information */}
+        {vendor && (
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-card via-card to-card/95 shadow-xl border border-border/30">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/10">
+                  <svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-base font-bold text-foreground">Business Information</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="business-name" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Business Name
+                  </Label>
+                  <Input
+                    id="business-name"
+                    value={formData.businessName}
+                    onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                    disabled={!isEditing}
+                    className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="phone" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Phone Number
+                  </Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    disabled={!isEditing}
+                    className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="address1" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Address Line 1
+                  </Label>
+                  <Input
+                    id="address1"
+                    value={formData.address1}
+                    onChange={(e) => setFormData({ ...formData, address1: e.target.value })}
+                    disabled={!isEditing}
+                    className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="address2" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Address Line 2 (Optional)
+                  </Label>
+                  <Input
+                    id="address2"
+                    value={formData.address2}
+                    onChange={(e) => setFormData({ ...formData, address2: e.target.value })}
+                    disabled={!isEditing}
+                    className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="city" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      City
+                    </Label>
+                    <Input
+                      id="city"
+                      value={formData.city}
+                      onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                      disabled={!isEditing}
+                      className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="state" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      State
+                    </Label>
+                    <Input
+                      id="state"
+                      value={formData.state}
+                      onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                      disabled={!isEditing}
+                      className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="postcode" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Postcode
+                    </Label>
+                    <Input
+                      id="postcode"
+                      value={formData.postcode}
+                      onChange={(e) => setFormData({ ...formData, postcode: e.target.value })}
+                      disabled={!isEditing}
+                      className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="country" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Country
+                    </Label>
+                    <Input
+                      id="country"
+                      value={formData.country}
+                      onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                      disabled={!isEditing}
+                      className="mt-2 h-12 bg-gradient-to-r from-muted/60 to-muted/40 border-border/50 rounded-2xl"
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </div>
+        )}
+
+        {!vendor && (
+          <div className="rounded-3xl bg-gradient-to-br from-card via-card to-card/95 shadow-xl border border-border/30 p-6 text-center">
+            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/30">
+              <svg className="h-8 w-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-muted-foreground mb-2">No Business Account Linked</p>
+            <p className="text-xs text-muted-foreground">Contact admin to link your vendor account</p>
+          </div>
+        )}
+
+        {/* Settings */}
         {[
           {
             title: "Notifications",
@@ -199,14 +598,10 @@ export default function ProfilePage() {
             ],
           },
         ].map((group, groupIndex) => (
-          <Card
-            key={groupIndex}
-            className="border-2 border-border/50 bg-card shadow-md animate-fade-in"
-            style={{ animationDelay: `${300 + groupIndex * 50}ms` }}
-          >
+          <div key={groupIndex} className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-card via-card to-card/95 shadow-xl border border-border/30">
             <CardContent className="p-5">
               <div className="flex items-center gap-2 mb-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/10">
                   <svg className="h-5 w-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     {groupIndex === 0 ? (
                       <path
@@ -232,100 +627,102 @@ export default function ProfilePage() {
                   <div
                     key={item.id}
                     className={`flex items-start justify-between ${
-                      itemIndex !== group.items.length - 1 ? "pb-4 border-b border-border/50" : ""
+                      itemIndex !== group.items.length - 1 ? "pb-4 border-b border-border/30" : ""
                     }`}
                   >
                     <div className="flex-1 pr-4">
                       <p className="text-sm font-semibold text-foreground">{item.label}</p>
                       <p className="text-xs text-muted-foreground mt-1">{item.description}</p>
                     </div>
-                    <Switch defaultChecked={item.checked} />
+                    <Switch defaultChecked={item.checked} disabled={!isEditing} />
                   </div>
                 ))}
               </div>
             </CardContent>
-          </Card>
+          </div>
         ))}
 
-        <Card
-          className="border-2 border-border/50 bg-card shadow-md animate-fade-in"
-          style={{ animationDelay: "400ms" }}
-        >
-          <CardContent className="p-0">
-            {[
-              {
-                icon: (
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                    />
-                  </svg>
-                ),
-                color: "primary",
-                title: "Security",
-                description: "Password and authentication",
-              },
-              {
-                icon: (
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                ),
-                color: "chart-3",
-                title: "Help & Support",
-                description: "Get help and contact us",
-              },
-              {
-                icon: (
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                ),
-                color: "chart-4",
-                title: "About",
-                description: "Version 1.0.0",
-              },
-            ].map((option, index) => (
-              <div key={index}>
-                {index > 0 && <div className="border-t border-border/50" />}
-                <button className="flex w-full items-center justify-between p-5 hover:bg-muted/50 transition-all group">
-                  <div className="flex items-center gap-4">
-                    <div
-                      className={`flex h-12 w-12 items-center justify-center rounded-xl bg-${option.color}/10 text-${option.color} group-hover:scale-110 transition-transform`}
-                    >
-                      {option.icon}
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-semibold text-foreground">{option.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{option.description}</p>
-                    </div>
-                  </div>
-                  <svg
-                    className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+        {/* Additional Options */}
+        <div className="rounded-3xl bg-gradient-to-br from-card via-card to-card/95 shadow-xl border border-border/30 overflow-hidden">
+          {[
+            {
+              icon: (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  />
+                </svg>
+              ),
+              color: "primary",
+              title: "Security",
+              description: "Password and authentication",
+            },
+            {
+              icon: (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              ),
+              color: "chart-3",
+              title: "Help & Support",
+              description: "Get help and contact us",
+            },
+            {
+              icon: (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              ),
+              color: "chart-2",
+              title: "About",
+              description: "Version 1.0.0",
+            },
+          ].map((option, index) => (
+            <div key={index}>
+              {index > 0 && <div className="border-t border-border/30" />}
+              <button className="flex w-full items-center justify-between p-5 hover:bg-gradient-to-r hover:from-primary/5 hover:to-transparent transition-all group">
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`flex h-12 w-12 items-center justify-center rounded-2xl group-hover:scale-110 transition-transform shadow-lg ${
+                      option.color === "primary"
+                        ? "bg-gradient-to-br from-primary/20 to-primary/10 text-primary"
+                        : option.color === "chart-3"
+                          ? "bg-gradient-to-br from-chart-3/20 to-chart-3/10 text-chart-3"
+                          : "bg-gradient-to-br from-chart-2/20 to-chart-2/10 text-chart-2"
+                    }`}
                   >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                    {option.icon}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-foreground">{option.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{option.description}</p>
+                  </div>
+                </div>
+                <svg
+                  className="h-5 w-5 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
       </div>
 
       <BottomNav />

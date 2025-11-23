@@ -68,8 +68,8 @@ export function BottomNav() {
   ]
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-border bg-card/98 backdrop-blur-xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
-      <div className="flex items-center justify-around px-2 py-3">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-border bg-card/98 backdrop-blur-xl shadow-[0_-4px_12px_rgba(0,0,0,0.05)] safe-bottom" style={{ paddingBottom: `calc(0.75rem + env(safe-area-inset-bottom, 0px))` }}>
+      <div className="flex items-center justify-around px-2 py-3 safe-left safe-right">
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
           return (

@@ -33,7 +33,7 @@ export function VendorRegistrationForm() {
     <div className="rounded-lg border border-border bg-card p-8">
       <h2 className="text-2xl font-bold mb-6">Vendor Registration</h2>
       <p className="text-muted-foreground mb-8">
-        Fill in the details below to register as a seller on EcoBuy. All fields marked with * are required.
+        Fill in the details below to register as a seller on Elecobuy. All fields marked with * are required.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-6">

@@ -23,22 +23,26 @@ export function ProductsSidebar() {
 
   return (
     <aside className="w-full lg:w-64 shrink-0">
-      <div className="rounded-lg border border-border bg-card p-6">
-        <div className="mb-6">
+      <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
+        <div className="mb-4 sm:mb-6">
           <button
             onClick={() => setShowCategories(!showCategories)}
-            className="flex w-full items-center justify-between text-lg font-semibold mb-4"
+            className="flex w-full items-center justify-between text-base sm:text-lg font-semibold mb-3 sm:mb-4 touch-manipulation"
+            aria-expanded={showCategories}
           >
-            Categories
-            {showCategories ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            <span>Categories</span>
+            {showCategories ? <ChevronUp className="h-4 w-4 sm:h-5 sm:w-5" /> : <ChevronDown className="h-4 w-4 sm:h-5 sm:w-5" />}
           </button>
 
           {showCategories && (
-            <div className="space-y-3">
+            <div className="space-y-2.5 sm:space-y-3 max-h-[60vh] overflow-y-auto">
               {categories.map((category) => (
-                <div key={category} className="flex items-start gap-2">
-                  <Checkbox id={category} className="mt-0.5" />
-                  <Label htmlFor={category} className="text-sm leading-tight cursor-pointer hover:text-primary">
+                <div key={category} className="flex items-start gap-2.5 sm:gap-3">
+                  <Checkbox id={category} className="mt-0.5 h-4 w-4 sm:h-5 sm:w-5" />
+                  <Label 
+                    htmlFor={category} 
+                    className="text-xs sm:text-sm leading-relaxed cursor-pointer hover:text-primary touch-manipulation flex-1"
+                  >
                     {category}
                   </Label>
                 </div>
@@ -47,7 +51,7 @@ export function ProductsSidebar() {
           )}
         </div>
 
-        <Button className="w-full bg-transparent" variant="outline">
+        <Button className="w-full bg-transparent h-10 sm:h-11 text-sm sm:text-base touch-manipulation" variant="outline">
           Apply Filters
         </Button>
       </div>

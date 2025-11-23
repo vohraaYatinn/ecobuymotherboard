@@ -1,14 +1,24 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { PushNotificationProvider } from '@/components/push-notification-provider'
+import { NavigationProvider } from '@/contexts/navigation-context'
+import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+}
+
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'Elecobuy Seller',
+  description: 'Elecobuy Seller - Your Business Command Center',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -35,9 +45,14 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className={`font-sans antialiased`}>
-        {children}
+    <html lang="en" style={{ height: '100%', margin: 0, padding: 0 }}>
+      <body className={`font-sans antialiased`} style={{ height: '100%', margin: 0, padding: 0 }}>
+        <NavigationProvider>
+          <PushNotificationProvider>
+            {children}
+          </PushNotificationProvider>
+        </NavigationProvider>
+        <Toaster />
         <Analytics />
       </body>
     </html>

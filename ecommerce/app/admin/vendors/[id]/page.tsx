@@ -1,5 +1,6 @@
 import { AdminVendorDetail } from "@/components/admin/admin-vendor-detail"
 
-export default function AdminVendorDetailPage({ params }: { params: { id: string } }) {
-  return <AdminVendorDetail vendorId={params.id} />
+export default async function AdminVendorDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  return <AdminVendorDetail vendorId={id} />
 }

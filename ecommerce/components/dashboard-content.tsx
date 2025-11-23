@@ -1,15 +1,17 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Loader2 } from "lucide-react"
 import {
   User,
   ShoppingBag,
   Heart,
   MapPin,
-  Settings,
   LogOut,
   Package,
   Truck,
@@ -18,42 +20,155 @@ import {
   HeadphonesIcon,
 } from "lucide-react"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
+
+interface Order {
+  _id: string
+  orderNumber: string
+  status: string
+  total: number
+  items: Array<{ quantity: number }>
+  createdAt: string
+}
+
+interface Customer {
+  _id: string
+  name: string
+  mobile: string
+  email?: string
+}
+
+interface OrderStats {
+  total: number
+  pending: number
+  processing: number
+  shipped: number
+  delivered: number
+  cancelled: number
+}
+
 export function DashboardContent() {
-  const recentOrders = [
-    {
-      id: "ORD-2024-001",
-      date: "Jan 15, 2024",
-      status: "Delivered",
-      total: "Rs. 3,450.00",
-      items: 2,
-    },
-    {
-      id: "ORD-2024-002",
-      date: "Jan 20, 2024",
-      status: "In Transit",
-      total: "Rs. 5,670.00",
-      items: 1,
-    },
-    {
-      id: "ORD-2024-003",
-      date: "Jan 22, 2024",
-      status: "Processing",
-      total: "Rs. 2,340.00",
-      items: 3,
-    },
-  ]
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+  const [customer, setCustomer] = useState<Customer | null>(null)
+  const [stats, setStats] = useState<OrderStats | null>(null)
+  const [recentOrders, setRecentOrders] = useState<Order[]>([])
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const token = localStorage.getItem("customerToken")
+        if (!token) {
+          router.push("/login")
+          return
+        }
+
+        // Fetch customer profile
+        const customerRes = await fetch(`${API_URL}/api/customer-auth/profile`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (!customerRes.ok) {
+          throw new Error("Failed to fetch customer profile")
+        }
+
+        const customerData = await customerRes.json()
+        if (customerData.success) {
+          setCustomer(customerData.data)
+        }
+
+        // Fetch order stats
+        const statsRes = await fetch(`${API_URL}/api/orders/stats`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (statsRes.ok) {
+          const statsData = await statsRes.json()
+          if (statsData.success) {
+            setStats(statsData.data)
+          }
+        }
+
+        // Fetch recent orders
+        const ordersRes = await fetch(`${API_URL}/api/orders?limit=3`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (ordersRes.ok) {
+          const ordersData = await ordersRes.json()
+          if (ordersData.success) {
+            setRecentOrders(ordersData.data)
+          }
+        }
+      } catch (err: any) {
+        console.error("Error fetching dashboard data:", err)
+        setError(err.message || "Failed to load dashboard data")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [router])
+
+  const handleLogout = () => {
+    localStorage.removeItem("customerToken")
+    localStorage.removeItem("customerData")
+    window.dispatchEvent(new Event("auth-change"))
+    router.push("/")
+    router.refresh()
+  }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Delivered":
+    switch (status.toLowerCase()) {
+      case "delivered":
         return "bg-green-500"
-      case "In Transit":
+      case "shipped":
         return "bg-blue-500"
-      case "Processing":
+      case "processing":
         return "bg-yellow-500"
+      case "pending":
+        return "bg-gray-500"
+      case "cancelled":
+        return "bg-red-500"
       default:
         return "bg-gray-500"
     }
+  }
+
+  const formatStatus = (status: string) => {
+    return status
+      .split("-")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="max-w-md mx-auto text-center">
+          <p className="text-destructive mb-4">{error}</p>
+          <Button onClick={() => router.push("/login")}>Go to Login</Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -74,8 +189,12 @@ export function DashboardContent() {
                   <User className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <CardTitle className="text-base sm:text-lg">John Doe</CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">+91 98765 43210</CardDescription>
+                  <CardTitle className="text-base sm:text-lg">
+                    {customer?.name || "Customer"}
+                  </CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">
+                    {customer?.mobile ? `+${customer.mobile}` : "No phone number"}
+                  </CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -104,21 +223,10 @@ export function DashboardContent() {
                   Addresses
                 </Button>
               </Link>
-              <Link href="/dashboard/support">
-                <Button variant="ghost" className="w-full justify-start text-sm sm:text-base h-10 sm:h-11">
-                  <HeadphonesIcon className="mr-2 h-4 w-4" />
-                  Support
-                </Button>
-              </Link>
-              <Link href="/dashboard/settings">
-                <Button variant="ghost" className="w-full justify-start text-sm sm:text-base h-10 sm:h-11">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </Button>
-              </Link>
               <Button
                 variant="ghost"
                 className="w-full justify-start text-destructive text-sm sm:text-base h-10 sm:h-11"
+                onClick={handleLogout}
               >
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
@@ -138,7 +246,7 @@ export function DashboardContent() {
                     <Package className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" />
                   </div>
                   <div>
-                    <p className="text-xl sm:text-2xl font-bold">12</p>
+                    <p className="text-xl sm:text-2xl font-bold">{stats?.total || 0}</p>
                     <p className="text-xs sm:text-sm text-muted-foreground">Total Orders</p>
                   </div>
                 </div>
@@ -152,7 +260,7 @@ export function DashboardContent() {
                     <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-yellow-500" />
                   </div>
                   <div>
-                    <p className="text-xl sm:text-2xl font-bold">2</p>
+                    <p className="text-xl sm:text-2xl font-bold">{stats?.pending || 0}</p>
                     <p className="text-xs sm:text-sm text-muted-foreground">Pending</p>
                   </div>
                 </div>
@@ -166,7 +274,7 @@ export function DashboardContent() {
                     <Truck className="h-5 w-5 sm:h-6 sm:w-6 text-orange-500" />
                   </div>
                   <div>
-                    <p className="text-xl sm:text-2xl font-bold">3</p>
+                    <p className="text-xl sm:text-2xl font-bold">{stats?.shipped || 0}</p>
                     <p className="text-xs sm:text-sm text-muted-foreground">Shipping</p>
                   </div>
                 </div>
@@ -180,7 +288,7 @@ export function DashboardContent() {
                     <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
                   </div>
                   <div>
-                    <p className="text-xl sm:text-2xl font-bold">7</p>
+                    <p className="text-xl sm:text-2xl font-bold">{stats?.delivered || 0}</p>
                     <p className="text-xs sm:text-sm text-muted-foreground">Delivered</p>
                   </div>
                 </div>
@@ -204,31 +312,50 @@ export function DashboardContent() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {recentOrders.map((order) => (
-                  <Link
-                    key={order.id}
-                    href={`/dashboard/orders/${order.id}`}
-                    className="block rounded-lg border border-border p-4 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold text-sm sm:text-base">{order.id}</p>
-                          <Badge className={`${getStatusColor(order.status)} text-xs`}>{order.status}</Badge>
-                        </div>
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          {order.date} • {order.items} item{order.items > 1 ? "s" : ""}
-                        </p>
-                      </div>
-                      <div className="text-left sm:text-right">
-                        <p className="font-bold text-sm sm:text-base">{order.total}</p>
-                        <p className="text-xs text-primary hover:underline">View Details →</p>
-                      </div>
-                    </div>
+              {recentOrders.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground mb-4">No orders yet</p>
+                  <Link href="/products">
+                    <Button variant="outline">Start Shopping</Button>
                   </Link>
-                ))}
-              </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recentOrders.map((order) => {
+                    const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)
+                    return (
+                      <Link
+                        key={order._id}
+                        href={`/dashboard/orders/${order._id}`}
+                        className="block rounded-lg border border-border p-4 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-semibold text-sm sm:text-base">{order.orderNumber}</p>
+                              <Badge className={`${getStatusColor(order.status)} text-xs`}>
+                                {formatStatus(order.status)}
+                              </Badge>
+                            </div>
+                            <p className="text-xs sm:text-sm text-muted-foreground">
+                              {new Date(order.createdAt).toLocaleDateString("en-IN", {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                              })}{" "}
+                              • {itemCount} item{itemCount > 1 ? "s" : ""}
+                            </p>
+                          </div>
+                          <div className="text-left sm:text-right">
+                            <p className="font-bold text-sm sm:text-base">₹{order.total.toLocaleString()}</p>
+                            <p className="text-xs text-primary hover:underline">View Details →</p>
+                          </div>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
 

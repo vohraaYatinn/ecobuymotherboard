@@ -11,23 +11,28 @@ export default function Home() {
       {/* Breadcrumb */}
       <div className="border-b border-border bg-muted/30">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-12 items-center gap-2 text-sm">
-            <a href="/" className="text-muted-foreground hover:text-foreground">
+          <div className="flex h-10 sm:h-12 items-center gap-1.5 sm:gap-2 text-xs sm:text-sm overflow-x-auto">
+            <a href="/" className="text-muted-foreground hover:text-foreground whitespace-nowrap">
               Home
             </a>
             <span className="text-muted-foreground">/</span>
-            <a href="/" className="text-muted-foreground hover:text-foreground">
+            <a href="/" className="text-muted-foreground hover:text-foreground whitespace-nowrap">
               All Collections
             </a>
             <span className="text-muted-foreground">/</span>
-            <span className="text-foreground">Television Inverter PCB Boards (LED Driver)</span>
+            <span className="text-foreground truncate">Television Inverter PCB Boards (LED Driver)</span>
           </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
-          <ProductsSidebar />
+          <div className="lg:hidden">
+            <ProductsSidebar />
+          </div>
+          <div className="hidden lg:block">
+            <ProductsSidebar />
+          </div>
           <ProductsGrid />
         </div>
       </div>

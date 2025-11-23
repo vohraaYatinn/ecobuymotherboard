@@ -14,7 +14,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-bold mb-4">1. Introduction</h2>
               <p className="text-muted-foreground">
-                Welcome to EcoBuy. These terms and conditions outline the rules and regulations for the use of EcoBuy's
+                Welcome to Elecobuy. These terms and conditions outline the rules and regulations for the use of Elecobuy's
                 website and services. By accessing this website, we assume you accept these terms and conditions in
                 full.
               </p>
@@ -23,7 +23,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-bold mb-4">2. Products and Services</h2>
               <p className="text-muted-foreground mb-3">
-                EcoBuy provides electronic components including but not limited to television PCB boards, motherboards,
+                Elecobuy provides electronic components including but not limited to television PCB boards, motherboards,
                 and related components. We reserve the right to:
               </p>
               <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
@@ -50,7 +50,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-bold mb-4">4. Shipping and Delivery</h2>
               <p className="text-muted-foreground">
-                We ship products worldwide. Delivery times vary based on location. EcoBuy is not responsible for delays
+                We ship products worldwide. Delivery times vary based on location. Elecobuy is not responsible for delays
                 caused by customs, weather, or other factors beyond our control. Risk of loss passes to the buyer upon
                 delivery.
               </p>
@@ -72,7 +72,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-bold mb-4">6. Warranty</h2>
               <p className="text-muted-foreground">
-                All products come with a manufacturer's warranty as specified in the product description. EcoBuy is not
+                All products come with a manufacturer's warranty as specified in the product description. Elecobuy is not
                 responsible for any consequential damages arising from product use. Warranty claims must be made within
                 the warranty period with proof of purchase.
               </p>
@@ -81,7 +81,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-bold mb-4">7. Intellectual Property</h2>
               <p className="text-muted-foreground">
-                All content on this website, including text, images, logos, and designs, is the property of EcoBuy and
+                All content on this website, including text, images, logos, and designs, is the property of Elecobuy and
                 protected by copyright laws. Unauthorized use of any content is strictly prohibited.
               </p>
             </section>
@@ -89,7 +89,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-bold mb-4">8. Limitation of Liability</h2>
               <p className="text-muted-foreground">
-                EcoBuy shall not be liable for any indirect, incidental, special, or consequential damages arising from
+                Elecobuy shall not be liable for any indirect, incidental, special, or consequential damages arising from
                 the use or inability to use our products or services. Our total liability shall not exceed the amount
                 paid for the product in question.
               </p>
@@ -115,7 +115,7 @@ export default function TermsPage() {
             <section>
               <h2 className="text-2xl font-bold mb-4">11. Changes to Terms</h2>
               <p className="text-muted-foreground">
-                EcoBuy reserves the right to modify these terms and conditions at any time. Changes will be effective
+                Elecobuy reserves the right to modify these terms and conditions at any time. Changes will be effective
                 immediately upon posting to the website. Continued use of the website constitutes acceptance of modified
                 terms.
               </p>

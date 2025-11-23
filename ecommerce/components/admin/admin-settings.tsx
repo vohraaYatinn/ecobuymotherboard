@@ -29,11 +29,11 @@ export function AdminSettings() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <Label htmlFor="brandName">Brand Name</Label>
-                <Input id="brandName" defaultValue="EcoBuy" className="mt-1.5" />
+                <Input id="brandName" defaultValue="Elecobuy" className="mt-1.5" />
               </div>
               <div className="sm:col-span-2">
                 <Label htmlFor="companyName">Company Name</Label>
-                <Input id="companyName" defaultValue="EcoBuy Electronics Pvt Ltd" className="mt-1.5" />
+                <Input id="companyName" defaultValue="Elecobuy Electronics Pvt Ltd" className="mt-1.5" />
               </div>
               <div className="sm:col-span-2">
                 <Label htmlFor="address">Company Address</Label>

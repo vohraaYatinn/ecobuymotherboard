@@ -1,21 +1,63 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
 
 export default function SplashScreen() {
   const router = useRouter()
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      router.push("/login")
-    }, 2500)
+    const checkAuthAndRedirect = async () => {
+      const token = localStorage.getItem("vendorToken")
+      
+      // Wait a bit for splash screen animation
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      
+      if (token) {
+        try {
+          // Verify token by fetching profile
+          const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
 
-    return () => clearTimeout(timer)
+          const data = await response.json()
+
+          if (response.ok && data.success) {
+            // Token is valid, redirect to dashboard
+            router.push("/dashboard")
+            return
+          } else {
+            // Token is invalid, clear it and go to login
+            localStorage.removeItem("vendorToken")
+            localStorage.removeItem("vendorData")
+            router.push("/login")
+          }
+        } catch (error) {
+          // Error checking auth, clear token and go to login
+          console.error("Error checking auth:", error)
+          localStorage.removeItem("vendorToken")
+          localStorage.removeItem("vendorData")
+          router.push("/login")
+        }
+      } else {
+        // No token, go to login
+        router.push("/login")
+      }
+      
+      setIsCheckingAuth(false)
+    }
+
+    checkAuthAndRedirect()
   }, [router])
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 px-4" style={{ paddingTop: `env(safe-area-inset-top, 0px)`, paddingBottom: `env(safe-area-inset-bottom, 0px)` }}>
       <div className="flex flex-col items-center gap-6 animate-fade-in">
         <div className="relative">
           <div className="absolute inset-0 animate-pulse rounded-3xl bg-primary/10 blur-3xl" />
@@ -32,7 +74,7 @@ export default function SplashScreen() {
         </div>
         <div className="text-center space-y-2">
           <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-            VendorHub
+            Elecobuy Seller
           </h1>
           <p className="text-sm text-muted-foreground font-medium">Your Business Command Center</p>
         </div>

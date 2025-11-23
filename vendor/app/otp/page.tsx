@@ -4,6 +4,9 @@ import type React from "react"
 import { useState, useRef, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { API_URL } from "@/lib/api-config"
+import { Capacitor } from "@capacitor/core"
+import { PushNotifications } from "@capacitor/push-notifications"
 
 function OTPContent() {
   const router = useRouter()
@@ -11,8 +14,71 @@ function OTPContent() {
   const phone = searchParams.get("phone") || ""
   const [otp, setOtp] = useState(["", "", "", ""])
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
   const [timer, setTimer] = useState(30)
+  const [fcmToken, setFcmToken] = useState<string | null>(null)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  // Get FCM token on mount
+  useEffect(() => {
+    const getFCMToken = async () => {
+      try {
+        // Check if token already exists in localStorage
+        const storedToken = localStorage.getItem("vendorFcmToken")
+        if (storedToken) {
+          console.log("🔔 [OTP] Using stored FCM token")
+          setFcmToken(storedToken)
+          return
+        }
+
+        // For native platforms (Android/iOS), use Capacitor Push Notifications
+        if (Capacitor.isNativePlatform()) {
+          try {
+            console.log("🔔 [OTP] Requesting push notification permissions...")
+            
+            // Check permissions
+            let permStatus = await PushNotifications.checkPermissions()
+            
+            if (permStatus.receive === 'prompt') {
+              permStatus = await PushNotifications.requestPermissions()
+            }
+            
+            if (permStatus.receive !== 'granted') {
+              console.warn("⚠️ [OTP] Push notification permission denied")
+              return
+            }
+
+            // Register for push notifications
+            await PushNotifications.register()
+            console.log("🔔 [OTP] Registered for push notifications")
+
+            // Listen for registration token
+            PushNotifications.addListener('registration', (token) => {
+              console.log("🔔 [OTP] FCM Token received:", token.value.substring(0, 20) + "...")
+              setFcmToken(token.value)
+              localStorage.setItem("vendorFcmToken", token.value)
+            })
+
+            // Listen for registration errors
+            PushNotifications.addListener('registrationError', (error) => {
+              console.error("❌ [OTP] Push registration error:", error)
+            })
+          } catch (err) {
+            console.error("❌ [OTP] Error getting FCM token from Capacitor:", err)
+          }
+        } else {
+          // For web platform, try to get from Firebase (if configured)
+          console.log("🔔 [OTP] Web platform - FCM token will be handled by usePushNotifications hook")
+          // Web FCM token is typically handled by the usePushNotifications hook
+          // which is called after login in the dashboard
+        }
+      } catch (err) {
+        console.error("❌ [OTP] Error getting FCM token:", err)
+      }
+    }
+
+    getFCMToken()
+  }, [])
 
   useEffect(() => {
     inputRefs.current[0]?.focus()
@@ -44,16 +110,126 @@ function OTPContent() {
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    router.push("/dashboard")
+    setError("")
+
+    try {
+      const otpValue = otp.join("")
+      const verificationId = sessionStorage.getItem("vendorVerificationId")
+      const storedMobile = sessionStorage.getItem("vendorMobile") || phone
+
+      if (!verificationId) {
+        setError("Session expired. Please request a new OTP.")
+        setIsLoading(false)
+        router.push("/login")
+        return
+      }
+
+      // Extract country code and mobile
+      const countryCode = storedMobile.startsWith("91") ? "91" : storedMobile.substring(0, 2)
+      const mobile = storedMobile.replace(/^\+?91/, "").replace(/\s+/g, "")
+
+      // Get FCM token from state (set by useEffect) or localStorage as fallback
+      const tokenToSend = fcmToken || localStorage.getItem("vendorFcmToken") || null
+      const userAgent = typeof window !== "undefined" ? navigator.userAgent : ""
+      const platform = userAgent.includes("Android") ? "android" : userAgent.includes("iPhone") || userAgent.includes("iPad") ? "ios" : "web"
+
+      // Debug output
+      console.log("🔔 [OTP] Sending FCM token:", {
+        token: tokenToSend ? tokenToSend.substring(0, 20) + "..." : "null",
+        platform,
+        deviceModel: userAgent || "Unknown Device",
+        source: fcmToken ? "state" : localStorage.getItem("vendorFcmToken") ? "localStorage" : "none",
+      })
+
+      const response = await fetch(`${API_URL}/api/vendor-auth/verify-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mobile: mobile,
+          countryCode: countryCode,
+          otp: otpValue,
+          verificationId: verificationId,
+          fcmToken: tokenToSend,
+          platform: platform,
+          deviceModel: userAgent || "Unknown Device",
+          appVersion: "1.0.0",
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.message || "Invalid OTP. Please try again.")
+        setIsLoading(false)
+        return
+      }
+
+      // Store token and user data
+      if (data.token) {
+        localStorage.setItem("vendorToken", data.token)
+        localStorage.setItem("vendorData", JSON.stringify(data.user))
+      }
+
+      // Clear session storage
+      sessionStorage.removeItem("vendorVerificationId")
+      sessionStorage.removeItem("vendorMobile")
+
+      // Redirect to dashboard
+      router.push("/dashboard")
+    } catch (err) {
+      console.error("Error verifying OTP:", err)
+      setError("Network error. Please try again.")
+      setIsLoading(false)
+    }
   }
 
-  const handleResend = () => {
+  const handleResend = async () => {
     setTimer(30)
+    setError("")
+    setIsLoading(true)
+
+    try {
+      const storedMobile = sessionStorage.getItem("vendorMobile") || phone
+      const countryCode = storedMobile.startsWith("91") ? "91" : storedMobile.substring(0, 2)
+      const mobile = storedMobile.replace(/^\+?91/, "").replace(/\s+/g, "")
+
+      const response = await fetch(`${API_URL}/api/vendor-auth/send-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mobile: mobile,
+          countryCode: countryCode,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        sessionStorage.setItem("vendorVerificationId", data.verificationId)
+        sessionStorage.setItem("vendorMobile", data.mobile)
+      } else {
+        setError(data.message || "Failed to resend OTP")
+      }
+    } catch (err) {
+      console.error("Error resending OTP:", err)
+      setError("Failed to resend OTP. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background px-6 pt-6 pb-6">
+    <div
+      className="flex h-screen flex-col bg-background px-6"
+      style={{
+        paddingTop: `calc(1.5rem + env(safe-area-inset-top, 0px))`,
+        paddingBottom: `calc(1.5rem + env(safe-area-inset-bottom, 0px))`,
+      }}
+    >
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <button onClick={() => router.back()} className="text-muted-foreground">
@@ -81,7 +257,7 @@ function OTPContent() {
               />
             </svg>
           </div>
-          <span className="text-xl font-bold text-primary">VendorHub</span>
+          <span className="text-xl font-bold text-primary">Elecobuy Seller</span>
         </div>
       </div>
 
@@ -123,6 +299,13 @@ function OTPContent() {
         </p>
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <div className="mb-4 rounded-md bg-destructive/10 border border-destructive/20 p-3">
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
+
       {/* OTP Input Form */}
       <form onSubmit={handleVerify} className="space-y-6">
         <div className="flex gap-3 justify-center">
@@ -138,7 +321,8 @@ function OTPContent() {
               value={digit}
               onChange={(e) => handleChange(index, e.target.value)}
               onKeyDown={(e) => handleKeyDown(index, e)}
-              className="h-16 w-16 rounded-xl border-2 border-border bg-muted/50 text-center text-2xl font-bold text-foreground transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 focus:scale-105"
+              className="h-16 w-16 rounded-xl border-2 border-border bg-muted/50 text-center text-2xl font-bold text-foreground transition-all focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/20 focus:scale-105 disabled:opacity-50"
+              disabled={isLoading}
             />
           ))}
         </div>
@@ -173,7 +357,11 @@ function OTPContent() {
             Resend code in <span className="font-semibold text-primary">{timer}s</span>
           </p>
         ) : (
-          <button onClick={handleResend} className="text-sm text-primary font-semibold hover:underline">
+          <button
+            onClick={handleResend}
+            disabled={isLoading}
+            className="text-sm text-primary font-semibold hover:underline disabled:opacity-50"
+          >
             Resend OTP
           </button>
         )}

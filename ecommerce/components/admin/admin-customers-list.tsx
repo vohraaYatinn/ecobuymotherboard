@@ -1,72 +1,116 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Search, Eye, Download, Filter } from "lucide-react"
+import { Search, Eye, Download, Filter, Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-const customers = [
-  {
-    id: "CUST001",
-    name: "Rajesh Kumar",
-    email: "rajesh.kumar@email.com",
-    phone: "+91 98765 43210",
-    totalOrders: 12,
-    totalSpent: "₹45,600",
-    status: "Active",
-    city: "Mumbai",
-    joinedDate: "2024-08-15",
-  },
-  {
-    id: "CUST002",
-    name: "Priya Sharma",
-    email: "priya.sharma@email.com",
-    phone: "+91 87654 32109",
-    totalOrders: 8,
-    totalSpent: "₹32,400",
-    status: "Active",
-    city: "Delhi",
-    joinedDate: "2024-09-22",
-  },
-  {
-    id: "CUST003",
-    name: "Amit Patel",
-    email: "amit.patel@email.com",
-    phone: "+91 76543 21098",
-    totalOrders: 5,
-    totalSpent: "₹18,900",
-    status: "Active",
-    city: "Bangalore",
-    joinedDate: "2024-10-10",
-  },
-  {
-    id: "CUST004",
-    name: "Sneha Reddy",
-    email: "sneha.reddy@email.com",
-    phone: "+91 65432 10987",
-    totalOrders: 15,
-    totalSpent: "₹58,200",
-    status: "Active",
-    city: "Hyderabad",
-    joinedDate: "2024-07-05",
-  },
-  {
-    id: "CUST005",
-    name: "Vikram Singh",
-    email: "vikram.singh@email.com",
-    phone: "+91 54321 09876",
-    totalOrders: 3,
-    totalSpent: "₹12,500",
-    status: "Inactive",
-    city: "Jaipur",
-    joinedDate: "2024-11-12",
-  },
-]
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
+
+interface Customer {
+  _id: string
+  name?: string
+  email?: string
+  mobile: string
+  totalOrders: number
+  totalSpent: number
+  city: string
+  createdAt: string
+}
 
 export function AdminCustomersList() {
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 0,
+  })
+
+  useEffect(() => {
+    fetchCustomers()
+  }, [page, search])
+
+  const fetchCustomers = async () => {
+    try {
+      setLoading(true)
+      setError("")
+      const token = localStorage.getItem("adminToken")
+      if (!token) return
+
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: "10",
+        ...(search && { search }),
+      })
+
+      const response = await fetch(`${API_URL}/api/admin/customers?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.message || "Failed to load customers")
+        return
+      }
+
+      setCustomers(data.data || [])
+      setPagination(data.pagination || { page: 1, limit: 10, total: 0, pages: 0 })
+    } catch (err) {
+      console.error("Error fetching customers:", err)
+      setError("Network error. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const formatCurrency = (amount: number) => {
+    return `₹${amount.toLocaleString("en-IN")}`
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })
+  }
+
+  const formatPhone = (mobile: string) => {
+    if (mobile.length === 12 && mobile.startsWith("91")) {
+      return `+91 ${mobile.slice(2, 7)} ${mobile.slice(7)}`
+    }
+    return mobile
+  }
+
+  const getCustomerId = (customer: Customer) => {
+    return customer._id.slice(-6).toUpperCase()
+  }
+  if (loading && customers.length === 0) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Customers Management</h1>
+          <p className="text-sm text-muted-foreground mt-1">View and manage all registered customers</p>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -79,10 +123,6 @@ export function AdminCustomersList() {
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Export</span>
           </Button>
-          <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-            <Filter className="h-4 w-4" />
-            <span className="hidden sm:inline">Filter</span>
-          </Button>
         </div>
       </div>
 
@@ -91,14 +131,38 @@ export function AdminCustomersList() {
         <CardContent className="pt-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search by name, email, phone, or customer ID..." className="pl-10" />
+            <Input
+              placeholder="Search by name, email, phone, or customer ID..."
+              className="pl-10"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setPage(1)
+              }}
+            />
           </div>
         </CardContent>
       </Card>
 
+      {error && (
+        <Card className="border-destructive/50 bg-destructive/10">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              <p className="text-sm text-destructive">{error}</p>
+              <Button variant="outline" size="sm" onClick={fetchCustomers} className="ml-auto">
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="shadow-md border-t-4 border-t-accent">
         <CardHeader className="bg-gradient-to-r from-accent/5 to-primary/5">
-          <CardTitle className="text-lg">All Customers ({customers.length})</CardTitle>
+          <CardTitle className="text-lg">
+            All Customers ({pagination.total.toLocaleString()})
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {/* Desktop Table View */}
@@ -119,104 +183,135 @@ export function AdminCustomersList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {customers.map((customer) => (
-                  <TableRow key={customer.id} className="hover:bg-muted/30 transition-colors">
-                    <TableCell className="font-medium text-primary">
-                      <Link href={`/admin/customers/${customer.id}`} className="hover:underline">
-                        {customer.id}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="font-medium">{customer.name}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{customer.email}</TableCell>
-                    <TableCell className="text-sm">{customer.phone}</TableCell>
-                    <TableCell className="text-sm">{customer.city}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="outline" className="font-semibold">
-                        {customer.totalOrders}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-semibold text-green-600">{customer.totalSpent}</TableCell>
-                    <TableCell>
-                      <Badge
-                        className={
-                          customer.status === "Active"
-                            ? "bg-green-100 text-green-800 border-green-200"
-                            : "bg-gray-100 text-gray-800 border-gray-200"
-                        }
-                      >
-                        {customer.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{customer.joinedDate}</TableCell>
-                    <TableCell className="text-right">
-                      <Link href={`/admin/customers/${customer.id}`}>
-                        <Button variant="ghost" size="sm" className="gap-2">
-                          <Eye className="h-4 w-4" />
-                          View
-                        </Button>
-                      </Link>
+                {customers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      No customers found
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  customers.map((customer) => (
+                    <TableRow key={customer._id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell className="font-medium text-primary">
+                        <Link href={`/admin/customers/${customer._id}`} className="hover:underline">
+                          CUST{getCustomerId(customer)}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="font-medium">{customer.name || "N/A"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{customer.email || "N/A"}</TableCell>
+                      <TableCell className="text-sm">{formatPhone(customer.mobile)}</TableCell>
+                      <TableCell className="text-sm">{customer.city}</TableCell>
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="font-semibold">
+                          {customer.totalOrders}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-semibold text-green-600">
+                        {formatCurrency(customer.totalSpent)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className="bg-green-100 text-green-800 border-green-200">Active</Badge>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{formatDate(customer.createdAt)}</TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`/admin/customers/${customer._id}`}>
+                          <Button variant="ghost" size="sm" className="gap-2">
+                            <Eye className="h-4 w-4" />
+                            View
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
 
           {/* Mobile Card View */}
           <div className="lg:hidden divide-y divide-border">
-            {customers.map((customer) => (
-              <div key={customer.id} className="p-4 hover:bg-muted/30 transition-colors">
-                <div className="space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <Link href={`/admin/customers/${customer.id}`}>
-                        <h3 className="font-semibold text-primary hover:underline">{customer.name}</h3>
+            {customers.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">No customers found</div>
+            ) : (
+              customers.map((customer) => (
+                <div key={customer._id} className="p-4 hover:bg-muted/30 transition-colors">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <Link href={`/admin/customers/${customer._id}`}>
+                          <h3 className="font-semibold text-primary hover:underline">{customer.name || "N/A"}</h3>
+                        </Link>
+                        <p className="text-sm text-muted-foreground">{customer.email || "N/A"}</p>
+                        <p className="text-sm text-muted-foreground">{formatPhone(customer.mobile)}</p>
+                      </div>
+                      <Badge className="bg-green-100 text-green-800 border-green-200">Active</Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Customer ID:</span>
+                        <p className="font-medium">CUST{getCustomerId(customer)}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">City:</span>
+                        <p className="font-medium">{customer.city}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Total Orders:</span>
+                        <p className="font-semibold">{customer.totalOrders}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Total Spent:</span>
+                        <p className="font-semibold text-green-600">{formatCurrency(customer.totalSpent)}</p>
+                      </div>
+                    </div>
+                    <div className="flex justify-end pt-2 border-t">
+                      <Link href={`/admin/customers/${customer._id}`}>
+                        <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+                          <Eye className="h-4 w-4" />
+                          View Details
+                        </Button>
                       </Link>
-                      <p className="text-sm text-muted-foreground">{customer.email}</p>
-                      <p className="text-sm text-muted-foreground">{customer.phone}</p>
                     </div>
-                    <Badge
-                      className={
-                        customer.status === "Active"
-                          ? "bg-green-100 text-green-800 border-green-200"
-                          : "bg-gray-100 text-gray-800 border-gray-200"
-                      }
-                    >
-                      {customer.status}
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Customer ID:</span>
-                      <p className="font-medium">{customer.id}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">City:</span>
-                      <p className="font-medium">{customer.city}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Total Orders:</span>
-                      <p className="font-semibold">{customer.totalOrders}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Total Spent:</span>
-                      <p className="font-semibold text-green-600">{customer.totalSpent}</p>
-                    </div>
-                  </div>
-                  <div className="flex justify-end pt-2 border-t">
-                    <Link href={`/admin/customers/${customer.id}`}>
-                      <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-                        <Eye className="h-4 w-4" />
-                        View Details
-                      </Button>
-                    </Link>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {pagination.pages > 1 && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-muted-foreground">
+            Showing {((pagination.page - 1) * pagination.limit) + 1} to{" "}
+            {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} customers
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1 || loading}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <div className="text-sm text-muted-foreground">
+              Page {pagination.page} of {pagination.pages}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+              disabled={page === pagination.pages || loading}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

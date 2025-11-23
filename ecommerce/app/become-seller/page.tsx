@@ -11,7 +11,7 @@ export default function BecomeSellerPage() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-12">
-            <h1 className="text-4xl font-bold text-foreground mb-4">Become a Seller on EcoBuy</h1>
+            <h1 className="text-4xl font-bold text-foreground mb-4">Become a Seller on Elecobuy</h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Join thousands of sellers and grow your business with India's leading electronics marketplace. Start
               selling your PCB boards and electronic components today.

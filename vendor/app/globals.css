@@ -118,7 +118,49 @@
   * {
     @apply border-border outline-ring/50;
   }
+  
+  html,
+  body {
+    /* Ensure no default padding that would interfere with safe areas */
+    margin: 0;
+    padding: 0;
+    height: 100%;
+  }
+  
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Full viewport with safe area consideration */
+  #__next,
+  main {
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
+  }
+}
+
+/* Safe area utilities */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.safe-left {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+.safe-right {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Safe area for fixed elements */
+.safe-top-offset {
+  top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom-offset {
+  bottom: env(safe-area-inset-bottom, 0px);
 }

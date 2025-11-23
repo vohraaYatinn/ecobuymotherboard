@@ -41,7 +41,7 @@ export function Features() {
         {/* Header */}
         <div className="text-center mb-12">
           <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
-            {"Why Choose EcoBuy?"}
+            {"Why Choose Elecobuy?"}
           </h2>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
             {"We combine quality products with exceptional service to deliver the best experience in the industry"}

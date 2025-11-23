@@ -1,82 +1,196 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
+import { Loader2, AlertCircle } from "lucide-react"
+import { API_URL } from "@/lib/api-config"
+import { useNavigation } from "@/contexts/navigation-context"
+
+interface OrderItem {
+  name: string
+  quantity: number
+  price: number
+  productId?: {
+    _id: string
+    name: string
+    brand?: string
+    images?: string[]
+  }
+}
+
+interface Customer {
+  _id: string
+  name?: string
+  mobile: string
+  email?: string
+}
+
+interface Order {
+  _id: string
+  orderNumber: string
+  customerId: Customer | string
+  items: OrderItem[]
+  status: string
+  total: number
+  createdAt: string
+}
 
 export default function OrdersPage() {
+  const router = useRouter()
+  const { setSelectedOrderId } = useNavigation()
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
 
-  const orders = [
-    {
-      id: "#ORD-1234",
-      customer: "Rajesh Kumar",
-      items: 3,
-      amount: "₹20,417",
-      status: "delivered",
-      date: "18 Dec, 2024",
-      time: "2 hours ago",
-    },
-    {
-      id: "#ORD-1233",
-      customer: "Priya Sharma",
-      items: 2,
-      amount: "₹10,708",
-      status: "processing",
-      date: "18 Dec, 2024",
-      time: "5 hours ago",
-    },
-    {
-      id: "#ORD-1232",
-      customer: "Amit Patel",
-      items: 5,
-      amount: "₹32,666",
-      status: "pending",
-      date: "17 Dec, 2024",
-      time: "1 day ago",
-    },
-    {
-      id: "#ORD-1231",
-      customer: "Sneha Reddy",
-      items: 1,
-      amount: "₹7,499",
-      status: "delivered",
-      date: "17 Dec, 2024",
-      time: "1 day ago",
-    },
-    {
-      id: "#ORD-1230",
-      customer: "Vikram Singh",
-      items: 4,
-      amount: "₹47,291",
-      status: "cancelled",
-      date: "16 Dec, 2024",
-      time: "2 days ago",
-    },
-  ]
+  useEffect(() => {
+    fetchOrders()
+  }, [activeTab])
+
+  const fetchOrders = async () => {
+    try {
+      setLoading(true)
+      setError("")
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const params = new URLSearchParams({
+        page: "1",
+        limit: "50",
+        ...(activeTab !== "all" && { status: activeTab }),
+      })
+
+      const response = await fetch(`${API_URL}/api/vendor/orders?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        if (response.status === 401) {
+          localStorage.removeItem("vendorToken")
+          localStorage.removeItem("vendorData")
+          router.push("/login")
+          return
+        }
+        setError(data.message || "Failed to load orders")
+        return
+      }
+
+      setOrders(data.data || [])
+    } catch (err) {
+      console.error("Error fetching orders:", err)
+      setError("Network error. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+    try {
+      setUpdatingStatus(orderId)
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendor/orders/${orderId}/status`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        if (response.status === 401) {
+          localStorage.removeItem("vendorToken")
+          localStorage.removeItem("vendorData")
+          router.push("/login")
+          return
+        }
+        alert(data.message || "Failed to update status")
+        return
+      }
+
+      // Update order in list
+      setOrders((prev) =>
+        prev.map((order) => (order._id === orderId ? { ...order, status: newStatus } : order))
+      )
+    } catch (err) {
+      console.error("Error updating status:", err)
+      alert("Network error. Please try again.")
+    } finally {
+      setUpdatingStatus(null)
+    }
+  }
+
+  const getCustomerInfo = (order: Order) => {
+    if (typeof order.customerId === "object" && order.customerId !== null) {
+      return {
+        name: order.customerId.name || "N/A",
+        mobile: order.customerId.mobile || "N/A",
+      }
+    }
+    return { name: "N/A", mobile: "N/A" }
+  }
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins} min ago`
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`
+    return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`
+  }
+
+  const itemCount = (order: Order) => {
+    return order.items.reduce((sum, item) => sum + item.quantity, 0)
+  }
 
   const tabs = [
     { id: "all", label: "All", count: orders.length },
-    { id: "pending", label: "Pending", count: orders.filter((o) => o.status === "pending").length },
     { id: "processing", label: "Processing", count: orders.filter((o) => o.status === "processing").length },
+    { id: "shipped", label: "Shipped", count: orders.filter((o) => o.status === "shipped").length },
     { id: "delivered", label: "Delivered", count: orders.filter((o) => o.status === "delivered").length },
   ]
 
   const filteredOrders = orders.filter((order) => {
-    const matchesTab = activeTab === "all" || order.status === activeTab
+    const customer = getCustomerInfo(order)
     const matchesSearch =
-      order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.customer.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesTab && matchesSearch
+      order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      customer.mobile.includes(searchQuery)
+    return matchesSearch
   })
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "delivered":
         return "bg-chart-3/10 text-chart-3 border-chart-3/20"
+      case "shipped":
+        return "bg-purple-100 text-purple-800 border-purple-200"
       case "processing":
         return "bg-primary/10 text-primary border-primary/20"
       case "pending":
@@ -94,6 +208,17 @@ export default function OrdersPage() {
         return (
           <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        )
+      case "shipped":
+        return (
+          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+            />
           </svg>
         )
       case "processing":
@@ -128,20 +253,14 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <div className="sticky top-0 z-10 border-b-2 border-border/50 bg-card/98 backdrop-blur-xl shadow-sm">
+    <div className="min-h-screen bg-background" style={{ paddingBottom: `calc(5rem + env(safe-area-inset-bottom, 0px))` }}>
+      <div className="sticky top-0 z-10 border-b-2 border-border/50 bg-card/98 backdrop-blur-xl shadow-sm safe-top" style={{ paddingTop: `calc(1rem + env(safe-area-inset-top, 0px))` }}>
         <div className="px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Orders</h1>
               <p className="text-xs text-muted-foreground mt-0.5">Manage your order history</p>
             </div>
-            <button className="flex h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-primary/90 px-4 text-sm font-semibold text-white shadow-lg shadow-primary/30 hover:shadow-xl hover:scale-105 transition-all">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              New
-            </button>
           </div>
 
           <div className="relative">
@@ -193,7 +312,23 @@ export default function OrdersPage() {
       </div>
 
       <div className="px-4 py-4 space-y-3">
-        {filteredOrders.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : error ? (
+          <Card className="border-destructive/50 bg-destructive/10">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+                <p className="text-sm text-destructive">{error}</p>
+                <Button variant="outline" size="sm" onClick={fetchOrders} className="ml-auto">
+                  Retry
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : filteredOrders.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-muted/50">
               <svg className="h-12 w-12 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -209,9 +344,15 @@ export default function OrdersPage() {
             <p className="text-sm text-muted-foreground mt-1">Try adjusting your search or filters</p>
           </div>
         ) : (
-          filteredOrders.map((order, index) => (
-            <Link key={order.id} href={`/orders/${order.id.replace("#ORD-", "")}`}>
+          filteredOrders.map((order, index) => {
+            const customer = getCustomerInfo(order)
+            const timeAgo = formatTimeAgo(order.createdAt)
+            const items = itemCount(order)
+            const canUpdateStatus = order.status === "processing" || order.status === "shipped"
+
+            return (
               <Card
+                key={order._id}
                 className="border-2 border-border/50 bg-card hover:border-primary/50 hover:shadow-lg transition-all hover:-translate-y-0.5 animate-fade-in"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
@@ -225,8 +366,16 @@ export default function OrdersPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="text-sm font-bold text-foreground">{order.id}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{order.customer}</p>
+                          <button
+                            onClick={() => {
+                              setSelectedOrderId(order._id)
+                              router.push("/order-detail")
+                            }}
+                            className="text-sm font-bold text-foreground hover:text-primary text-left"
+                          >
+                            {order.orderNumber}
+                          </button>
+                          <p className="text-xs text-muted-foreground mt-0.5">{customer.name}</p>
                         </div>
                         <span
                           className={`rounded-lg border px-3 py-1 text-xs font-semibold ${getStatusColor(order.status)}`}
@@ -236,6 +385,35 @@ export default function OrdersPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Status Update Selector */}
+                  {canUpdateStatus && (
+                    <div className="mb-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+                      <label className="text-xs font-semibold text-foreground mb-2 block">Update Status:</label>
+                      <Select
+                        value={order.status}
+                        onValueChange={(value) => handleStatusUpdate(order._id, value)}
+                        disabled={updatingStatus === order._id}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {order.status === "processing" && (
+                            <SelectItem value="shipped">
+                              {updatingStatus === order._id ? "Updating..." : "Mark as Shipped"}
+                            </SelectItem>
+                          )}
+                          {order.status === "shipped" && (
+                            <SelectItem value="delivered">
+                              {updatingStatus === order._id ? "Updating..." : "Mark as Delivered"}
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between pt-3 border-t border-border/50">
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1.5">
@@ -247,7 +425,7 @@ export default function OrdersPage() {
                             d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
                           />
                         </svg>
-                        <span className="font-medium">{order.items} items</span>
+                        <span className="font-medium">{items} items</span>
                       </span>
                       <span className="flex items-center gap-1.5">
                         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -258,15 +436,15 @@ export default function OrdersPage() {
                             d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                           />
                         </svg>
-                        {order.time}
+                        {timeAgo}
                       </span>
                     </div>
-                    <p className="text-lg font-bold text-primary">{order.amount}</p>
+                    <p className="text-lg font-bold text-primary">₹{order.total.toLocaleString("en-IN")}</p>
                   </div>
                 </CardContent>
               </Card>
-            </Link>
-          ))
+            )
+          })
         )}
       </div>
 
