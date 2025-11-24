@@ -10,7 +10,7 @@ import { Grid3x3, List, Star, ShoppingCart, Loader2, Heart } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface Product {
   _id: string

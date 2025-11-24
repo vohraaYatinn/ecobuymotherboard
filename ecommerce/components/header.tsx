@@ -71,7 +71,7 @@ export function Header() {
       const token = localStorage.getItem("customerToken")
       if (!token) return
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"}/api/notifications/customer?unreadOnly=true&limit=1`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"}/api/notifications/customer?unreadOnly=true&limit=1`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

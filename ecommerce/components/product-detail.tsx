@@ -9,7 +9,7 @@ import { Star, ShoppingCart, Heart, Truck, Shield, RotateCcw, Plus, Minus, Loade
 import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface ProductDetailProps {
   productId: string

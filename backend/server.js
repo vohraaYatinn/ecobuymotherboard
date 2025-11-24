@@ -35,13 +35,14 @@ const PORT = process.env.PORT || 5000
 connectDB()
 
 // Middleware - CORS configuration
-const BACKEND_URL = process.env.BACKEND_URL || "http://192.168.1.36:5000"
+const BACKEND_URL = process.env.BACKEND_URL || "https://api.elecobuy.com"
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "http://192.168.1.36:5000",
+  "https://api.elecobuy.com",
+  "https://elecobuy.com",
+  "https://www.elecobuy.com",
   "http://127.0.0.1:5000",
-  "http://192.168.1.36:5000", // Explicitly add your backend IP
   process.env.FRONTEND_URL,
   process.env.BACKEND_URL
 ].filter(Boolean) // Remove undefined values
@@ -76,7 +77,23 @@ if (process.env.NODE_ENV !== "production") {
 } else {
   // Production: only allow specific origins
   app.use(cors({
-    origin: allowedOrigins,
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true)
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else if (
+        origin === "https://elecobuy.com" ||
+        origin === "https://www.elecobuy.com" ||
+        origin === "https://api.elecobuy.com"
+      ) {
+        callback(null, true)
+      } else {
+        callback(new Error("Not allowed by CORS"))
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-session-id", "Accept"],
