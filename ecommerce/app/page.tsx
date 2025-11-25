@@ -1,7 +1,6 @@
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { ProductsGrid } from "@/components/products-grid"
-import { ProductsSidebar } from "@/components/products-sidebar"
 
 export default function Home() {
   return (
@@ -26,15 +25,7 @@ export default function Home() {
       </div>
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
-        <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
-          <div className="lg:hidden">
-            <ProductsSidebar />
-          </div>
-          <div className="hidden lg:block">
-            <ProductsSidebar />
-          </div>
-          <ProductsGrid />
-        </div>
+        <ProductsGrid />
       </div>
 
       <Footer />

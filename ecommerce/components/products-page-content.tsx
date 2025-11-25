@@ -2,11 +2,23 @@
 
 import { useSearchParams } from "next/navigation"
 import { ProductsGrid } from "@/components/products-grid"
-import { ProductsSidebar } from "@/components/products-sidebar"
 
 export function ProductsPageContent() {
   const searchParams = useSearchParams()
   const searchQuery = searchParams.get("search") || undefined
+  const category = searchParams.get("category") || undefined
+
+  const getCategoryLabel = (cat: string) => {
+    const categoryMap: Record<string, string> = {
+      "tv-pcb": "Television PCB Boards",
+      "tv-inverter": "Television Inverter Boards",
+      "tv-motherboard": "Television Motherboard",
+      "power-supply": "Power Supply Boards",
+      "t-con": "T-Con Board",
+      "universal-motherboard": "Universal Motherboard",
+    }
+    return categoryMap[cat] || cat
+  }
 
   return (
     <>
@@ -19,7 +31,7 @@ export function ProductsPageContent() {
             </a>
             <span className="text-muted-foreground">/</span>
             <a href="/products" className="text-muted-foreground hover:text-foreground">
-              All Collections
+              Products
             </a>
             {searchQuery && (
               <>
@@ -27,10 +39,16 @@ export function ProductsPageContent() {
                 <span className="text-foreground">Search: {searchQuery}</span>
               </>
             )}
-            {!searchQuery && (
+            {category && !searchQuery && (
               <>
                 <span className="text-muted-foreground">/</span>
-                <span className="text-foreground">Television Inverter PCB Boards (LED Driver)</span>
+                <span className="text-foreground">{getCategoryLabel(category)}</span>
+              </>
+            )}
+            {!searchQuery && !category && (
+              <>
+                <span className="text-muted-foreground">/</span>
+                <span className="text-foreground">All Products</span>
               </>
             )}
           </div>
@@ -38,10 +56,7 @@ export function ProductsPageContent() {
       </div>
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {!searchQuery && <ProductsSidebar />}
-          <ProductsGrid searchQuery={searchQuery} />
-        </div>
+        <ProductsGrid searchQuery={searchQuery} category={category} />
       </div>
     </>
   )

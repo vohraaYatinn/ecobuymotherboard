@@ -4,9 +4,10 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
-import { ChevronDown, ChevronUp, Check, Loader2, AlertCircle } from "lucide-react"
+import { ChevronDown, ChevronUp, Check, Loader2, AlertCircle, Volume2, VolumeX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { API_URL } from "@/lib/api-config"
+import { useNotificationSoundContext } from "@/contexts/notification-sound-context"
 
 interface OrderItem {
   name: string
@@ -52,15 +53,32 @@ interface Order {
 
 export default function AcceptOrdersPage() {
   const router = useRouter()
+  const { stopSound, stopAllSounds, isPlaying } = useNotificationSoundContext()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null)
   const [expandedItems, setExpandedItems] = useState<{ [key: string]: boolean }>({})
+  const [previousOrderIds, setPreviousOrderIds] = useState<Set<string>>(new Set())
+  const [soundPlaying, setSoundPlaying] = useState(false)
 
   useEffect(() => {
     fetchUnassignedOrders()
-  }, [])
+    // Poll for new orders every 10 seconds
+    const interval = setInterval(() => {
+      fetchUnassignedOrders()
+    }, 10000)
+    
+    // Check sound status periodically
+    const soundCheckInterval = setInterval(() => {
+      setSoundPlaying(isPlaying())
+    }, 500)
+    
+    return () => {
+      clearInterval(interval)
+      clearInterval(soundCheckInterval)
+    }
+  }, [isPlaying])
 
   const fetchUnassignedOrders = async () => {
     try {
@@ -91,7 +109,19 @@ export default function AcceptOrdersPage() {
         return
       }
 
-      setOrders(data.data || [])
+      const newOrders = data.data || []
+      setOrders(newOrders)
+
+      // Check for orders that were removed (accepted by someone else or cancelled)
+      const currentOrderIds = new Set(newOrders.map((o: Order) => o._id))
+      const removedOrderIds = Array.from(previousOrderIds).filter(id => !currentOrderIds.has(id))
+      
+      // Stop sound for removed orders
+      removedOrderIds.forEach(orderId => {
+        stopSound(orderId)
+      })
+      
+      setPreviousOrderIds(currentOrderIds)
     } catch (err) {
       console.error("Error fetching orders:", err)
       setError("Network error. Please try again.")
@@ -130,8 +160,16 @@ export default function AcceptOrdersPage() {
         return
       }
 
+      // Stop sound for accepted order
+      stopSound(orderId, true)
+      
       // Remove accepted order from list
       setOrders((prev) => prev.filter((order) => order._id !== orderId))
+      setPreviousOrderIds((prev) => {
+        const updated = new Set(prev)
+        updated.delete(orderId)
+        return updated
+      })
       alert("Order accepted successfully!")
     } catch (err) {
       console.error("Error accepting order:", err)
@@ -204,9 +242,24 @@ export default function AcceptOrdersPage() {
         <div className="px-4 py-3">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold tracking-tight text-foreground">Accept Orders</h1>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
-              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-xs font-semibold text-primary">{orders.length} pending</span>
+            <div className="flex items-center gap-2">
+              {soundPlaying && (
+                <button
+                  onClick={() => {
+                    stopAllSounds()
+                    setSoundPlaying(false)
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 hover:bg-destructive/20 transition-colors"
+                  title="Stop notification sound"
+                >
+                  <VolumeX className="h-4 w-4 text-destructive" />
+                  <span className="text-xs font-semibold text-destructive">Stop Sound</span>
+                </button>
+              )}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                <span className="text-xs font-semibold text-primary">{orders.length} pending</span>
+              </div>
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { Capacitor } from '@capacitor/core';
 import { getMessagingInstance } from '@/lib/firebase';
 import { getToken, onMessage, Messaging } from 'firebase/messaging';
 import { useNavigation } from '@/contexts/navigation-context';
+import { useNotificationSoundContext } from '@/contexts/notification-sound-context';
 
 export interface NotificationData {
   id: string;
@@ -61,6 +62,7 @@ async function sendTokenToBackend(token: string, platform: string, deviceModel?:
 
 export function usePushNotifications() {
   const { setSelectedOrderId } = useNavigation();
+  const { startSound } = useNotificationSoundContext();
   const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [fcmToken, setFcmToken] = useState<string | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
@@ -136,6 +138,14 @@ export function usePushNotifications() {
                       data: payload.data,
                     };
                     
+                    // Start continuous sound for new order notifications
+                    const notificationType = payload.data?.type || notification.type;
+                    const orderId = payload.data?.orderId;
+                    if (notificationType === 'new_order_available' || notificationType === 'order_placed') {
+                      console.log('🔔 [PushNotification] Starting continuous sound for new order');
+                      startSound(orderId);
+                    }
+                    
                     // Show browser notification with click handler
                     if ('Notification' in window && Notification.permission === 'granted') {
                       const browserNotification = new Notification(notification.title, {
@@ -148,9 +158,6 @@ export function usePushNotifications() {
                       browserNotification.onclick = () => {
                         window.focus();
                         if (router && typeof window !== 'undefined') {
-                          const notificationType = payload.data?.type || notification.type;
-                          const orderId = payload.data?.orderId;
-                          
                           console.log('🔔 [PushNotification] Browser notification clicked, type:', notificationType);
                           
                           // Navigate to accept-orders for new order notifications
@@ -244,6 +251,14 @@ export function usePushNotifications() {
           read: false,
           data: notification.data,
         };
+        
+        // Start continuous sound for new order notifications
+        const notificationType = notification.data?.type || notificationData.type;
+        const orderId = notification.data?.orderId;
+        if (notificationType === 'new_order_available' || notificationType === 'order_placed') {
+          console.log('🔔 [PushNotification] Starting continuous sound for new order');
+          startSound(orderId);
+        }
         
         const updated = [notificationData, ...notifications];
         saveNotifications(updated);

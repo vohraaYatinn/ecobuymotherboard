@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Star, ShoppingCart, Heart, Truck, Shield, RotateCcw, Plus, Minus, Loader2 } from "lucide-react"
+import { Star, ShoppingCart, Heart, Plus, Minus, Loader2 } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
 
@@ -222,21 +222,6 @@ export function ProductDetail({ productId }: ProductDetailProps) {
           </div>
 
           <p className="text-sm sm:text-base text-muted-foreground mb-4 sm:mb-6 leading-relaxed">{product.description}</p>
-
-          <div className="space-y-4 mb-6">
-            <div className="flex items-center gap-2 text-sm">
-              <Truck className="h-5 w-5 text-primary" />
-              <span>Free shipping on orders over ₹500</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Shield className="h-5 w-5 text-primary" />
-              <span>{product.specifications.warranty || "12 months"} warranty included</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <RotateCcw className="h-5 w-5 text-primary" />
-              <span>30-day return policy</span>
-            </div>
-          </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
             <div className="flex items-center border border-border rounded-lg w-full sm:w-auto justify-between sm:justify-start">

@@ -5,7 +5,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { LayoutDashboard, ShoppingBag, Users, Store, Package, Settings, Menu, LogOut, UserCircle, Bell, Send } from "lucide-react"
+import { LayoutDashboard, ShoppingBag, Users, Store, Package, Settings, Menu, LogOut, UserCircle, Bell, Send, BookOpen, BarChart3 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
@@ -16,6 +16,8 @@ const menuItems = [
   { href: "/admin/customers", label: "Customers", icon: Users },
   { href: "/admin/vendors", label: "Vendors", icon: Store },
   { href: "/admin/products", label: "Products", icon: Package },
+  { href: "/admin/reports", label: "Reports", icon: BarChart3 },
+  { href: "/admin/learning-resources", label: "Learning Resources", icon: BookOpen },
   { href: "/admin/push-notifications", label: "Push Notifications", icon: Send },
   { href: "/admin/notifications", label: "Notifications", icon: Bell, hasBadge: true },
   { href: "/admin/settings", label: "Settings", icon: Settings },

@@ -21,6 +21,9 @@ import searchRoutes from "./routes/search.js"
 import wishlistRoutes from "./routes/wishlist.js"
 import notificationRoutes from "./routes/notifications.js"
 import pushNotificationRoutes from "./routes/pushNotifications.js"
+import learningResourceRoutes from "./routes/learningResources.js"
+import adminReportsRoutes from "./routes/adminReports.js"
+import enquiryRoutes from "./routes/enquiries.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -124,6 +127,9 @@ app.use("/api/search", searchRoutes)
 app.use("/api/wishlist", wishlistRoutes)
 app.use("/api/notifications", notificationRoutes)
 app.use("/api/push-notifications", pushNotificationRoutes)
+app.use("/api/learning-resources", learningResourceRoutes)
+app.use("/api/admin/reports", adminReportsRoutes)
+app.use("/api/enquiries", enquiryRoutes)
 
 // Health check
 app.get("/api/health", (req, res) => {

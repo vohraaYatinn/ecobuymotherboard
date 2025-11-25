@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { PushNotificationProvider } from '@/components/push-notification-provider'
 import { NavigationProvider } from '@/contexts/navigation-context'
+import { NotificationSoundProvider } from '@/contexts/notification-sound-context'
 import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
@@ -48,9 +49,11 @@ export default function RootLayout({
     <html lang="en" style={{ height: '100%', margin: 0, padding: 0 }}>
       <body className={`font-sans antialiased`} style={{ height: '100%', margin: 0, padding: 0 }}>
         <NavigationProvider>
-          <PushNotificationProvider>
-            {children}
-          </PushNotificationProvider>
+          <NotificationSoundProvider>
+            <PushNotificationProvider>
+              {children}
+            </PushNotificationProvider>
+          </NotificationSoundProvider>
         </NavigationProvider>
         <Toaster />
         <Analytics />

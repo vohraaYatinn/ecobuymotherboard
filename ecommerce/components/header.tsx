@@ -12,6 +12,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 import { Menu, ShoppingCart, Heart, MapPin, User, Globe, Package, LogOut, LayoutDashboard, Bell, Home, Info, Mail, Store, X } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
@@ -22,15 +25,29 @@ export function Header() {
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [customerName, setCustomerName] = useState<string | null>(null)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const { cartCount } = useCart()
   const { wishlistCount } = useWishlist()
 
   useEffect(() => {
-    // Check if user is logged in
+    // Check if user is logged in and get customer name
     const checkAuth = () => {
       const token = localStorage.getItem("customerToken")
+      const customerData = localStorage.getItem("customerData")
       setIsLoggedIn(!!token)
+      
+      if (token && customerData) {
+        try {
+          const customer = JSON.parse(customerData)
+          setCustomerName(customer.name || customer.firstName || "User")
+        } catch (err) {
+          console.error("Error parsing customer data:", err)
+          setCustomerName(null)
+        }
+      } else {
+        setCustomerName(null)
+      }
     }
 
     // Initial check
@@ -104,18 +121,18 @@ export function Header() {
           <div className="flex h-10 items-center justify-between text-xs sm:text-sm">
             <div className="flex items-center gap-2 sm:gap-4">
               <a
-                href="tel:+917396777800"
+                href="tel:18001239336"
                 className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
               >
-                <span className="hidden sm:inline">+91 7396 777 800 / 600 / 300</span>
+                <span className="hidden sm:inline">1800 123 9336</span>
                 <span className="sm:hidden">Call Us</span>
               </a>
               <span className="hidden text-muted-foreground md:inline">|</span>
               <a
-                href="mailto:customercare@ecobuy.com"
+                href="mailto:info@elecobuy.com"
                 className="hidden text-muted-foreground hover:text-foreground md:inline"
               >
-                customercare@ecobuy.com
+                info@elecobuy.com
               </a>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
@@ -129,34 +146,39 @@ export function Header() {
               {isLoggedIn ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-1 text-muted-foreground hover:text-foreground">
+                    <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
                       <User className="h-3 w-3" />
-                      <span className="hidden sm:inline">My Account</span>
+                      <span className="hidden sm:inline">{customerName || "My Account"}</span>
                       <span className="sm:hidden">Account</span>
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuContent align="end" className="w-56">
+                    <div className="px-2 py-1.5 border-b border-border">
+                      <p className="text-sm font-semibold text-foreground">{customerName || "User"}</p>
+                      <p className="text-xs text-muted-foreground">My Account</p>
+                    </div>
                     <DropdownMenuItem asChild>
                       <Link href="/dashboard/orders" className="flex items-center gap-2 cursor-pointer">
                         <Package className="h-4 w-4" />
-                        My Orders
+                        Orders
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/dashboard/addresses" className="flex items-center gap-2 cursor-pointer">
+                        <MapPin className="h-4 w-4" />
+                        Address
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/dashboard" className="flex items-center gap-2 cursor-pointer">
                         <LayoutDashboard className="h-4 w-4" />
-                        My Dashboard
+                        Account Details
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/dashboard/notifications" className="flex items-center gap-2 cursor-pointer">
-                        <Bell className="h-4 w-4" />
-                        Notifications
-                        {unreadNotifications > 0 && (
-                          <Badge className="ml-auto bg-destructive text-xs">
-                            {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                          </Badge>
-                        )}
+                      <Link href="/dashboard/support" className="flex items-center gap-2 cursor-pointer">
+                        <Info className="h-4 w-4" />
+                        Support Tickets
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -267,12 +289,12 @@ export function Header() {
                       <span>Home</span>
                     </Link>
                     <Link
-                      href="/about"
+                      href="/products"
                       className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors group"
                       onClick={() => setIsOpen(false)}
                     >
-                      <Info className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                      <span>About Us</span>
+                      <Package className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      <span>Products</span>
                     </Link>
                     <Link
                       href="/contact"
@@ -339,6 +361,14 @@ export function Header() {
                   {/* Additional Links */}
                   <div className="space-y-1">
                     <Link
+                      href="/learning-center"
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors group"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <Info className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      <span>Learning Center</span>
+                    </Link>
+                    <Link
                       href="/become-seller"
                       className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors group"
                       onClick={() => setIsOpen(false)}
@@ -370,20 +400,20 @@ export function Header() {
                 <div className="p-4 border-t border-border bg-muted/30">
                   <div className="flex flex-col gap-2 text-sm text-muted-foreground">
                     <a
-                      href="tel:+917396777800"
+                      href="tel:18001239336"
                       className="flex items-center gap-2 hover:text-foreground transition-colors"
                       onClick={() => setIsOpen(false)}
                     >
                       <span>📞</span>
-                      <span>+91 7396 777 800</span>
+                      <span>1800 123 9336</span>
                     </a>
                     <a
-                      href="mailto:customercare@ecobuy.com"
+                      href="mailto:info@elecobuy.com"
                       className="flex items-center gap-2 hover:text-foreground transition-colors"
                       onClick={() => setIsOpen(false)}
                     >
                       <span>✉️</span>
-                      <span>customercare@ecobuy.com</span>
+                      <span>info@elecobuy.com</span>
                     </a>
                   </div>
                 </div>
@@ -404,14 +434,36 @@ export function Header() {
               <Link href="/" className="text-sm font-medium hover:text-primary whitespace-nowrap">
                 Home
               </Link>
-              <Link href="/about" className="text-sm font-medium hover:text-primary whitespace-nowrap">
-                About us
-              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger className="text-sm font-medium hover:text-primary whitespace-nowrap flex items-center gap-1 outline-none">
+                  Products
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      All Television Boards
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      <DropdownMenuItem asChild>
+                        <Link href="/products?category=tv-pcb" className="cursor-pointer">
+                          Television PCB Boards
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </DropdownMenuContent>
+              </DropdownMenu>
               {isLoggedIn && (
                 <Link href="/dashboard/orders" className="text-sm font-medium hover:text-primary whitespace-nowrap">
                   My Orders
                 </Link>
               )}
+              <Link href="/learning-center" className="text-sm font-medium hover:text-primary whitespace-nowrap">
+                Learning Center
+              </Link>
               <Link href="/contact" className="text-sm font-medium hover:text-primary whitespace-nowrap">
                 Contact Us
               </Link>

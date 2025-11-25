@@ -9,6 +9,7 @@ import { Loader2, AlertCircle, Check } from "lucide-react"
 import { BottomNav } from "@/components/bottom-nav"
 import { API_URL } from "@/lib/api-config"
 import { useNavigation } from "@/contexts/navigation-context"
+import { useNotificationSoundContext } from "@/contexts/notification-sound-context"
 
 interface OrderItem {
   name: string
@@ -59,6 +60,7 @@ interface Order {
 export default function OrderDetailPage() {
   const router = useRouter()
   const { selectedOrderId } = useNavigation()
+  const { stopSound } = useNotificationSoundContext()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -159,6 +161,9 @@ export default function OrderDetailPage() {
         return
       }
 
+      // Stop sound for accepted order
+      stopSound(order._id, true)
+      
       alert("Order accepted successfully!")
       // Refresh order data
       fetchOrderDetails(order._id)

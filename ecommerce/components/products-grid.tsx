@@ -6,9 +6,10 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Grid3x3, List, Star, ShoppingCart, Loader2, Heart } from "lucide-react"
+import { Grid3x3, List, Star, ShoppingCart, Loader2, Heart, MessageSquare } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
+import { EnquiryModal } from "@/components/enquiry-modal"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
@@ -25,7 +26,7 @@ interface Product {
   stock: number
 }
 
-export function ProductsGrid({ searchQuery }: { searchQuery?: string }) {
+export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; category?: string }) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,6 +34,7 @@ export function ProductsGrid({ searchQuery }: { searchQuery?: string }) {
   const [sortBy, setSortBy] = useState("best-selling")
   const [addingToCart, setAddingToCart] = useState<string | null>(null)
   const [togglingFavorite, setTogglingFavorite] = useState<string | null>(null)
+  const [isEnquiryModalOpen, setIsEnquiryModalOpen] = useState(false)
   const { addToCart } = useCart()
   const { isFavorite, addToWishlist, removeFromWishlist } = useWishlist()
 
@@ -69,6 +71,21 @@ export function ProductsGrid({ searchQuery }: { searchQuery?: string }) {
           params.append("sortBy", sortParam)
           params.append("sortOrder", sortOrder)
           params.append("limit", "50")
+          
+          // Add category filter if provided
+          if (category) {
+            const categoryMap: Record<string, string> = {
+              "tv-pcb": "Television PCB Board",
+              "tv-inverter": "Television Inverter Boards",
+              "tv-motherboard": "Television Motherboard",
+              "power-supply": "Television Power Supply Boards",
+              "t-con": "Television T-Con Board",
+              "universal-motherboard": "Television Universal Motherboard",
+            }
+            const categoryName = categoryMap[category] || category
+            params.append("category", categoryName)
+          }
+          
           response = await fetch(`${API_URL}/api/products?${params.toString()}`)
         }
 
@@ -88,7 +105,7 @@ export function ProductsGrid({ searchQuery }: { searchQuery?: string }) {
     }
 
     fetchProducts()
-  }, [sortBy, searchQuery])
+  }, [sortBy, searchQuery, category])
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -191,7 +208,20 @@ export function ProductsGrid({ searchQuery }: { searchQuery?: string }) {
 
       {products.length === 0 ? (
         <div className="text-center py-8 sm:py-12">
-          <p className="text-sm sm:text-base text-muted-foreground">No products found</p>
+          <div className="max-w-md mx-auto">
+            <p className="text-sm sm:text-base text-muted-foreground mb-4">
+              No products found{searchQuery ? ` for "${searchQuery}"` : ""}
+            </p>
+            {searchQuery && (
+              <Button
+                onClick={() => setIsEnquiryModalOpen(true)}
+                className="flex items-center gap-2 mx-auto"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Enquiry Now
+              </Button>
+            )}
+          </div>
         </div>
       ) : (
         <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" : "space-y-3 sm:space-y-4"}>
@@ -304,6 +334,13 @@ export function ProductsGrid({ searchQuery }: { searchQuery?: string }) {
           })}
         </div>
       )}
+
+      {/* Enquiry Modal */}
+      <EnquiryModal
+        open={isEnquiryModalOpen}
+        onOpenChange={setIsEnquiryModalOpen}
+        productSearched={searchQuery || ""}
+      />
     </div>
   )
 }
