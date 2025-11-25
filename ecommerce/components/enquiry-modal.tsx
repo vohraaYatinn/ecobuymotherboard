@@ -263,7 +263,7 @@ export function EnquiryModal({ open, onOpenChange, productSearched }: EnquiryMod
                     </button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {formData.image?.name} ({(formData.image?.size || 0) / 1024 / 1024).toFixed(2)} MB)
+                    {`${formData.image?.name} (${((formData.image?.size || 0) / 1024 / 1024).toFixed(2)} MB)`}
                   </p>
                 </div>
               )}
