@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { getMessagingInstance } from '@/lib/firebase';
@@ -67,6 +67,12 @@ export function usePushNotifications() {
   const [fcmToken, setFcmToken] = useState<string | null>(null);
   const [isRegistered, setIsRegistered] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
+  
+  // Use refs to avoid stale closures in event listeners
+  const startSoundRef = useRef(startSound);
+  useEffect(() => {
+    startSoundRef.current = startSound;
+  }, [startSound]);
 
   // Load notifications from localStorage
   useEffect(() => {
@@ -143,7 +149,7 @@ export function usePushNotifications() {
                     const orderId = payload.data?.orderId;
                     if (notificationType === 'new_order_available' || notificationType === 'order_placed') {
                       console.log('🔔 [PushNotification] Starting continuous sound for new order');
-                      startSound(orderId);
+                      startSoundRef.current(orderId, notification.title, notification.message);
                     }
                     
                     // Show browser notification with click handler
@@ -257,7 +263,7 @@ export function usePushNotifications() {
         const orderId = notification.data?.orderId;
         if (notificationType === 'new_order_available' || notificationType === 'order_placed') {
           console.log('🔔 [PushNotification] Starting continuous sound for new order');
-          startSound(orderId);
+          startSoundRef.current(orderId, notificationData.title, notificationData.message);
         }
         
         const updated = [notificationData, ...notifications];

@@ -4,10 +4,10 @@ import React, { createContext, useContext, ReactNode } from 'react';
 import { useNotificationSound } from '@/hooks/use-notification-sound';
 
 interface NotificationSoundContextType {
-  startSound: (orderId?: string) => void;
-  stopSound: (orderId?: string, force?: boolean) => void;
-  stopAllSounds: () => void;
-  isPlaying: () => boolean;
+  startSound: (orderId?: string, title?: string, message?: string) => Promise<void>;
+  stopSound: (orderId?: string, force?: boolean) => Promise<void>;
+  stopAllSounds: () => Promise<void>;
+  isPlaying: () => Promise<boolean>;
 }
 
 const NotificationSoundContext = createContext<NotificationSoundContextType | undefined>(undefined);
@@ -25,15 +25,14 @@ export function NotificationSoundProvider({ children }: { children: ReactNode })
 export function useNotificationSoundContext() {
   const context = useContext(NotificationSoundContext);
   if (context === undefined) {
-    // Return a no-op implementation if used outside provider (for safety)
-    console.warn('useNotificationSoundContext used outside NotificationSoundProvider, returning no-op');
+    // Return a no-op implementation if used outside provider
+    console.warn('useNotificationSoundContext used outside NotificationSoundProvider');
     return {
-      startSound: () => {},
-      stopSound: () => {},
-      stopAllSounds: () => {},
-      isPlaying: () => false,
+      startSound: async () => {},
+      stopSound: async () => {},
+      stopAllSounds: async () => {},
+      isPlaying: async () => false,
     };
   }
   return context;
 }
-

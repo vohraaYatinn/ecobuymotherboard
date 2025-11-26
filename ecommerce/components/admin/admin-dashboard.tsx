@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Package, Users, ShoppingBag, TrendingUp, Loader2, AlertCircle } from "lucide-react"
 import Link from "next/link"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
 
 interface DashboardStats {
   totals: {

@@ -35,7 +35,7 @@ import {
 import { FileText, Video, Download, Loader2, Plus, Trash2, Edit, X } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
 
 interface LearningResource {
   _id: string
@@ -552,4 +552,5 @@ export function AdminLearningResources() {
     </div>
   )
 }
+
 

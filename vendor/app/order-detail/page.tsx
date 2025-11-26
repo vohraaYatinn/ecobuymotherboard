@@ -162,7 +162,7 @@ export default function OrderDetailPage() {
       }
 
       // Stop sound for accepted order
-      stopSound(order._id, true)
+      await stopSound(order._id, true)
       
       alert("Order accepted successfully!")
       // Refresh order data

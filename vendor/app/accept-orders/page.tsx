@@ -53,7 +53,7 @@ interface Order {
 
 export default function AcceptOrdersPage() {
   const router = useRouter()
-  const { stopSound, stopAllSounds, isPlaying } = useNotificationSoundContext()
+  const { startSound, stopSound, stopAllSounds, isPlaying } = useNotificationSoundContext()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -70,8 +70,9 @@ export default function AcceptOrdersPage() {
     }, 10000)
     
     // Check sound status periodically
-    const soundCheckInterval = setInterval(() => {
-      setSoundPlaying(isPlaying())
+    const soundCheckInterval = setInterval(async () => {
+      const playing = await isPlaying()
+      setSoundPlaying(playing)
     }, 500)
     
     return () => {
@@ -117,9 +118,9 @@ export default function AcceptOrdersPage() {
       const removedOrderIds = Array.from(previousOrderIds).filter(id => !currentOrderIds.has(id))
       
       // Stop sound for removed orders
-      removedOrderIds.forEach(orderId => {
-        stopSound(orderId)
-      })
+      for (const orderId of removedOrderIds) {
+        await stopSound(orderId)
+      }
       
       setPreviousOrderIds(currentOrderIds)
     } catch (err) {
@@ -161,7 +162,7 @@ export default function AcceptOrdersPage() {
       }
 
       // Stop sound for accepted order
-      stopSound(orderId, true)
+      await stopSound(orderId, true)
       
       // Remove accepted order from list
       setOrders((prev) => prev.filter((order) => order._id !== orderId))
@@ -243,17 +244,29 @@ export default function AcceptOrdersPage() {
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold tracking-tight text-foreground">Accept Orders</h1>
             <div className="flex items-center gap-2">
-              {soundPlaying && (
+              {soundPlaying ? (
                 <button
-                  onClick={() => {
-                    stopAllSounds()
+                  onClick={async () => {
+                    await stopAllSounds()
                     setSoundPlaying(false)
                   }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 hover:bg-destructive/20 transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 hover:bg-destructive/20 transition-colors animate-pulse"
                   title="Stop notification sound"
                 >
                   <VolumeX className="h-4 w-4 text-destructive" />
-                  <span className="text-xs font-semibold text-destructive">Stop Sound</span>
+                  <span className="text-xs font-semibold text-destructive">Stop</span>
+                </button>
+              ) : (
+                <button
+                  onClick={async () => {
+                    await startSound('test', 'Test Alert', 'Testing notification sound')
+                    setSoundPlaying(true)
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors"
+                  title="Test notification sound"
+                >
+                  <Volume2 className="h-4 w-4 text-primary" />
+                  <span className="text-xs font-semibold text-primary">Test</span>
                 </button>
               )}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">

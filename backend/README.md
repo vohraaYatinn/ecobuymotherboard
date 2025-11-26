@@ -27,7 +27,7 @@ FRONTEND_URL=http://localhost:3000
 
 # Backend URL (for network access - Android app development)
 # Replace with your local network IP address
-BACKEND_URL=https://api.elecobuy.com
+BACKEND_URL=https://api.safartax.com
 ```
 
 **Note:** 
@@ -55,7 +55,7 @@ Production mode:
 npm start
 ```
 
-The server will run on `https://api.elecobuy.com` by default.
+The server will run on `https://api.safartax.com` by default.
 
 ## API Endpoints
 

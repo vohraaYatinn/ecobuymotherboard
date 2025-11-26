@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -17,7 +27,9 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
-            android:exported="true">
+            android:exported="true"
+            android:showOnLockScreen="true"
+            android:turnScreenOn="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -25,6 +37,32 @@
             </intent-filter>
 
         </activity>
+
+        <!-- Order Alert Foreground Service -->
+        <service
+            android:name=".OrderAlertService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- Custom Firebase Messaging Service -->
+        <service
+            android:name=".MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- Default notification channel for FCM -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="order_alert_channel" />
+
+        <!-- High priority notifications -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -37,7 +75,4 @@
         </provider>
     </application>
 
-    <!-- Permissions -->
-
-    <uses-permission android:name="android.permission.INTERNET" />
 </manifest>
