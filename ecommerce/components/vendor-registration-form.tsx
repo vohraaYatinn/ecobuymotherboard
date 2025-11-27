@@ -7,8 +7,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useToast } from "@/hooks/use-toast"
+import { Loader2, CheckCircle } from "lucide-react"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
 export function VendorRegistrationForm() {
+  const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSuccess, setIsSuccess] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -23,10 +31,113 @@ export function VendorRegistrationForm() {
     storePhone: "",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Validate form fields
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {}
+    
+    if (!formData.username.trim()) {
+      newErrors.username = "Username is required"
+    }
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required"
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address"
+    }
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = "First name is required"
+    }
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = "Last name is required"
+    }
+    if (!formData.address1.trim()) {
+      newErrors.address1 = "Address is required"
+    }
+    if (!formData.country) {
+      newErrors.country = "Please select a country"
+    }
+    if (!formData.city.trim()) {
+      newErrors.city = "City is required"
+    }
+    if (!formData.state.trim()) {
+      newErrors.state = "State is required"
+    }
+    if (!formData.postcode.trim()) {
+      newErrors.postcode = "Postcode is required"
+    }
+    if (!formData.storePhone.trim()) {
+      newErrors.storePhone = "Phone number is required"
+    }
+    
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Vendor registration:", formData)
-    // Handle form submission
+    
+    // Clear previous errors
+    setErrors({})
+    
+    // Validate all required fields
+    if (!validateForm()) {
+      toast({
+        title: "Please fill all required fields",
+        description: "Some fields are missing or invalid. Please check the form.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const response = await fetch(`${API_URL}/api/vendors/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setIsSuccess(true)
+        toast({
+          title: "Registration Submitted!",
+          description: "Your application is pending approval. We'll notify you once it's reviewed.",
+        })
+        // Reset form
+        setFormData({
+          username: "",
+          email: "",
+          firstName: "",
+          lastName: "",
+          address1: "",
+          address2: "",
+          country: "",
+          city: "",
+          state: "",
+          postcode: "",
+          storePhone: "",
+        })
+      } else {
+        toast({
+          title: "Registration Failed",
+          description: data.message || "Something went wrong. Please try again.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Vendor registration error:", error)
+      toast({
+        title: "Error",
+        description: "Failed to connect to server. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -36,18 +147,21 @@ export function VendorRegistrationForm() {
         Fill in the details below to register as a seller on Elecobuy. All fields marked with * are required.
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <Label htmlFor="username">Username *</Label>
             <Input
               id="username"
               value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-              required
-              className="mt-2"
+              onChange={(e) => {
+                setFormData({ ...formData, username: e.target.value })
+                if (errors.username) setErrors({ ...errors, username: "" })
+              }}
+              className={`mt-2 ${errors.username ? "border-red-500 focus-visible:ring-red-500" : ""}`}
               placeholder="Choose a unique username"
             />
+            {errors.username && <p className="text-sm text-red-500 mt-1">{errors.username}</p>}
           </div>
 
           <div>
@@ -56,11 +170,14 @@ export function VendorRegistrationForm() {
               id="email"
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              required
-              className="mt-2"
+              onChange={(e) => {
+                setFormData({ ...formData, email: e.target.value })
+                if (errors.email) setErrors({ ...errors, email: "" })
+              }}
+              className={`mt-2 ${errors.email ? "border-red-500 focus-visible:ring-red-500" : ""}`}
               placeholder="your@email.com"
             />
+            {errors.email && <p className="text-sm text-red-500 mt-1">{errors.email}</p>}
           </div>
 
           <div>
@@ -68,10 +185,13 @@ export function VendorRegistrationForm() {
             <Input
               id="firstName"
               value={formData.firstName}
-              onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-              required
-              className="mt-2"
+              onChange={(e) => {
+                setFormData({ ...formData, firstName: e.target.value })
+                if (errors.firstName) setErrors({ ...errors, firstName: "" })
+              }}
+              className={`mt-2 ${errors.firstName ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
+            {errors.firstName && <p className="text-sm text-red-500 mt-1">{errors.firstName}</p>}
           </div>
 
           <div>
@@ -79,10 +199,13 @@ export function VendorRegistrationForm() {
             <Input
               id="lastName"
               value={formData.lastName}
-              onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-              required
-              className="mt-2"
+              onChange={(e) => {
+                setFormData({ ...formData, lastName: e.target.value })
+                if (errors.lastName) setErrors({ ...errors, lastName: "" })
+              }}
+              className={`mt-2 ${errors.lastName ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
+            {errors.lastName && <p className="text-sm text-red-500 mt-1">{errors.lastName}</p>}
           </div>
 
           <div className="md:col-span-2">
@@ -90,11 +213,14 @@ export function VendorRegistrationForm() {
             <Input
               id="address1"
               value={formData.address1}
-              onChange={(e) => setFormData({ ...formData, address1: e.target.value })}
-              required
-              className="mt-2"
+              onChange={(e) => {
+                setFormData({ ...formData, address1: e.target.value })
+                if (errors.address1) setErrors({ ...errors, address1: "" })
+              }}
+              className={`mt-2 ${errors.address1 ? "border-red-500 focus-visible:ring-red-500" : ""}`}
               placeholder="Street address"
             />
+            {errors.address1 && <p className="text-sm text-red-500 mt-1">{errors.address1}</p>}
           </div>
 
           <div className="md:col-span-2">
@@ -110,8 +236,14 @@ export function VendorRegistrationForm() {
 
           <div>
             <Label htmlFor="country">Country *</Label>
-            <Select value={formData.country} onValueChange={(value) => setFormData({ ...formData, country: value })}>
-              <SelectTrigger className="mt-2">
+            <Select 
+              value={formData.country} 
+              onValueChange={(value) => {
+                setFormData({ ...formData, country: value })
+                if (errors.country) setErrors({ ...errors, country: "" })
+              }}
+            >
+              <SelectTrigger className={`mt-2 ${errors.country ? "border-red-500 focus:ring-red-500" : ""}`}>
                 <SelectValue placeholder="Select country" />
               </SelectTrigger>
               <SelectContent>
@@ -122,6 +254,7 @@ export function VendorRegistrationForm() {
                 <SelectItem value="australia">Australia</SelectItem>
               </SelectContent>
             </Select>
+            {errors.country && <p className="text-sm text-red-500 mt-1">{errors.country}</p>}
           </div>
 
           <div>
@@ -129,10 +262,13 @@ export function VendorRegistrationForm() {
             <Input
               id="city"
               value={formData.city}
-              onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              required
-              className="mt-2"
+              onChange={(e) => {
+                setFormData({ ...formData, city: e.target.value })
+                if (errors.city) setErrors({ ...errors, city: "" })
+              }}
+              className={`mt-2 ${errors.city ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
+            {errors.city && <p className="text-sm text-red-500 mt-1">{errors.city}</p>}
           </div>
 
           <div>
@@ -140,10 +276,13 @@ export function VendorRegistrationForm() {
             <Input
               id="state"
               value={formData.state}
-              onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-              required
-              className="mt-2"
+              onChange={(e) => {
+                setFormData({ ...formData, state: e.target.value })
+                if (errors.state) setErrors({ ...errors, state: "" })
+              }}
+              className={`mt-2 ${errors.state ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
+            {errors.state && <p className="text-sm text-red-500 mt-1">{errors.state}</p>}
           </div>
 
           <div>
@@ -151,10 +290,13 @@ export function VendorRegistrationForm() {
             <Input
               id="postcode"
               value={formData.postcode}
-              onChange={(e) => setFormData({ ...formData, postcode: e.target.value })}
-              required
-              className="mt-2"
+              onChange={(e) => {
+                setFormData({ ...formData, postcode: e.target.value })
+                if (errors.postcode) setErrors({ ...errors, postcode: "" })
+              }}
+              className={`mt-2 ${errors.postcode ? "border-red-500 focus-visible:ring-red-500" : ""}`}
             />
+            {errors.postcode && <p className="text-sm text-red-500 mt-1">{errors.postcode}</p>}
           </div>
 
           <div className="md:col-span-2">
@@ -163,22 +305,55 @@ export function VendorRegistrationForm() {
               id="storePhone"
               type="tel"
               value={formData.storePhone}
-              onChange={(e) => setFormData({ ...formData, storePhone: e.target.value })}
-              required
-              className="mt-2"
+              onChange={(e) => {
+                setFormData({ ...formData, storePhone: e.target.value })
+                if (errors.storePhone) setErrors({ ...errors, storePhone: "" })
+              }}
+              className={`mt-2 ${errors.storePhone ? "border-red-500 focus-visible:ring-red-500" : ""}`}
               placeholder="+91 1234567890"
             />
+            {errors.storePhone && <p className="text-sm text-red-500 mt-1">{errors.storePhone}</p>}
           </div>
         </div>
 
         <div className="pt-6">
-          <Button type="submit" size="lg" className="w-full md:w-auto">
-            Register as Seller
+          <Button 
+            type="submit" 
+            size="lg" 
+            className="w-full md:w-auto"
+            disabled={isLoading || isSuccess}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Submitting...
+              </>
+            ) : isSuccess ? (
+              <>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Submitted!
+              </>
+            ) : (
+              "Register as Seller"
+            )}
           </Button>
           <p className="text-sm text-muted-foreground mt-4">
             By registering, you agree to our Terms and Conditions and Privacy Policy.
           </p>
         </div>
+
+        {isSuccess && (
+          <div className="mt-6 p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+            <div className="flex items-center gap-2 text-green-700 dark:text-green-400">
+              <CheckCircle className="h-5 w-5" />
+              <span className="font-medium">Registration Submitted Successfully!</span>
+            </div>
+            <p className="text-sm text-green-600 dark:text-green-500 mt-2">
+              Your vendor application is now pending approval. Our team will review your details and get back to you soon.
+              You will be notified once your application is approved.
+            </p>
+          </div>
+        )}
       </form>
     </div>
   )

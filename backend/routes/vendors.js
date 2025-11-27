@@ -313,6 +313,98 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
   }
 })
 
+// Public vendor registration (no auth required)
+router.post("/register", async (req, res) => {
+  try {
+    const {
+      username,
+      email,
+      firstName,
+      lastName,
+      address1,
+      address2,
+      country,
+      city,
+      state,
+      postcode,
+      storePhone,
+    } = req.body
+
+    // Validate required fields
+    if (!username || !email || !firstName || !lastName || !address1 || !city || !state || !postcode || !storePhone) {
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be filled",
+      })
+    }
+
+    // Check if email or username already exists
+    const existingVendor = await Vendor.findOne({
+      $or: [{ email: email.toLowerCase() }, { username: username.toLowerCase() }],
+    })
+
+    if (existingVendor) {
+      return res.status(400).json({
+        success: false,
+        message: "A vendor with this email or username already exists",
+      })
+    }
+
+    // Create vendor with pending status
+    const vendor = new Vendor({
+      name: `${firstName} ${lastName}`,
+      username: username.toLowerCase(),
+      email: email.toLowerCase(),
+      phone: storePhone,
+      status: "pending",
+      address: {
+        firstName: firstName,
+        lastName: lastName,
+        address1: address1,
+        address2: address2 || "",
+        city: city,
+        state: state,
+        postcode: postcode,
+        country: country || "india",
+      },
+    })
+
+    await vendor.save()
+
+    console.log("✅ New vendor registration:", vendor._id, vendor.name)
+
+    res.status(201).json({
+      success: true,
+      message: "Registration submitted successfully! Your application is pending approval.",
+      data: {
+        id: vendor._id,
+        name: vendor.name,
+        username: vendor.username,
+        email: vendor.email,
+        status: vendor.status,
+      },
+    })
+  } catch (error) {
+    console.error("Vendor registration error:", error)
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "A vendor with this email or username already exists",
+      })
+    }
+    if (error.name === "ValidationError") {
+      return res.status(400).json({
+        success: false,
+        message: Object.values(error.errors)[0].message,
+      })
+    }
+    res.status(500).json({
+      success: false,
+      message: "Error submitting registration. Please try again.",
+    })
+  }
+})
+
 // Get vendor statistics
 router.get("/:id/stats", async (req, res) => {
   try {

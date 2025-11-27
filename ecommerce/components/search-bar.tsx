@@ -6,7 +6,8 @@ import Link from "next/link"
 import Image from "next/image"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Search, Loader2 } from "lucide-react"
+import { Search, Loader2, MessageSquarePlus } from "lucide-react"
+import { EnquiryModal } from "@/components/enquiry-modal"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
@@ -27,6 +28,8 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [loading, setLoading] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
+  const [searchCompleted, setSearchCompleted] = useState(false)
+  const [enquiryModalOpen, setEnquiryModalOpen] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceTimer = useRef<NodeJS.Timeout | null>(null)
@@ -52,6 +55,7 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
     if (searchQuery.trim().length < 2) {
       setSuggestions([])
       setShowSuggestions(false)
+      setSearchCompleted(false)
       return
     }
 
@@ -62,12 +66,14 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
         const data = await response.json()
         if (data.success) {
           setSuggestions(data.data)
-          setShowSuggestions(data.data.length > 0)
+          setShowSuggestions(true) // Always show dropdown when we have a query
           setSelectedIndex(-1)
+          setSearchCompleted(true)
         }
       } catch (error) {
         console.error("Error fetching suggestions:", error)
         setSuggestions([])
+        setSearchCompleted(true)
       } finally {
         setLoading(false)
       }
@@ -132,7 +138,7 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onFocus={() => {
-            if (suggestions.length > 0) {
+            if (searchQuery.trim().length >= 2 && searchCompleted) {
               setShowSuggestions(true)
             }
           }}
@@ -151,52 +157,86 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
       </form>
 
       {/* Suggestions Dropdown */}
-      {showSuggestions && suggestions.length > 0 && (
+      {showSuggestions && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-lg shadow-lg z-50 max-h-[500px] overflow-y-auto">
           <div className="p-2">
-            {suggestions.map((product, index) => (
-              <Link
-                key={product._id}
-                href={`/products/${product._id}`}
-                onClick={() => {
-                  setShowSuggestions(false)
-                  setSearchQuery("")
-                }}
-                className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors ${
-                  selectedIndex === index ? "bg-muted" : ""
-                }`}
-              >
-                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
-                  <Image
-                    src={product.images?.[0] ? `${API_URL}${product.images[0]}` : "/placeholder.svg"}
-                    alt={product.name}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground line-clamp-1">{product.brand}</p>
-                  <p className="text-sm font-medium line-clamp-2">{product.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1">SKU: {product.sku}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-bold text-primary">{formatPrice(product.price)}</p>
-                </div>
-              </Link>
-            ))}
-            {searchQuery.trim().length > 0 && (
-              <div className="border-t border-border mt-2 pt-2">
-                <button
-                  onClick={() => handleSearch()}
-                  className="w-full text-left px-3 py-2 text-sm font-medium text-primary hover:bg-muted rounded-lg transition-colors"
+            {suggestions.length > 0 ? (
+              <>
+                {suggestions.map((product, index) => (
+                  <Link
+                    key={product._id}
+                    href={`/products/${product._id}`}
+                    onClick={() => {
+                      setShowSuggestions(false)
+                      setSearchQuery("")
+                    }}
+                    className={`flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors ${
+                      selectedIndex === index ? "bg-muted" : ""
+                    }`}
+                  >
+                    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-muted">
+                      <Image
+                        src={product.images?.[0] ? `${API_URL}${product.images[0]}` : "/placeholder.svg"}
+                        alt={product.name}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground line-clamp-1">{product.brand}</p>
+                      <p className="text-sm font-medium line-clamp-2">{product.name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">SKU: {product.sku}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-primary">{formatPrice(product.price)}</p>
+                    </div>
+                  </Link>
+                ))}
+                {searchQuery.trim().length > 0 && (
+                  <div className="border-t border-border mt-2 pt-2">
+                    <button
+                      onClick={() => handleSearch()}
+                      className="w-full text-left px-3 py-2 text-sm font-medium text-primary hover:bg-muted rounded-lg transition-colors"
+                    >
+                      View all results for "{searchQuery}"
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : searchCompleted && !loading ? (
+              // No results found - show Enquiry button
+              <div className="p-4 text-center">
+                <p className="text-sm text-muted-foreground mb-3">
+                  No products found for "<span className="font-medium">{searchQuery}</span>"
+                </p>
+                <Button
+                  onClick={() => {
+                    setEnquiryModalOpen(true)
+                    setShowSuggestions(false)
+                  }}
+                  className="gap-2"
+                  variant="default"
                 >
-                  View all results for "{searchQuery}"
-                </button>
+                  <MessageSquarePlus className="h-4 w-4" />
+                  Enquire About This Product
+                </Button>
               </div>
-            )}
+            ) : loading ? (
+              <div className="p-4 text-center">
+                <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mt-2">Searching...</p>
+              </div>
+            ) : null}
           </div>
         </div>
       )}
+
+      {/* Enquiry Modal */}
+      <EnquiryModal
+        open={enquiryModalOpen}
+        onOpenChange={setEnquiryModalOpen}
+        productSearched={searchQuery}
+      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Card, CardContent } from "@/components/ui/card"
@@ -8,7 +8,17 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Eye, Plus, Edit, Loader2 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Search, Eye, Plus, Edit, Loader2, Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
@@ -42,6 +52,14 @@ const getStatusLabel = (status: string) => {
   return statusMap[status] || status
 }
 
+interface BulkUploadResult {
+  total: number
+  created: number
+  updated: number
+  failed: number
+  errors: Array<{ row: number; sku: string; error: string }>
+}
+
 export function AdminProductsList() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -52,6 +70,14 @@ export function AdminProductsList() {
   const [brandFilter, setBrandFilter] = useState("all")
   const [categories, setCategories] = useState<string[]>([])
   const [brands, setBrands] = useState<string[]>([])
+  
+  // Bulk upload state
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadResult, setUploadResult] = useState<BulkUploadResult | null>(null)
+  const [uploadError, setUploadError] = useState("")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch filter options
   useEffect(() => {
@@ -115,6 +141,102 @@ export function AdminProductsList() {
     }).format(price)
   }
 
+  // Download Excel template
+  const handleDownloadTemplate = async () => {
+    try {
+      const token = localStorage.getItem("adminToken")
+      const response = await fetch(`${API_URL}/api/products/bulk/template`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to download template")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "product_upload_template.xlsx"
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (err) {
+      console.error("Error downloading template:", err)
+      alert("Failed to download template. Please try again.")
+    }
+  }
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setSelectedFile(file)
+      setUploadError("")
+      setUploadResult(null)
+    }
+  }
+
+  // Handle bulk upload
+  const handleBulkUpload = async () => {
+    if (!selectedFile) {
+      setUploadError("Please select a file to upload")
+      return
+    }
+
+    setUploading(true)
+    setUploadError("")
+    setUploadResult(null)
+
+    try {
+      const token = localStorage.getItem("adminToken")
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+
+      const response = await fetch(`${API_URL}/api/products/bulk/upload`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setUploadResult(data.data)
+        // Refresh products list
+        const params = new URLSearchParams()
+        params.append("limit", "50")
+        const productsResponse = await fetch(`${API_URL}/api/products?${params.toString()}`)
+        const productsData = await productsResponse.json()
+        if (productsData.success) {
+          setProducts(productsData.data)
+        }
+      } else {
+        setUploadError(data.message || "Failed to upload file")
+      }
+    } catch (err) {
+      console.error("Error uploading file:", err)
+      setUploadError("Failed to upload file. Please try again.")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // Reset upload dialog state
+  const resetUploadDialog = () => {
+    setSelectedFile(null)
+    setUploadError("")
+    setUploadResult(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -122,12 +244,148 @@ export function AdminProductsList() {
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Products Management</h1>
           <p className="text-sm text-muted-foreground mt-1">View and manage all products</p>
         </div>
-        <Link href="/admin/products/add">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Product
+        <div className="flex flex-wrap gap-2">
+          {/* Download Template Button */}
+          <Button variant="outline" className="gap-2" onClick={handleDownloadTemplate}>
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Download Template</span>
           </Button>
-        </Link>
+
+          {/* Bulk Upload Dialog */}
+          <Dialog open={uploadDialogOpen} onOpenChange={(open) => {
+            setUploadDialogOpen(open)
+            if (!open) resetUploadDialog()
+          }}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">Bulk Upload</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                  Bulk Product Upload
+                </DialogTitle>
+                <DialogDescription>
+                  Upload an Excel file (.xlsx) to add or update multiple products at once.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4">
+                {/* Upload Result */}
+                {uploadResult && (
+                  <Alert className={uploadResult.failed > 0 ? "border-yellow-500 bg-yellow-50" : "border-green-500 bg-green-50"}>
+                    <div className="flex items-start gap-3">
+                      {uploadResult.failed > 0 ? (
+                        <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                      ) : (
+                        <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
+                      )}
+                      <div className="space-y-2 flex-1">
+                        <p className="font-medium text-foreground">Upload Complete</p>
+                        <div className="grid grid-cols-3 gap-2 text-sm">
+                          <div className="flex items-center gap-1">
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            <span>Created: {uploadResult.created}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4 text-blue-600" />
+                            <span>Updated: {uploadResult.updated}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <XCircle className="h-4 w-4 text-red-600" />
+                            <span>Failed: {uploadResult.failed}</span>
+                          </div>
+                        </div>
+                        {uploadResult.errors.length > 0 && (
+                          <div className="mt-2 max-h-32 overflow-y-auto text-xs space-y-1 bg-white/50 p-2 rounded border">
+                            <p className="font-medium text-red-600">Errors:</p>
+                            {uploadResult.errors.map((err, idx) => (
+                              <p key={idx} className="text-red-600">
+                                Row {err.row} (SKU: {err.sku}): {err.error}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Alert>
+                )}
+
+                {/* Upload Error */}
+                {uploadError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{uploadError}</AlertDescription>
+                  </Alert>
+                )}
+
+                {/* File Input */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Select Excel File</label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={handleFileSelect}
+                      className="flex-1"
+                    />
+                  </div>
+                  {selectedFile && (
+                    <p className="text-sm text-muted-foreground">
+                      Selected: {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                    </p>
+                  )}
+                </div>
+
+                {/* Instructions */}
+                <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-2">
+                  <p className="font-medium">Instructions:</p>
+                  <ul className="list-disc list-inside space-y-1 text-muted-foreground">
+                    <li>Download the template first to see the required format</li>
+                    <li>Fill in your product data in the Products sheet</li>
+                    <li>Required fields: name, sku, brand, category, description, price, stock</li>
+                    <li>If a SKU already exists, the product will be updated</li>
+                    <li>Features should be separated by pipe (|) character</li>
+                  </ul>
+                </div>
+              </div>
+
+              <DialogFooter className="flex-col sm:flex-row gap-2">
+                <Button variant="outline" onClick={handleDownloadTemplate} className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Download Template
+                </Button>
+                <Button
+                  onClick={handleBulkUpload}
+                  disabled={!selectedFile || uploading}
+                  className="gap-2"
+                >
+                  {uploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      Upload Products
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Link href="/admin/products/add">
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Product
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search and Filters */}

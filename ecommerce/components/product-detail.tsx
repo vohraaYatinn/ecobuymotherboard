@@ -146,12 +146,12 @@ export function ProductDetail({ productId }: ProductDetailProps) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12 mb-8 sm:mb-12 lg:mb-16">
         {/* Product Images */}
         <div>
-          <div className="relative aspect-square overflow-hidden rounded-lg border border-border bg-muted mb-3 sm:mb-4">
+          <div className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-muted mb-3 sm:mb-4 cursor-zoom-in">
             <Image
               src={getImageUrl(displayImages[selectedImage])}
               alt={product.name}
               fill
-              className="object-cover"
+              className="object-cover transition-transform duration-500 ease-out group-hover:scale-125"
               sizes="(max-width: 1024px) 100vw, 50vw"
               priority
             />

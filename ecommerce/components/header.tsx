@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -32,7 +33,7 @@ export function Header() {
 
   useEffect(() => {
     // Check if user is logged in and get customer name
-    const checkAuth = () => {
+    const checkAuth = async () => {
       const token = localStorage.getItem("customerToken")
       const customerData = localStorage.getItem("customerData")
       setIsLoggedIn(!!token)
@@ -40,7 +41,41 @@ export function Header() {
       if (token && customerData) {
         try {
           const customer = JSON.parse(customerData)
-          setCustomerName(customer.name || customer.firstName || "User")
+          // Check for name with proper trimming to handle empty strings
+          const storedName = customer.name?.trim()
+          
+          if (storedName) {
+            setCustomerName(storedName)
+          } else {
+            // If name is not in localStorage, fetch from API to get latest data
+            try {
+              const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"}/api/customer-auth/profile`, {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              })
+              
+              if (response.ok) {
+                const data = await response.json()
+                if (data.success && data.data?.name?.trim()) {
+                  setCustomerName(data.data.name.trim())
+                  // Update localStorage with fresh data
+                  localStorage.setItem("customerData", JSON.stringify({
+                    ...customer,
+                    name: data.data.name,
+                    email: data.data.email,
+                  }))
+                } else {
+                  setCustomerName(null)
+                }
+              } else {
+                setCustomerName(null)
+              }
+            } catch (fetchErr) {
+              console.error("Error fetching customer profile:", fetchErr)
+              setCustomerName(null)
+            }
+          }
         } catch (err) {
           console.error("Error parsing customer data:", err)
           setCustomerName(null)
@@ -154,8 +189,8 @@ export function Header() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
                     <div className="px-2 py-1.5 border-b border-border">
-                      <p className="text-sm font-semibold text-foreground">{customerName || "User"}</p>
-                      <p className="text-xs text-muted-foreground">My Account</p>
+                      <p className="text-sm font-semibold text-foreground">{customerName || "My Account"}</p>
+                      <p className="text-xs text-muted-foreground">Customer Account</p>
                     </div>
                     <DropdownMenuItem asChild>
                       <Link href="/dashboard/orders" className="flex items-center gap-2 cursor-pointer">
@@ -206,11 +241,15 @@ export function Header() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 sm:h-20 items-center justify-between gap-2 sm:gap-4">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 flex-shrink-0">
-            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-primary">
-              <span className="text-lg sm:text-xl font-bold text-primary-foreground">E</span>
-            </div>
-            <span className="hidden text-xl font-bold text-foreground sm:inline">Elecobuy</span>
+          <Link href="/" className="flex items-center flex-shrink-0">
+            <Image
+              src="/logo.png"
+              alt="Elecobuy"
+              width={160}
+              height={48}
+              className="h-10 sm:h-12 w-auto"
+              priority
+            />
           </Link>
 
           <div className="hidden flex-1 max-w-2xl md:block">
@@ -260,11 +299,14 @@ export function Header() {
               <SheetContent side="right" className="w-[300px] sm:w-[380px] p-0 flex flex-col">
                 {/* Header Section */}
                 <div className="flex items-center justify-between p-6 border-b border-border bg-gradient-to-r from-primary/5 to-primary/10">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                      <span className="text-xl font-bold text-primary-foreground">E</span>
-                    </div>
-                    <span className="text-xl font-bold text-foreground">Elecobuy</span>
+                  <div className="flex items-center">
+                    <Image
+                      src="/logo.png"
+                      alt="Elecobuy"
+                      width={140}
+                      height={42}
+                      className="h-10 w-auto"
+                    />
                   </div>
                   <Button
                     variant="ghost"

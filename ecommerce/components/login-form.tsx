@@ -7,19 +7,22 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2, User, Mail, Phone } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export function LoginForm() {
   const router = useRouter()
-  const [step, setStep] = useState<"phone" | "otp">("phone")
+  const [step, setStep] = useState<"details" | "otp">("details")
   const [phoneNumber, setPhoneNumber] = useState("")
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
   const [otp, setOtp] = useState(["", "", "", ""])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [verificationId, setVerificationId] = useState("")
   const [timer, setTimer] = useState(30)
+  const [isNewUser, setIsNewUser] = useState(false)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
   useEffect(() => {
@@ -35,10 +38,31 @@ export function LoginForm() {
     }
   }, [timer, step])
 
-  const handlePhoneSubmit = async (e: React.FormEvent) => {
+  // Validate email format
+  const isValidEmail = (email: string) => {
+    if (!email) return true // Email is optional
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    return emailRegex.test(email)
+  }
+
+  const handleDetailsSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError("")
+
+    // Validate name
+    if (!name.trim()) {
+      setError("Please enter your name")
+      setIsLoading(false)
+      return
+    }
+
+    // Validate email format if provided
+    if (email && !isValidEmail(email)) {
+      setError("Please enter a valid email address")
+      setIsLoading(false)
+      return
+    }
 
     try {
       const response = await fetch(`${API_URL}/api/customer-auth/send-otp`, {
@@ -49,6 +73,8 @@ export function LoginForm() {
         body: JSON.stringify({
           mobile: phoneNumber,
           countryCode: "91",
+          name: name.trim(),
+          email: email.trim(),
         }),
       })
 
@@ -61,8 +87,11 @@ export function LoginForm() {
       }
 
       setVerificationId(data.verificationId)
+      setIsNewUser(data.isNewUser)
       sessionStorage.setItem("customerVerificationId", data.verificationId)
       sessionStorage.setItem("customerMobile", data.mobile)
+      sessionStorage.setItem("customerName", name.trim())
+      sessionStorage.setItem("customerEmail", email.trim())
       setStep("otp")
       setTimer(30)
     } catch (err) {
@@ -100,11 +129,13 @@ export function LoginForm() {
       const otpValue = otp.join("")
       const storedVerificationId = verificationId || sessionStorage.getItem("customerVerificationId")
       const storedMobile = sessionStorage.getItem("customerMobile") || `91${phoneNumber}`
+      const storedName = sessionStorage.getItem("customerName") || name
+      const storedEmail = sessionStorage.getItem("customerEmail") || email
 
       if (!storedVerificationId) {
         setError("Session expired. Please request a new OTP.")
         setIsLoading(false)
-        setStep("phone")
+        setStep("details")
         return
       }
 
@@ -121,6 +152,8 @@ export function LoginForm() {
           countryCode: countryCode,
           otp: otpValue,
           verificationId: storedVerificationId,
+          name: storedName,
+          email: storedEmail,
         }),
       })
 
@@ -141,6 +174,8 @@ export function LoginForm() {
       // Clear session storage
       sessionStorage.removeItem("customerVerificationId")
       sessionStorage.removeItem("customerMobile")
+      sessionStorage.removeItem("customerName")
+      sessionStorage.removeItem("customerEmail")
 
       // Trigger cart refresh to merge session cart with customer cart
       window.dispatchEvent(new Event("customerLoggedIn"))
@@ -164,6 +199,9 @@ export function LoginForm() {
     setIsLoading(true)
 
     try {
+      const storedName = sessionStorage.getItem("customerName") || name
+      const storedEmail = sessionStorage.getItem("customerEmail") || email
+
       const response = await fetch(`${API_URL}/api/customer-auth/send-otp`, {
         method: "POST",
         headers: {
@@ -172,6 +210,8 @@ export function LoginForm() {
         body: JSON.stringify({
           mobile: phoneNumber,
           countryCode: "91",
+          name: storedName,
+          email: storedEmail,
         }),
       })
 
@@ -197,10 +237,12 @@ export function LoginForm() {
       <div className="max-w-md mx-auto">
         <div className="text-center mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold mb-2">
-            {step === "phone" ? "Welcome to Elecobuy" : "Verify OTP"}
+            {step === "details" ? "Welcome to Elecobuy" : "Verify OTP"}
           </h1>
           <p className="text-sm sm:text-base text-muted-foreground">
-            {step === "phone" ? "Enter your phone number to continue" : `We've sent a 4-digit code to ${phoneNumber}`}
+            {step === "details" 
+              ? "Enter your details to continue" 
+              : `We've sent a 4-digit code to +91 ${phoneNumber}`}
           </p>
         </div>
 
@@ -211,10 +253,49 @@ export function LoginForm() {
             </div>
           )}
 
-          {step === "phone" ? (
-            <form onSubmit={handlePhoneSubmit} className="space-y-6">
+          {step === "details" ? (
+            <form onSubmit={handleDetailsSubmit} className="space-y-5">
+              {/* Name Field */}
               <div>
-                <Label htmlFor="phone">Phone Number</Label>
+                <Label htmlFor="name" className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Full Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  placeholder="Enter your full name"
+                  className="mt-2"
+                  disabled={isLoading}
+                />
+              </div>
+
+              {/* Email Field */}
+              <div>
+                <Label htmlFor="email" className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Email Address <span className="text-muted-foreground text-xs">(optional)</span>
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email address"
+                  className="mt-2"
+                  disabled={isLoading}
+                />
+              </div>
+
+              {/* Phone Number Field */}
+              <div>
+                <Label htmlFor="phone" className="flex items-center gap-2">
+                  <Phone className="h-4 w-4" />
+                  Phone Number <span className="text-destructive">*</span>
+                </Label>
                 <div className="flex gap-2 mt-2">
                   <div className="flex items-center px-3 border border-input rounded-md bg-muted">
                     <span className="text-sm font-medium">+91</span>
@@ -231,16 +312,24 @@ export function LoginForm() {
                     disabled={isLoading}
                   />
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  We'll send you a verification code via SMS
+                </p>
               </div>
 
-              <Button type="submit" size="lg" className="w-full" disabled={isLoading || phoneNumber.length < 10}>
+              <Button 
+                type="submit" 
+                size="lg" 
+                className="w-full" 
+                disabled={isLoading || phoneNumber.length < 10 || !name.trim()}
+              >
                 {isLoading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Sending OTP...
                   </>
                 ) : (
-                  "Send OTP"
+                  "Continue"
                 )}
               </Button>
             </form>
@@ -299,13 +388,13 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={() => {
-                  setStep("phone")
+                  setStep("details")
                   setError("")
                 }}
                 className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full"
               >
                 <ArrowLeft className="h-4 w-4" />
-                Change phone number
+                Change details
               </button>
             </form>
           )}

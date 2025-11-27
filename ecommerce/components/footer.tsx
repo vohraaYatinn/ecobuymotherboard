@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Phone, Headphones, ShoppingCart, ArrowUp, Facebook, Instagram, Linkedin, Youtube } from "lucide-react"
+import Image from "next/image"
+import { Phone, Headphones, ArrowUp, Facebook, Instagram, Linkedin, Youtube } from "lucide-react"
 import { useEffect, useState } from "react"
 
 export function Footer() {
@@ -25,12 +26,16 @@ export function Footer() {
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {/* Company Info - Top Left */}
           <div className="space-y-3">
-            <Link href="/" className="flex items-center gap-2 mb-3">
-              <span className="text-xl font-bold text-green-600">eleco</span>
-              <span className="text-xl font-bold text-blue-600 flex items-center gap-1">
-                buy
-                <ShoppingCart className="h-4 w-4 text-blue-600" />
-              </span>
+            <Link href="/" className="flex items-center mb-3">
+              <div className="bg-white rounded-md p-2">
+                <Image
+                  src="/logo.png"
+                  alt="Elecobuy"
+                  width={140}
+                  height={42}
+                  className="h-10 w-auto"
+                />
+              </div>
             </Link>
             
             <div className="flex items-center gap-2 mb-2">
@@ -88,27 +93,22 @@ export function Footer() {
             <h3 className="mb-3 text-sm font-semibold text-secondary-foreground">Customer Services</h3>
             <ul className="space-y-2 text-sm">
               <li>
-                <Link href="/become-seller" className="text-muted-foreground transition-colors hover:text-primary">
-                  Become A Vendor
-                </Link>
-              </li>
-              <li>
                 <Link href="/terms" className="text-muted-foreground transition-colors hover:text-primary">
                   Terms and Conditions
                 </Link>
               </li>
               <li>
-                <Link href="/terms" className="text-muted-foreground transition-colors hover:text-primary">
+                <Link href="/shipping-policy" className="text-muted-foreground transition-colors hover:text-primary">
                   Shipping Policy
                 </Link>
               </li>
               <li>
-                <Link href="/terms" className="text-muted-foreground transition-colors hover:text-primary">
+                <Link href="/privacy-policy" className="text-muted-foreground transition-colors hover:text-primary">
                   Privacy Policy
                 </Link>
               </li>
               <li>
-                <Link href="/terms" className="text-muted-foreground transition-colors hover:text-primary">
+                <Link href="/return-policy" className="text-muted-foreground transition-colors hover:text-primary">
                   Return Policy
                 </Link>
               </li>
@@ -155,13 +155,13 @@ export function Footer() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">Ekranfix Private Limited - All Rights Reserved</p>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="font-semibold">Discover</span>
-                <span className="font-semibold">Mastercard</span>
-                <span className="font-semibold">Visa</span>
-                <span className="font-semibold">BHIM</span>
-                <span className="font-semibold">UPI</span>
-              </div>
+              <Image 
+                src="/footer-payments.png" 
+                alt="We accept: Discover, Mastercard, Visa, BHIM, UPI" 
+                width={200} 
+                height={24} 
+                className="h-6 w-auto"
+              />
             </div>
           </div>
         </div>

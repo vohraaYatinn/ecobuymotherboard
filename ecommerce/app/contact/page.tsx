@@ -1,7 +1,7 @@
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { ContactForm } from "@/components/contact-form"
-import { Mail, Phone, MapPin, Clock } from "lucide-react"
+import { Mail, Phone, MapPin, Building2 } from "lucide-react"
 
 export default function ContactPage() {
   return (
@@ -29,8 +29,8 @@ export default function ContactPage() {
                       <Phone className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold mb-1">Phone</h3>
-                      <p className="text-muted-foreground">+91 7396 777 800 / 600 / 300</p>
+                      <h3 className="font-semibold mb-1">Support</h3>
+                      <p className="text-muted-foreground">1800 123 9336</p>
                     </div>
                   </div>
 
@@ -40,7 +40,7 @@ export default function ContactPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold mb-1">Email</h3>
-                      <p className="text-muted-foreground">customercare@ecobuy.com</p>
+                      <p className="text-muted-foreground">info@ekranfix.com</p>
                     </div>
                   </div>
 
@@ -51,26 +51,24 @@ export default function ContactPage() {
                     <div>
                       <h3 className="font-semibold mb-1">Address</h3>
                       <p className="text-muted-foreground">
-                        123 Electronics Plaza
+                        H NO 3-122/6, Chengicherla Road,
                         <br />
-                        Tech District, Mumbai 400001
+                        Besides Growel Feed Supplements and Mineral Mixtures,
                         <br />
-                        Maharashtra, India
+                        Boudha Nagar, Hyderabad,
+                        <br />
+                        Medchal Malkajgiri, Telangana, 500098
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-start gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                      <Clock className="h-5 w-5 text-primary" />
+                      <Building2 className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <h3 className="font-semibold mb-1">Business Hours</h3>
-                      <p className="text-muted-foreground">
-                        Monday - Saturday: 9:00 AM - 6:00 PM
-                        <br />
-                        Sunday: Closed
-                      </p>
+                      <h3 className="font-semibold mb-1">CIN</h3>
+                      <p className="text-muted-foreground">U95210TS2023PTC173156</p>
                     </div>
                   </div>
                 </div>

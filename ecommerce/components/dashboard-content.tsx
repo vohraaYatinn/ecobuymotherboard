@@ -188,13 +188,18 @@ export function DashboardContent() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                   <User className="h-6 w-6 text-primary" />
                 </div>
-                <div>
+                <div className="min-w-0 flex-1">
                   <CardTitle className="text-base sm:text-lg">
                     {customer?.name || "Customer"}
                   </CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">
+                  <CardDescription className="text-xs sm:text-sm truncate">
                     {customer?.mobile ? `+${customer.mobile}` : "No phone number"}
                   </CardDescription>
+                  {customer?.email && (
+                    <CardDescription className="text-xs truncate">
+                      {customer.email}
+                    </CardDescription>
+                  )}
                 </div>
               </div>
             </CardHeader>

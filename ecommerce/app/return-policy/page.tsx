@@ -1,10 +1,11 @@
 import { PolicyPageContent } from "@/components/policy-page-content"
 
-export default function TermsPage() {
+export default function ReturnPolicyPage() {
   return (
     <PolicyPageContent 
-      slug="terms-and-conditions" 
-      fallbackTitle="Terms and Conditions" 
+      slug="return-policy" 
+      fallbackTitle="Return Policy" 
     />
   )
 }
+
