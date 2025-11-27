@@ -11,9 +11,13 @@ import { ArrowLeft, Loader2, User, Mail, Phone } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
+type LoginMode = "register" | "login"
+type Step = "details" | "phone" | "newUserDetails" | "otp"
+
 export function LoginForm() {
   const router = useRouter()
-  const [step, setStep] = useState<"details" | "otp">("details")
+  const [mode, setMode] = useState<LoginMode>("register") // "register" for new users, "login" for existing
+  const [step, setStep] = useState<Step>("details")
   const [phoneNumber, setPhoneNumber] = useState("")
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -43,6 +47,91 @@ export function LoginForm() {
     if (!email) return true // Email is optional
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     return emailRegex.test(email)
+  }
+
+  // Switch between login and register modes
+  const handleModeSwitch = () => {
+    setError("")
+    setPhoneNumber("")
+    setName("")
+    setEmail("")
+    setOtp(["", "", "", ""])
+    if (mode === "register") {
+      setMode("login")
+      setStep("phone")
+    } else {
+      setMode("register")
+      setStep("details")
+    }
+  }
+
+  // Handle phone-only submission (for existing users)
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch(`${API_URL}/api/customer-auth/send-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mobile: phoneNumber,
+          countryCode: "91",
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.message || "Failed to send OTP. Please try again.")
+        setIsLoading(false)
+        return
+      }
+
+      setVerificationId(data.verificationId)
+      setIsNewUser(data.isNewUser)
+      sessionStorage.setItem("customerVerificationId", data.verificationId)
+      sessionStorage.setItem("customerMobile", data.mobile)
+
+      // If user doesn't exist, ask for name and email
+      if (data.isNewUser) {
+        setStep("newUserDetails")
+      } else {
+        setStep("otp")
+        setTimer(30)
+      }
+    } catch (err) {
+      console.error("Error sending OTP:", err)
+      setError("Network error. Please check if the server is running.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Handle new user details submission (when existing user flow discovers new user)
+  const handleNewUserDetailsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError("")
+
+    // Validate name
+    if (!name.trim()) {
+      setError("Please enter your name")
+      return
+    }
+
+    // Validate email format if provided
+    if (email && !isValidEmail(email)) {
+      setError("Please enter a valid email address")
+      return
+    }
+
+    sessionStorage.setItem("customerName", name.trim())
+    sessionStorage.setItem("customerEmail", email.trim())
+    setStep("otp")
+    setTimer(30)
   }
 
   const handleDetailsSubmit = async (e: React.FormEvent) => {
@@ -232,18 +321,45 @@ export function LoginForm() {
     }
   }
 
+  // Get title and subtitle based on current step
+  const getHeaderContent = () => {
+    switch (step) {
+      case "details":
+        return {
+          title: "Create Your Account",
+          subtitle: "Enter your details to get started"
+        }
+      case "phone":
+        return {
+          title: "Welcome Back",
+          subtitle: "Enter your phone number to continue"
+        }
+      case "newUserDetails":
+        return {
+          title: "Complete Your Profile",
+          subtitle: "Please enter your details to create an account"
+        }
+      case "otp":
+        return {
+          title: "Verify OTP",
+          subtitle: `We've sent a 4-digit code to +91 ${phoneNumber}`
+        }
+      default:
+        return {
+          title: "Welcome to Elecobuy",
+          subtitle: "Enter your details to continue"
+        }
+    }
+  }
+
+  const { title, subtitle } = getHeaderContent()
+
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-16">
       <div className="max-w-md mx-auto">
         <div className="text-center mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold mb-2">
-            {step === "details" ? "Welcome to Elecobuy" : "Verify OTP"}
-          </h1>
-          <p className="text-sm sm:text-base text-muted-foreground">
-            {step === "details" 
-              ? "Enter your details to continue" 
-              : `We've sent a 4-digit code to +91 ${phoneNumber}`}
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">{title}</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">{subtitle}</p>
         </div>
 
         <div className="rounded-lg border border-border bg-card p-6 sm:p-8">
@@ -253,7 +369,8 @@ export function LoginForm() {
             </div>
           )}
 
-          {step === "details" ? (
+          {/* New User Registration Form */}
+          {step === "details" && (
             <form onSubmit={handleDetailsSubmit} className="space-y-5">
               {/* Name Field */}
               <div>
@@ -332,8 +449,148 @@ export function LoginForm() {
                   "Continue"
                 )}
               </Button>
+
+              {/* Switch to login mode */}
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleModeSwitch}
+                  className="text-sm text-primary hover:underline font-medium"
+                >
+                  Already a user? Sign in
+                </button>
+              </div>
             </form>
-          ) : (
+          )}
+
+          {/* Existing User Login - Phone Only */}
+          {step === "phone" && (
+            <form onSubmit={handlePhoneSubmit} className="space-y-5">
+              {/* Phone Number Field */}
+              <div>
+                <Label htmlFor="phone" className="flex items-center gap-2">
+                  <Phone className="h-4 w-4" />
+                  Phone Number <span className="text-destructive">*</span>
+                </Label>
+                <div className="flex gap-2 mt-2">
+                  <div className="flex items-center px-3 border border-input rounded-md bg-muted">
+                    <span className="text-sm font-medium">+91</span>
+                  </div>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    required
+                    placeholder="Enter 10-digit number"
+                    className="flex-1"
+                    maxLength={10}
+                    disabled={isLoading}
+                    autoFocus
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  We'll send you a verification code via SMS
+                </p>
+              </div>
+
+              <Button 
+                type="submit" 
+                size="lg" 
+                className="w-full" 
+                disabled={isLoading || phoneNumber.length < 10}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Sending OTP...
+                  </>
+                ) : (
+                  "Send OTP"
+                )}
+              </Button>
+
+              {/* Switch to register mode */}
+              <div className="text-center pt-2">
+                <button
+                  type="button"
+                  onClick={handleModeSwitch}
+                  className="text-sm text-primary hover:underline font-medium"
+                >
+                  New user? Create an account
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* New User Details (when existing user flow discovers new user) */}
+          {step === "newUserDetails" && (
+            <form onSubmit={handleNewUserDetailsSubmit} className="space-y-5">
+              <div className="mb-4 rounded-md bg-primary/10 border border-primary/20 p-3">
+                <p className="text-sm text-primary">
+                  This phone number is not registered. Please provide your details to create an account.
+                </p>
+              </div>
+
+              {/* Name Field */}
+              <div>
+                <Label htmlFor="name" className="flex items-center gap-2">
+                  <User className="h-4 w-4" />
+                  Full Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  placeholder="Enter your full name"
+                  className="mt-2"
+                  autoFocus
+                />
+              </div>
+
+              {/* Email Field */}
+              <div>
+                <Label htmlFor="email" className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Email Address <span className="text-muted-foreground text-xs">(optional)</span>
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email address"
+                  className="mt-2"
+                />
+              </div>
+
+              <Button 
+                type="submit" 
+                size="lg" 
+                className="w-full" 
+                disabled={!name.trim()}
+              >
+                Continue to Verification
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setStep("phone")
+                  setError("")
+                }}
+                className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Change phone number
+              </button>
+            </form>
+          )}
+
+          {/* OTP Verification */}
+          {step === "otp" && (
             <form onSubmit={handleOtpSubmit} className="space-y-6">
               <div className="space-y-4">
                 <div className="flex gap-2 justify-center">
@@ -388,13 +645,18 @@ export function LoginForm() {
               <button
                 type="button"
                 onClick={() => {
-                  setStep("details")
+                  setOtp(["", "", "", ""])
                   setError("")
+                  if (mode === "register") {
+                    setStep("details")
+                  } else {
+                    setStep("phone")
+                  }
                 }}
                 className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground w-full"
               >
                 <ArrowLeft className="h-4 w-4" />
-                Change details
+                Change phone number
               </button>
             </form>
           )}
