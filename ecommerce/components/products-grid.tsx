@@ -43,42 +43,38 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
       setLoading(true)
       setError("")
       try {
-        let response
-        if (searchQuery && searchQuery.trim().length > 0) {
-          // Use search endpoint if search query exists
-          const params = new URLSearchParams()
-          params.append("q", searchQuery.trim())
-          params.append("limit", "20")
-          response = await fetch(`${API_URL}/api/search?${params.toString()}`)
-        } else {
-          // Use products endpoint for normal listing
-          let sortParam = "createdAt"
-          let sortOrder = "desc"
+        // Always use products endpoint
+        let sortParam = "createdAt"
+        let sortOrder = "desc"
 
-          if (sortBy === "price-low") {
-            sortParam = "price"
-            sortOrder = "asc"
-          } else if (sortBy === "price-high") {
-            sortParam = "price"
-            sortOrder = "desc"
-          } else if (sortBy === "newest") {
-            sortParam = "createdAt"
-            sortOrder = "desc"
-          }
-
-          const params = new URLSearchParams()
-          params.append("status", "in-stock")
-          params.append("sortBy", sortParam)
-          params.append("sortOrder", sortOrder)
-          params.append("limit", "50")
-          
-          // Add category filter if provided (can be slug or ObjectId)
-          if (category) {
-            params.append("category", category)
-          }
-          
-          response = await fetch(`${API_URL}/api/products?${params.toString()}`)
+        if (sortBy === "price-low") {
+          sortParam = "price"
+          sortOrder = "asc"
+        } else if (sortBy === "price-high") {
+          sortParam = "price"
+          sortOrder = "desc"
+        } else if (sortBy === "newest") {
+          sortParam = "createdAt"
+          sortOrder = "desc"
         }
+
+        const params = new URLSearchParams()
+        params.append("status", "in-stock")
+        params.append("sortBy", sortParam)
+        params.append("sortOrder", sortOrder)
+        params.append("limit", "50")
+        
+        // Add search parameter if provided
+        if (searchQuery && searchQuery.trim().length > 0) {
+          params.append("search", searchQuery.trim())
+        }
+        
+        // Add category filter if provided (can be slug or ObjectId)
+        if (category) {
+          params.append("category", category)
+        }
+        
+        const response = await fetch(`${API_URL}/api/products?${params.toString()}`)
 
         const data = await response.json()
 
