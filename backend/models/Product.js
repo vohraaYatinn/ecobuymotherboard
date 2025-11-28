@@ -24,16 +24,9 @@ const productSchema = new mongoose.Schema(
       trim: true,
     },
     category: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
       required: [true, "Category is required"],
-      enum: [
-        "tv-inverter",
-        "tv-motherboard",
-        "tv-pcb",
-        "power-supply",
-        "t-con",
-        "universal-motherboard",
-      ],
     },
     description: {
       type: String,

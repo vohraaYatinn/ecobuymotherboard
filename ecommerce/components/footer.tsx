@@ -150,7 +150,9 @@ export function Footer() {
       </div>
 
       {/* Bottom Footer Bar */}
-      <div className="bg-secondary/80 border-t border-border py-3">
+      <div className="bg-secondary/80 border-t border-border py-3" style={{
+        background:"white"
+      }}>
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">Ekranfix Private Limited - All Rights Reserved</p>

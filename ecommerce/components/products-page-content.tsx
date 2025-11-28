@@ -9,15 +9,12 @@ export function ProductsPageContent() {
   const category = searchParams.get("category") || undefined
 
   const getCategoryLabel = (cat: string) => {
-    const categoryMap: Record<string, string> = {
-      "tv-pcb": "Television PCB Boards",
-      "tv-inverter": "Television Inverter Boards",
-      "tv-motherboard": "Television Motherboard",
-      "power-supply": "Power Supply Boards",
-      "t-con": "T-Con Board",
-      "universal-motherboard": "Universal Motherboard",
-    }
-    return categoryMap[cat] || cat
+    // For URL params, we'll fetch category name from API if needed
+    // For now, format the slug nicely
+    return cat
+      .split("-")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
   }
 
   return (

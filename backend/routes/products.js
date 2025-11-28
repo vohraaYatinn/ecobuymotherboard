@@ -1,5 +1,7 @@
 import express from "express"
+import mongoose from "mongoose"
 import Product from "../models/Product.js"
+import Category from "../models/Category.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 import excelUpload from "../middleware/excelUpload.js"
 import * as XLSX from "xlsx"
@@ -43,11 +45,6 @@ router.get("/", async (req, res) => {
       filter.status = status
     }
 
-    // Category filter
-    if (category) {
-      filter.category = category
-    }
-
     // Brand filter
     if (brand) {
       filter.brand = { $regex: brand, $options: "i" }
@@ -63,15 +60,147 @@ router.get("/", async (req, res) => {
     const sort = {}
     sort[sortBy] = sortOrder === "asc" ? 1 : -1
 
-    // Get products
-    const products = await Product.find(filter)
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean()
+    // Handle category filter - SIMPLEST APPROACH: Query all, filter in memory
+    let products = []
+    let total = 0
+    
+    if (category) {
+      // Find category
+      let categoryDoc = null
+      if (mongoose.Types.ObjectId.isValid(category)) {
+        categoryDoc = await Category.findById(category)
+      } else {
+        categoryDoc = await Category.findOne({ slug: category, isActive: true })
+        if (!categoryDoc) {
+          // Try reverse mapping
+          const reverseMap = {
+            "tv-pcb": "television-pcb",
+            "tv-motherboard": "television-motherboard",
+            "tv-inverter": "television-inverter"
+          }
+          const newSlug = reverseMap[category]
+          if (newSlug) {
+            categoryDoc = await Category.findOne({ slug: newSlug, isActive: true })
+          }
+        }
+      }
+      
+      if (categoryDoc) {
+        // Get all matching products (no category filter in DB query)
+        const baseFilter = { ...filter }
+        delete baseFilter.$or
+        delete baseFilter.$and
+        
+        // Get all products matching other filters
+        let allProducts = await Product.find(baseFilter).lean()
+        if (filter.$or) {
+          // Apply search filter in memory
+          const searchRegex = new RegExp(filter.$or[0].name.$regex, 'i')
+          allProducts = allProducts.filter(p => 
+            searchRegex.test(p.name) || 
+            searchRegex.test(p.sku) || 
+            searchRegex.test(p.brand)
+          )
+        }
+        
+        // Filter by category in memory
+        const matchingProducts = allProducts.filter(p => {
+          if (!p.category) return false
+          const catId = p.category.toString ? p.category.toString() : p.category
+          const catStr = typeof p.category === 'string' ? p.category : null
+          return catId === categoryDoc._id.toString() || 
+                 catStr === categoryDoc.slug ||
+                 catStr === "tv-pcb" && categoryDoc.slug === "television-pcb" ||
+                 catStr === "tv-motherboard" && categoryDoc.slug === "television-motherboard" ||
+                 catStr === "tv-inverter" && categoryDoc.slug === "television-inverter"
+        })
+        
+        // Sort
+        matchingProducts.sort((a, b) => {
+          const aVal = a[sortBy] || new Date(0)
+          const bVal = b[sortBy] || new Date(0)
+          return sortOrder === "asc" ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1)
+        })
+        
+        total = matchingProducts.length
+        products = matchingProducts.slice(skip, skip + parseInt(limit))
+      } else {
+        products = []
+        total = 0
+      }
+    } else {
+      // No category - normal query
+      products = await Product.find(filter)
+        .sort(sort)
+        .skip(skip)
+        .limit(parseInt(limit))
+        .lean()
+      
+      total = await Product.countDocuments(filter)
+    }
 
-    // Get total count
-    const total = await Product.countDocuments(filter)
+    // Collect all category IDs and slugs to fetch in one query
+    const categoryIds = []
+    const categorySlugs = []
+    products.forEach((product) => {
+      if (product.category) {
+        if (mongoose.Types.ObjectId.isValid(product.category)) {
+          categoryIds.push(product.category)
+        } else if (typeof product.category === "string") {
+          categorySlugs.push(product.category)
+        }
+      }
+    })
+
+    // Fetch all categories at once
+    const categoryMap = new Map()
+    if (categoryIds.length > 0 || categorySlugs.length > 0) {
+      const categoryQuery = {
+        isActive: true,
+        $or: [
+          ...(categoryIds.length > 0 ? [{ _id: { $in: categoryIds } }] : []),
+          ...(categorySlugs.length > 0 ? [{ slug: { $in: categorySlugs } }] : []),
+        ],
+      }
+      const categories = await Category.find(categoryQuery).select("_id name slug").lean()
+      categories.forEach((cat) => {
+        categoryMap.set(cat._id.toString(), cat)
+        categoryMap.set(cat.slug, cat)
+      })
+    }
+
+    // Format products with category data
+    products = products.map((product) => {
+      if (product.category) {
+        const categoryKey =
+          typeof product.category === "string" && mongoose.Types.ObjectId.isValid(product.category)
+            ? product.category
+            : typeof product.category === "string"
+            ? product.category
+            : product.category.toString()
+
+        const categoryDoc = categoryMap.get(categoryKey)
+        if (categoryDoc) {
+          product.category = {
+            _id: categoryDoc._id,
+            name: categoryDoc.name,
+            slug: categoryDoc.slug,
+          }
+        } else if (typeof product.category === "string") {
+          // Format string category nicely if not found in database
+          product.category = {
+            _id: null,
+            name: product.category
+              .split("-")
+              .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+              .join(" "),
+            slug: product.category,
+          }
+        }
+      }
+      return product
+    })
+
 
     res.status(200).json({
       success: true,
@@ -85,9 +214,15 @@ router.get("/", async (req, res) => {
     })
   } catch (error) {
     console.error("Get products error:", error)
+    console.error("Error details:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    })
     res.status(500).json({
       success: false,
       message: "Error fetching products",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined
     })
   }
 })
@@ -95,13 +230,40 @@ router.get("/", async (req, res) => {
 // Get single product by ID
 router.get("/:id", async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
+    const product = await Product.findById(req.params.id).lean()
 
     if (!product) {
       return res.status(404).json({
         success: false,
         message: "Product not found",
       })
+    }
+
+    // Handle category - can be string (old format) or ObjectId (new format)
+    if (product.category) {
+      let categoryDoc = null
+      if (mongoose.Types.ObjectId.isValid(product.category)) {
+        categoryDoc = await Category.findById(product.category).select("_id name slug description").lean()
+      } else if (typeof product.category === "string") {
+        categoryDoc = await Category.findOne({ slug: product.category, isActive: true })
+          .select("_id name slug description")
+          .lean()
+      }
+
+      if (categoryDoc) {
+        product.category = categoryDoc
+      } else if (typeof product.category === "string") {
+        // Format string category nicely if not found
+        product.category = {
+          _id: null,
+          name: product.category
+            .split("-")
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(" "),
+          slug: product.category,
+          description: null,
+        }
+      }
     }
 
     res.status(200).json({
@@ -150,6 +312,21 @@ router.post("/", verifyAdminToken, async (req, res) => {
       })
     }
 
+    // Validate category - can be ObjectId or slug
+    let categoryDoc
+    if (mongoose.Types.ObjectId.isValid(category)) {
+      categoryDoc = await Category.findById(category)
+    } else {
+      categoryDoc = await Category.findOne({ slug: category, isActive: true })
+    }
+
+    if (!categoryDoc || !categoryDoc.isActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or inactive category",
+      })
+    }
+
     // Check if SKU already exists
     const existingProduct = await Product.findOne({ sku: sku.toUpperCase() })
     if (existingProduct) {
@@ -175,7 +352,7 @@ router.post("/", verifyAdminToken, async (req, res) => {
       sku: sku.toUpperCase(),
       brand,
       model,
-      category,
+      category: categoryDoc._id,
       description,
       features: featuresArray,
       specifications: specifications || {},
@@ -253,6 +430,24 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
       }
     }
 
+    // Validate category if being updated - can be ObjectId or slug
+    if (category) {
+      let categoryDoc
+      if (mongoose.Types.ObjectId.isValid(category)) {
+        categoryDoc = await Category.findById(category)
+      } else {
+        categoryDoc = await Category.findOne({ slug: category, isActive: true })
+      }
+
+      if (!categoryDoc || !categoryDoc.isActive) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid or inactive category",
+        })
+      }
+      product.category = categoryDoc._id
+    }
+
     // Parse features if it's a string
     let featuresArray = product.features
     if (features !== undefined) {
@@ -268,7 +463,6 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
     if (sku) product.sku = sku.toUpperCase()
     if (brand) product.brand = brand
     if (model !== undefined) product.model = model
-    if (category) product.category = category
     if (description) product.description = description
     if (featuresArray) product.features = featuresArray
     if (specifications) product.specifications = { ...product.specifications, ...specifications }
@@ -279,6 +473,9 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
     if (images) product.images = images
 
     await product.save()
+
+    // Populate category before sending response
+    await product.populate("category", "name slug description")
 
     res.status(200).json({
       success: true,
@@ -350,14 +547,20 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
 // Get filter options (categories, brands, etc.)
 router.get("/filters/options", async (req, res) => {
   try {
-    const categories = await Product.distinct("category", { isActive: true })
+    // Get active categories
+    const categories = await Category.find({ isActive: true })
+      .select("_id name slug")
+      .sort({ name: 1 })
+      .lean()
+    
+    // Get brands from products
     const brands = await Product.distinct("brand", { isActive: true })
     const statuses = ["in-stock", "out-of-stock", "low-stock"]
 
     res.status(200).json({
       success: true,
       data: {
-        categories: categories.sort(),
+        categories,
         brands: brands.sort(),
         statuses,
       },
@@ -446,7 +649,7 @@ router.get("/bulk/template", verifyAdminToken, (req, res) => {
       { Field: "sku", Required: "Yes", Description: "Unique Stock Keeping Unit (e.g., SAM-MB-12345). Will be converted to uppercase." },
       { Field: "brand", Required: "Yes", Description: "Brand name (e.g., Samsung, LG, Sony)" },
       { Field: "model", Required: "No", Description: "Model number" },
-      { Field: "category", Required: "Yes", Description: "One of: tv-inverter, tv-motherboard, tv-pcb, power-supply, t-con, universal-motherboard" },
+      { Field: "category", Required: "Yes", Description: "Category slug (e.g., tv-inverter, tv-motherboard) or category ID. Must match an active category in the system." },
       { Field: "description", Required: "Yes", Description: "Product description" },
       { Field: "features", Required: "No", Description: "Features separated by pipe (|) character. E.g., Feature 1|Feature 2|Feature 3" },
       { Field: "price", Required: "Yes", Description: "Product price (number)" },
@@ -519,15 +722,6 @@ router.post("/bulk/upload", verifyAdminToken, excelUpload.single("file"), async 
       errors: [],
     }
 
-    const validCategories = [
-      "tv-inverter",
-      "tv-motherboard",
-      "tv-pcb",
-      "power-supply",
-      "t-con",
-      "universal-motherboard",
-    ]
-
     const validConditions = ["new", "refurbished", "used"]
 
     for (let i = 0; i < data.length; i++) {
@@ -546,13 +740,21 @@ router.post("/bulk/upload", verifyAdminToken, excelUpload.single("file"), async 
           continue
         }
 
-        // Validate category
-        if (!validCategories.includes(row.category)) {
+        // Validate and find category - can be slug or ObjectId
+        let categoryDoc
+        const categoryValue = row.category.toString().trim()
+        if (mongoose.Types.ObjectId.isValid(categoryValue)) {
+          categoryDoc = await Category.findById(categoryValue)
+        } else {
+          categoryDoc = await Category.findOne({ slug: categoryValue.toLowerCase(), isActive: true })
+        }
+
+        if (!categoryDoc || !categoryDoc.isActive) {
           results.failed++
           results.errors.push({
             row: rowNumber,
             sku: row.sku,
-            error: `Invalid category. Must be one of: ${validCategories.join(", ")}`,
+            error: `Invalid or inactive category: ${categoryValue}. Please use a valid category slug or ID.`,
           })
           continue
         }
@@ -592,7 +794,7 @@ router.post("/bulk/upload", verifyAdminToken, excelUpload.single("file"), async 
           existingProduct.name = row.name
           existingProduct.brand = row.brand
           existingProduct.model = row.model || existingProduct.model
-          existingProduct.category = row.category
+          existingProduct.category = categoryDoc._id
           existingProduct.description = row.description
           existingProduct.features = featuresArray.length > 0 ? featuresArray : existingProduct.features
           existingProduct.specifications = { ...existingProduct.specifications, ...specifications }
@@ -610,7 +812,7 @@ router.post("/bulk/upload", verifyAdminToken, excelUpload.single("file"), async 
             sku: row.sku.toString().toUpperCase(),
             brand: row.brand,
             model: row.model || "",
-            category: row.category,
+            category: categoryDoc._id,
             description: row.description,
             features: featuresArray,
             specifications,

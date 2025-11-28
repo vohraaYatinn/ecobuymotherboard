@@ -68,7 +68,7 @@ export function AdminProductsList() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [brandFilter, setBrandFilter] = useState("all")
-  const [categories, setCategories] = useState<string[]>([])
+  const [categories, setCategories] = useState<Array<{ _id: string; name: string; slug: string }>>([])
   const [brands, setBrands] = useState<string[]>([])
   
   // Bulk upload state
@@ -418,11 +418,8 @@ export function AdminProductsList() {
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
               {categories.map((cat) => (
-                <SelectItem key={cat} value={cat}>
-                  {cat
-                    .split("-")
-                    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                    .join(" ")}
+                <SelectItem key={cat._id} value={cat._id}>
+                  {cat.name}
                 </SelectItem>
               ))}
             </SelectContent>

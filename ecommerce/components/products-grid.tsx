@@ -72,18 +72,9 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
           params.append("sortOrder", sortOrder)
           params.append("limit", "50")
           
-          // Add category filter if provided
+          // Add category filter if provided (can be slug or ObjectId)
           if (category) {
-            const categoryMap: Record<string, string> = {
-              "tv-pcb": "Television PCB Board",
-              "tv-inverter": "Television Inverter Boards",
-              "tv-motherboard": "Television Motherboard",
-              "power-supply": "Television Power Supply Boards",
-              "t-con": "Television T-Con Board",
-              "universal-motherboard": "Television Universal Motherboard",
-            }
-            const categoryName = categoryMap[category] || category
-            params.append("category", categoryName)
+            params.append("category", category)
           }
           
           response = await fetch(`${API_URL}/api/products?${params.toString()}`)

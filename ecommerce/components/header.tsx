@@ -22,12 +22,21 @@ import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
 import { SearchBar } from "@/components/search-bar"
 
+interface Category {
+  _id: string
+  name: string
+  slug: string
+  isActive: boolean
+}
+
 export function Header() {
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [customerName, setCustomerName] = useState<string | null>(null)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [loadingCategories, setLoadingCategories] = useState(true)
   const { cartCount } = useCart()
   const { wishlistCount } = useWishlist()
 
@@ -117,6 +126,24 @@ export function Header() {
       setUnreadNotifications(0)
     }
   }, [isLoggedIn])
+
+  // Fetch categories for dropdown
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"}/api/categories`)
+        const data = await response.json()
+        if (data.success) {
+          setCategories(data.data.filter((cat: Category) => cat.isActive))
+        }
+      } catch (err) {
+        console.error("Error fetching categories:", err)
+      } finally {
+        setLoadingCategories(false)
+      }
+    }
+    fetchCategories()
+  }, [])
 
   const fetchUnreadNotifications = async () => {
     try {
@@ -484,18 +511,25 @@ export function Header() {
                   </svg>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-56">
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      All Television Boards
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      <DropdownMenuItem asChild>
-                        <Link href="/products?category=tv-pcb" className="cursor-pointer">
-                          Television PCB Boards
+                  <DropdownMenuItem asChild>
+                    <Link href="/products" className="cursor-pointer">
+                      All Products
+                    </Link>
+                  </DropdownMenuItem>
+                  {categories.length > 0 && <DropdownMenuSeparator />}
+                  {loadingCategories ? (
+                    <DropdownMenuItem disabled>
+                      <span className="text-sm text-muted-foreground">Loading categories...</span>
+                    </DropdownMenuItem>
+                  ) : (
+                    categories.map((category) => (
+                      <DropdownMenuItem key={category._id} asChild>
+                        <Link href={`/products?category=${category.slug}`} className="cursor-pointer">
+                          {category.name}
                         </Link>
                       </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
+                    ))
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
               {isLoggedIn && (

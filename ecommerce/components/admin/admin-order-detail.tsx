@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label"
 import { ArrowLeft, Save, Package, User, CreditCard, Truck, Loader2, AlertCircle } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface OrderItem {
   name: string
@@ -92,20 +92,39 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
       setError("")
       const token = localStorage.getItem("adminToken")
       if (!token) {
-        setError("Not authenticated")
+        setError("Not authenticated. Please login again.")
+        setLoading(false)
         return
       }
 
       const response = await fetch(`${API_URL}/api/admin/orders/${orderId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
       })
 
+      // Check if response is ok before parsing JSON
+      if (!response.ok) {
+        // Try to parse error message
+        let errorMessage = "Failed to load order"
+        try {
+          const errorData = await response.json()
+          errorMessage = errorData.message || errorMessage
+        } catch {
+          // If JSON parsing fails, use status text
+          errorMessage = response.statusText || `Error ${response.status}`
+        }
+        setError(errorMessage)
+        setLoading(false)
+        return
+      }
+
       const data = await response.json()
 
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         setError(data.message || "Failed to load order")
+        setLoading(false)
         return
       }
 
@@ -116,7 +135,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
       }
     } catch (err) {
       console.error("Error fetching order:", err)
-      setError("Network error. Please try again.")
+      const errorMessage = err instanceof Error ? err.message : "Network error. Please check your connection and try again."
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -152,7 +172,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
 
       // Update status
       if (selectedStatus !== order.status) {
-        await fetch(`${API_URL}/api/admin/orders/${orderId}/status`, {
+        const statusResponse = await fetch(`${API_URL}/api/admin/orders/${orderId}/status`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -160,18 +180,29 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
           },
           body: JSON.stringify({ status: selectedStatus }),
         })
+        
+        if (!statusResponse.ok) {
+          const errorData = await statusResponse.json()
+          throw new Error(errorData.message || "Failed to update status")
+        }
       }
 
       // Assign vendor if changed
-      if (selectedVendor && selectedVendor !== (typeof order.vendorId === "object" ? order.vendorId?._id : order.vendorId)) {
-        await fetch(`${API_URL}/api/admin/orders/${orderId}/assign`, {
+      const currentVendorId = typeof order.vendorId === "object" && order.vendorId ? order.vendorId._id : order.vendorId
+      if (selectedVendor !== currentVendorId) {
+        const response = await fetch(`${API_URL}/api/admin/orders/${orderId}/assign-vendor`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ vendorId: selectedVendor }),
+          body: JSON.stringify({ vendorId: selectedVendor || null }),
         })
+        
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.message || "Failed to assign vendor")
+        }
       }
 
       // Refresh order data
@@ -550,5 +581,6 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
     </div>
   )
 }
+
 
 

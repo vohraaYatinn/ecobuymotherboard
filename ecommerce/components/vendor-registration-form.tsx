@@ -7,15 +7,26 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, CheckCircle } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export function VendorRegistrationForm() {
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
     username: "",
@@ -66,6 +77,8 @@ export function VendorRegistrationForm() {
     }
     if (!formData.storePhone.trim()) {
       newErrors.storePhone = "Phone number is required"
+    } else if (!/^\d{10}$/.test(formData.storePhone.replace(/\D/g, ""))) {
+      newErrors.storePhone = "Phone number must be exactly 10 digits"
     }
     
     setErrors(newErrors)
@@ -88,6 +101,12 @@ export function VendorRegistrationForm() {
       return
     }
 
+    // Show confirmation dialog
+    setShowConfirmDialog(true)
+  }
+
+  const handleConfirmSubmit = async () => {
+    setShowConfirmDialog(false)
     setIsLoading(true)
 
     try {
@@ -306,13 +325,22 @@ export function VendorRegistrationForm() {
               type="tel"
               value={formData.storePhone}
               onChange={(e) => {
-                setFormData({ ...formData, storePhone: e.target.value })
+                // Only allow digits and limit to 10 digits
+                const value = e.target.value.replace(/\D/g, "").slice(0, 10)
+                setFormData({ ...formData, storePhone: value })
                 if (errors.storePhone) setErrors({ ...errors, storePhone: "" })
               }}
               className={`mt-2 ${errors.storePhone ? "border-red-500 focus-visible:ring-red-500" : ""}`}
-              placeholder="+91 1234567890"
+              placeholder="Enter 10-digit phone number"
+              maxLength={10}
+              inputMode="numeric"
             />
             {errors.storePhone && <p className="text-sm text-red-500 mt-1">{errors.storePhone}</p>}
+            {!errors.storePhone && formData.storePhone && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {formData.storePhone.length}/10 digits
+              </p>
+            )}
           </div>
         </div>
 
@@ -355,6 +383,31 @@ export function VendorRegistrationForm() {
           </div>
         )}
       </form>
+
+      {/* Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Registration</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to submit your vendor registration? Please review your details before confirming.
+              <br />
+              <br />
+              <strong>Username:</strong> {formData.username}
+              <br />
+              <strong>Email:</strong> {formData.email}
+              <br />
+              <strong>Store Phone:</strong> {formData.storePhone}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmSubmit}>
+              Confirm & Submit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -410,19 +410,34 @@ export async function sendPushNotificationToAllVendors(title, body, data = {}) {
       return { success: false, message: 'No active vendors found' };
     }
 
-    // Collect all FCM tokens
-    const tokens = [];
+    // Collect FCM tokens with platform info
+    const androidTokens = [];
+    const iosTokens = [];
+    const otherTokens = [];
+    const tokenToPlatformMap = new Map();
+    
     for (const vendorUser of vendorUsers) {
       if (vendorUser.pushTokens && vendorUser.pushTokens.length > 0) {
         for (const tokenData of vendorUser.pushTokens) {
           if (tokenData.token && tokenData.token.trim()) {
-            tokens.push(tokenData.token.trim());
+            const platform = tokenData.platform || 'unknown';
+            const token = tokenData.token.trim();
+            tokenToPlatformMap.set(token, platform);
+            
+            if (platform === 'android') {
+              androidTokens.push(token);
+            } else if (platform === 'ios') {
+              iosTokens.push(token);
+            } else {
+              otherTokens.push(token);
+            }
           }
         }
       }
     }
 
-    if (tokens.length === 0) {
+    const totalTokens = androidTokens.length + iosTokens.length + otherTokens.length;
+    if (totalTokens === 0) {
       console.log('📭 [PushNotification] No FCM tokens found for vendors');
       return { success: false, message: 'No FCM tokens found' };
     }
@@ -431,78 +446,182 @@ export async function sendPushNotificationToAllVendors(title, body, data = {}) {
     const notificationData = {
       type: data.type || 'new_order_available',
       ...data,
+      title: title, // Include title and body in data for data-only messages
+      body: body,
     };
 
-    // Prepare message
-    const message = {
-      notification: {
-        title: title,
-        body: body,
-      },
-      data: Object.entries(notificationData).reduce((acc, [key, value]) => {
-        acc[key] = String(value); // FCM data must be strings
-        return acc;
-      }, {}),
-      android: {
-        priority: 'high',
-        notification: {
-          sound: 'default',
-          channelId: 'default',
-        },
-      },
-      apns: {
-        payload: {
-          aps: {
-            sound: 'default',
-            badge: 1,
-          },
-        },
-      },
-    };
+    const isNewOrderAlert = notificationData.type === 'new_order_available' || 
+                           notificationData.type === 'order_placed' ||
+                           notificationData.type === 'new_order';
 
-    console.log(`📤 [PushNotification] Sending to ${tokens.length} vendor device(s)`);
+    // Prepare data payload (convert all values to strings as required by FCM)
+    const dataPayload = Object.entries(notificationData).reduce((acc, [key, value]) => {
+      acc[key] = String(value);
+      return acc;
+    }, {});
+
+    console.log(`📤 [PushNotification] Sending to ${totalTokens} vendor device(s): ${androidTokens.length} Android, ${iosTokens.length} iOS, ${otherTokens.length} other`);
     console.log(`📝 [PushNotification] Title: "${title}" - Body: "${body}"`);
+    console.log(`🔔 [PushNotification] Is new order alert: ${isNewOrderAlert}`);
 
-    // Send to all tokens using multicast
-    const response = await messaging.sendEachForMulticast({
-      tokens: tokens,
-      ...message,
-    });
+    let totalSent = 0;
+    let totalFailed = 0;
+    const allFailedTokens = [];
 
-    const sent = response.successCount;
-    const failed = response.failureCount;
+    // Send to Android devices - use data-only for new order alerts to ensure onMessageReceived is called
+    if (androidTokens.length > 0) {
+      const androidMessage = isNewOrderAlert
+        ? {
+            // Data-only message for new orders - ensures onMessageReceived is ALWAYS called, even when app is closed
+            data: dataPayload,
+            android: {
+              priority: 'high',
+            },
+          }
+        : {
+            // Regular notification + data for other notifications
+            notification: {
+              title: title,
+              body: body,
+            },
+            data: dataPayload,
+            android: {
+              priority: 'high',
+              notification: {
+                sound: 'default',
+                channelId: 'default',
+              },
+            },
+          };
 
-    console.log(`✅ [PushNotification] Sent: ${sent}, Failed: ${failed}`);
+      const androidResponse = await messaging.sendEachForMulticast({
+        tokens: androidTokens,
+        ...androidMessage,
+      });
 
-    if (failed > 0) {
-      // Clean up invalid tokens
-      const failedTokens = [];
-      response.responses.forEach((resp, idx) => {
+      totalSent += androidResponse.successCount;
+      totalFailed += androidResponse.failureCount;
+
+      // Track failed tokens
+      androidResponse.responses.forEach((resp, idx) => {
         if (!resp.success) {
-          failedTokens.push(tokens[idx]);
-          console.error(`❌ [PushNotification] Failed to send to token ${idx}: ${resp.error?.message}`);
+          allFailedTokens.push(androidTokens[idx]);
         }
       });
 
-      // Remove invalid tokens from database
-      if (failedTokens.length > 0) {
-        for (const vendorUser of vendorUsers) {
-          if (vendorUser.pushTokens && vendorUser.pushTokens.length > 0) {
-            vendorUser.pushTokens = vendorUser.pushTokens.filter(
-              (tokenData) => !failedTokens.includes(tokenData.token.trim())
-            );
+      console.log(`📱 [PushNotification] Android: Sent: ${androidResponse.successCount}, Failed: ${androidResponse.failureCount}`);
+    }
+
+    // Send to iOS devices - always use notification + data
+    if (iosTokens.length > 0) {
+      const iosMessage = {
+        notification: {
+          title: title,
+          body: body,
+        },
+        data: dataPayload,
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1,
+            },
+          },
+        },
+      };
+
+      const iosResponse = await messaging.sendEachForMulticast({
+        tokens: iosTokens,
+        ...iosMessage,
+      });
+
+      totalSent += iosResponse.successCount;
+      totalFailed += iosResponse.failureCount;
+
+      // Track failed tokens
+      iosResponse.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          allFailedTokens.push(iosTokens[idx]);
+        }
+      });
+
+      console.log(`🍎 [PushNotification] iOS: Sent: ${iosResponse.successCount}, Failed: ${iosResponse.failureCount}`);
+    }
+
+    // Send to other/unknown platforms - use notification + data
+    if (otherTokens.length > 0) {
+      const otherMessage = {
+        notification: {
+          title: title,
+          body: body,
+        },
+        data: dataPayload,
+        android: {
+          priority: 'high',
+          notification: {
+            sound: 'default',
+            channelId: 'default',
+          },
+        },
+        apns: {
+          payload: {
+            aps: {
+              sound: 'default',
+              badge: 1,
+            },
+          },
+        },
+      };
+
+      const otherResponse = await messaging.sendEachForMulticast({
+        tokens: otherTokens,
+        ...otherMessage,
+      });
+
+      totalSent += otherResponse.successCount;
+      totalFailed += otherResponse.failureCount;
+
+      // Track failed tokens
+      otherResponse.responses.forEach((resp, idx) => {
+        if (!resp.success) {
+          allFailedTokens.push(otherTokens[idx]);
+        }
+      });
+
+      console.log(`🌐 [PushNotification] Other: Sent: ${otherResponse.successCount}, Failed: ${otherResponse.failureCount}`);
+    }
+
+    const sent = totalSent;
+    const failed = totalFailed;
+
+    console.log(`✅ [PushNotification] Sent: ${sent}, Failed: ${failed}`);
+
+    if (failed > 0 && allFailedTokens.length > 0) {
+      // Clean up invalid tokens
+      console.log(`🧹 [PushNotification] Cleaning up ${allFailedTokens.length} invalid tokens`);
+      
+      for (const vendorUser of vendorUsers) {
+        if (vendorUser.pushTokens && vendorUser.pushTokens.length > 0) {
+          const originalLength = vendorUser.pushTokens.length;
+          vendorUser.pushTokens = vendorUser.pushTokens.filter(
+            (tokenData) => !allFailedTokens.includes(tokenData.token.trim())
+          );
+          
+          if (vendorUser.pushTokens.length < originalLength) {
             await vendorUser.save();
+            console.log(`🧹 [PushNotification] Removed ${originalLength - vendorUser.pushTokens.length} invalid token(s) for vendor user ${vendorUser._id}`);
           }
         }
-        console.log(`🧹 [PushNotification] Removed ${failedTokens.length} invalid tokens`);
       }
+      
+      console.log(`🧹 [PushNotification] Cleanup complete`);
     }
 
     return {
       success: true,
       sent,
       failed,
-      total: tokens.length,
+      total: totalTokens,
     };
   } catch (error) {
     console.error('❌ [PushNotification] Error sending to vendors:', error);

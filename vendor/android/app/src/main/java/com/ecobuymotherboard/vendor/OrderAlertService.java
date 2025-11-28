@@ -21,6 +21,8 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 
+import com.ecobuymotherboard.vendor.R;
+
 /**
  * Foreground Service that plays continuous alert sound for new orders
  * Similar to gate approval apps - rings until user accepts or dismisses
@@ -93,6 +95,9 @@ public class OrderAlertService extends Service {
             return;
         }
 
+        // Ensure notification channel exists (in case app was killed)
+        createNotificationChannel();
+
         isServiceRunning = true;
         isPlaying = true;
 
@@ -125,7 +130,7 @@ public class OrderAlertService extends Service {
 
         // Build the notification
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title != null ? title : "New Order!")
                 .setContentText(message != null ? message : "You have a new order to accept")
                 .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -281,6 +286,7 @@ public class OrderAlertService extends Service {
         context.startService(intent);
     }
 }
+
 
 
 

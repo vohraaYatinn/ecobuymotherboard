@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import React from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,6 +22,8 @@ export function AdminAddProduct() {
   const [uploadingImages, setUploadingImages] = useState(false)
   const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [categories, setCategories] = useState<Array<{ _id: string; name: string; slug: string }>>([])
+  const [loadingCategories, setLoadingCategories] = useState(true)
 
   const [formData, setFormData] = useState({
     name: "",
@@ -135,6 +138,24 @@ export function AdminAddProduct() {
     setImagePreviews((prev) => prev.filter((_, i) => i !== index))
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
   }
+
+  // Fetch categories on component mount
+  React.useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/categories`)
+        const data = await response.json()
+        if (data.success) {
+          setCategories(data.data)
+        }
+      } catch (err) {
+        console.error("Error fetching categories:", err)
+      } finally {
+        setLoadingCategories(false)
+      }
+    }
+    fetchCategories()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -572,12 +593,17 @@ export function AdminAddProduct() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="tv-inverter">Television Inverter Boards</SelectItem>
-                    <SelectItem value="tv-motherboard">Television Motherboard</SelectItem>
-                    <SelectItem value="tv-pcb">Television PCB Board</SelectItem>
-                    <SelectItem value="power-supply">Power Supply Boards</SelectItem>
-                    <SelectItem value="t-con">T-Con Board</SelectItem>
-                    <SelectItem value="universal-motherboard">Universal Motherboard</SelectItem>
+                    {loadingCategories ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading categories...</div>
+                    ) : categories.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">No categories available</div>
+                    ) : (
+                      categories.map((category) => (
+                        <SelectItem key={category._id} value={category._id}>
+                          {category.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </CardContent>

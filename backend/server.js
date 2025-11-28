@@ -25,6 +25,8 @@ import learningResourceRoutes from "./routes/learningResources.js"
 import adminReportsRoutes from "./routes/adminReports.js"
 import enquiryRoutes from "./routes/enquiries.js"
 import pageContentRoutes from "./routes/pageContent.js"
+import contactRoutes from "./routes/contact.js"
+import categoryRoutes from "./routes/categories.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -132,6 +134,8 @@ app.use("/api/learning-resources", learningResourceRoutes)
 app.use("/api/admin/reports", adminReportsRoutes)
 app.use("/api/enquiries", enquiryRoutes)
 app.use("/api/page-content", pageContentRoutes)
+app.use("/api/contact", contactRoutes)
+app.use("/api/categories", categoryRoutes)
 
 // Health check
 app.get("/api/health", (req, res) => {

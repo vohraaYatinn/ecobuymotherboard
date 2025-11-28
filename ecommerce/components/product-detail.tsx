@@ -27,7 +27,7 @@ interface Product {
   status: string
   stock: number
   sku: string
-  category: string
+  category: string | { _id: string; name: string; slug: string }
   images: string[]
   description: string
   features: string[]
@@ -93,11 +93,23 @@ export function ProductDetail({ productId }: ProductDetailProps) {
     return `${API_URL}${imageUrl}`
   }
 
-  const getCategoryLabel = (category: string) => {
-    return category
-      .split("-")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ")
+  const getCategoryLabel = (category: string | { name?: string; slug?: string; _id?: string }) => {
+    if (typeof category === 'object' && category?.name) {
+      return category.name
+    }
+    if (typeof category === 'object' && category?.slug) {
+      return category.slug
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ")
+    }
+    if (typeof category === 'string') {
+      return category
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ")
+    }
+    return "Unknown Category"
   }
 
   if (loading) {
