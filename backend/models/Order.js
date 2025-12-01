@@ -84,6 +84,42 @@ const orderSchema = new mongoose.Schema(
       enum: ["accepted-by-vendor", "assigned-by-admin"],
       default: null,
     },
+    // DTDC Tracking fields
+    awbNumber: {
+      type: String,
+      default: null,
+    },
+    dtdcTrackingData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    trackingLastUpdated: {
+      type: Date,
+      default: null,
+    },
+    // GST and Invoice fields
+    shippingState: {
+      type: String,
+      default: null,
+    },
+    cgst: {
+      type: Number,
+      default: 0,
+    },
+    sgst: {
+      type: Number,
+      default: 0,
+    },
+    igst: {
+      type: Number,
+      default: 0,
+    },
+    invoiceNumber: {
+      type: String,
+      default: null,
+      unique: true,
+      sparse: true,
+    },
   },
   {
     timestamps: true,

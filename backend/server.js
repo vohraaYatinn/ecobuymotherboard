@@ -27,6 +27,8 @@ import enquiryRoutes from "./routes/enquiries.js"
 import pageContentRoutes from "./routes/pageContent.js"
 import contactRoutes from "./routes/contact.js"
 import categoryRoutes from "./routes/categories.js"
+import dtdcRoutes from "./routes/dtdc.js"
+import invoiceRoutes from "./routes/invoices.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -41,11 +43,11 @@ const PORT = process.env.PORT || 5000
 connectDB()
 
 // Middleware - CORS configuration
-const BACKEND_URL = process.env.BACKEND_URL || "https://api.elecobuy.com"
+const BACKEND_URL = process.env.BACKEND_URL || "http://192.168.1.36:5000"
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "https://api.elecobuy.com",
+  "http://192.168.1.36:5000",
   "https://elecobuy.com",
   "https://www.elecobuy.com",
   "http://127.0.0.1:5000",
@@ -93,7 +95,7 @@ if (process.env.NODE_ENV !== "production") {
       } else if (
         origin === "https://elecobuy.com" ||
         origin === "https://www.elecobuy.com" ||
-        origin === "https://api.elecobuy.com"
+        origin === "http://192.168.1.36:5000"
       ) {
         callback(null, true)
       } else {
@@ -136,6 +138,8 @@ app.use("/api/enquiries", enquiryRoutes)
 app.use("/api/page-content", pageContentRoutes)
 app.use("/api/contact", contactRoutes)
 app.use("/api/categories", categoryRoutes)
+app.use("/api/dtdc", dtdcRoutes)
+app.use("/api/invoices", invoiceRoutes)
 
 // Health check
 app.get("/api/health", (req, res) => {

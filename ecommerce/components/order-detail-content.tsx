@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, Package, CheckCircle2, MapPin, Phone, Mail, ArrowLeft, Download } from "lucide-react"
+import { Loader2, Package, CheckCircle2, MapPin, Phone, Mail, ArrowLeft, Download, RefreshCw, Truck, AlertCircle } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Label } from "@/components/ui/label"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
 
 interface OrderItem {
   productId: {
@@ -49,6 +51,14 @@ interface Order {
   shippingAddress: ShippingAddress
   paymentMethod: string
   paymentStatus: string
+  awbNumber?: string
+  dtdcTrackingData?: any
+  trackingLastUpdated?: string
+  invoiceNumber?: string
+  cgst?: number
+  sgst?: number
+  igst?: number
+  shippingState?: string
   createdAt: string
   updatedAt: string
 }
@@ -64,6 +74,8 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [trackingData, setTrackingData] = useState<any>(null)
+  const [trackingLoading, setTrackingLoading] = useState(false)
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -87,6 +99,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
         const data = await response.json()
         if (data.success) {
           setOrder(data.data)
+          setTrackingData(data.data.dtdcTrackingData || null)
         } else {
           setError(data.message || "Order not found")
         }
@@ -100,6 +113,40 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
     fetchOrder()
   }, [orderId, router])
+
+  const fetchTrackingData = async () => {
+    if (!order || !order.awbNumber) return
+
+    try {
+      setTrackingLoading(true)
+      const token = localStorage.getItem("customerToken")
+      if (!token) return
+
+      const response = await fetch(`${API_URL}/api/dtdc/order/${orderId}/tracking/customer`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch tracking data")
+      }
+
+      const data = await response.json()
+      if (data.success) {
+        setTrackingData(data.data.tracking)
+        // Update order with fresh tracking data
+        if (order) {
+          setOrder({ ...order, dtdcTrackingData: data.data.tracking })
+        }
+      }
+    } catch (err: any) {
+      console.error("Error fetching tracking:", err)
+      alert(err.message || "Failed to fetch tracking data")
+    } finally {
+      setTrackingLoading(false)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -217,7 +264,43 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       <div className="mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
           <h1 className="text-2xl sm:text-3xl font-bold">Order Details</h1>
-          <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs sm:text-sm bg-transparent">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto text-xs sm:text-sm bg-transparent"
+            onClick={async () => {
+              try {
+                const token = localStorage.getItem("customerToken")
+                if (!token) {
+                  alert("Please login to download invoice")
+                  return
+                }
+
+                const response = await fetch(`${API_URL}/api/invoices/${orderId}/download`, {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                })
+
+                if (!response.ok) {
+                  throw new Error("Failed to download invoice")
+                }
+
+                const blob = await response.blob()
+                const url = window.URL.createObjectURL(blob)
+                const a = document.createElement("a")
+                a.href = url
+                a.download = `Invoice_${order?.invoiceNumber || order?.orderNumber || "invoice"}.pdf`
+                document.body.appendChild(a)
+                a.click()
+                window.URL.revokeObjectURL(url)
+                document.body.removeChild(a)
+              } catch (err) {
+                console.error("Error downloading invoice:", err)
+                alert("Failed to download invoice. Please try again.")
+              }
+            }}
+          >
             <Download className="mr-2 h-4 w-4" />
             Download Invoice
           </Button>
@@ -286,6 +369,137 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
               </div>
             </CardContent>
           </Card>
+
+          {/* DTDC Tracking Information */}
+          {order.awbNumber && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+                    <Truck className="h-5 w-5" />
+                    Shipment Tracking (DTDC)
+                  </CardTitle>
+                  <Button
+                    onClick={fetchTrackingData}
+                    disabled={trackingLoading}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {trackingLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Refresh
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {trackingData && trackingData.success !== false ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">AWB Number</Label>
+                        <p className="text-sm font-medium mt-1">{trackingData.awbNumber || order.awbNumber}</p>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Status</Label>
+                        <p className="text-sm font-medium mt-1 capitalize">{trackingData.status || "N/A"}</p>
+                      </div>
+                      {trackingData.origin && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Origin</Label>
+                          <p className="text-sm mt-1">{trackingData.origin}</p>
+                        </div>
+                      )}
+                      {trackingData.destination && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Destination</Label>
+                          <p className="text-sm mt-1">{trackingData.destination}</p>
+                        </div>
+                      )}
+                      {trackingData.statusDate && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Last Update</Label>
+                          <p className="text-sm mt-1">
+                            {trackingData.statusDate} {trackingData.statusTime ? `at ${trackingData.statusTime}` : ""}
+                          </p>
+                        </div>
+                      )}
+                      {trackingData.weight && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Weight</Label>
+                          <p className="text-sm mt-1">
+                            {trackingData.weight} {trackingData.weightUnit || "kg"}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {trackingData.remarks && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Remarks</Label>
+                        <p className="text-sm mt-1">{trackingData.remarks}</p>
+                      </div>
+                    )}
+
+                    {trackingData.trackingDetails && trackingData.trackingDetails.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground mb-2 block">Tracking History</Label>
+                        <div className="space-y-3 max-h-64 overflow-y-auto border-l-2 border-primary pl-4">
+                          {trackingData.trackingDetails.map((detail: any, idx: number) => (
+                            <div key={idx} className="relative">
+                              <div className="absolute -left-6 top-2 h-2 w-2 rounded-full bg-primary" />
+                              <p className="text-sm font-medium">{detail.action}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {detail.actionDate} {detail.actionTime ? `at ${detail.actionTime}` : ""}
+                              </p>
+                              {detail.origin && detail.destination && (
+                                <p className="text-xs text-muted-foreground">
+                                  {detail.origin} → {detail.destination}
+                                </p>
+                              )}
+                              {detail.remarks && (
+                                <p className="text-xs text-muted-foreground mt-1 italic">{detail.remarks}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : trackingData && trackingData.success === false ? (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      {trackingData.error || "Failed to retrieve tracking information"}
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      AWB Number: <span className="font-medium">{order.awbNumber}</span>
+                    </p>
+                    <Button onClick={fetchTrackingData} disabled={trackingLoading} variant="outline" size="sm">
+                      {trackingLoading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Loading...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Fetch Tracking Data
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Order Items */}
           <Card>
@@ -363,6 +577,31 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
                   {formatStatus(order.paymentStatus)}
                 </Badge>
               </div>
+              
+              {/* GST Breakdown */}
+              {order.cgst !== undefined || order.igst !== undefined ? (
+                <>
+                  <Separator />
+                  {order.cgst && order.sgst ? (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">CGST (9%)</span>
+                        <span className="font-medium">₹{order.cgst.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">SGST (9%)</span>
+                        <span className="font-medium">₹{order.sgst.toLocaleString()}</span>
+                      </div>
+                    </>
+                  ) : order.igst ? (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">IGST (18%)</span>
+                      <span className="font-medium">₹{order.igst.toLocaleString()}</span>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+              
               <Separator />
               <div className="flex justify-between text-base sm:text-lg font-bold">
                 <span>Total</span>

@@ -119,14 +119,42 @@ router.post("/", authenticate, async (req, res) => {
       })
     }
 
-    const shipping = subtotal > 500 ? 0 : 50
-    const total = subtotal + shipping
+    // Shipping charges: ₹125 as per requirements
+    const shipping = 125
+
+    // Calculate GST based on shipping state
+    // Telangana (TS) -> CGST 9% + SGST 9%
+    // Other states -> IGST 18%
+    const shippingState = address.state?.trim().toUpperCase() || ""
+    const isTelangana = shippingState === "TELANGANA" || shippingState === "TS"
+    
+    // GST is calculated on (subtotal + shipping)
+    const taxableAmount = subtotal + shipping
+    let cgst = 0
+    let sgst = 0
+    let igst = 0
+    
+    if (isTelangana) {
+      // Intra-State: CGST 9% + SGST 9% = 18% total
+      cgst = Math.round((taxableAmount * 9) / 100)
+      sgst = Math.round((taxableAmount * 9) / 100)
+    } else {
+      // Inter-State: IGST 18%
+      igst = Math.round((taxableAmount * 18) / 100)
+    }
+    
+    const gstTotal = cgst + sgst + igst
+    const total = subtotal + shipping + gstTotal
 
     // Generate unique order number
     // Format: ORD-TIMESTAMP-RANDOM
     const timestamp = Date.now()
     const randomSuffix = Math.random().toString(36).substr(2, 9).toUpperCase()
     const orderNumber = `ORD-${timestamp}-${randomSuffix}`
+
+    // Generate invoice number (sequential, 10 digits)
+    const orderCount = await Order.countDocuments()
+    const invoiceNumber = String(orderCount + 1).padStart(10, "0")
 
     // Create order
     const order = new Order({
@@ -136,7 +164,12 @@ router.post("/", authenticate, async (req, res) => {
       shippingAddress: addressId,
       subtotal,
       shipping,
+      cgst,
+      sgst,
+      igst,
       total,
+      shippingState: address.state,
+      invoiceNumber,
       paymentMethod,
       paymentStatus: paymentMethod === "cod" ? "pending" : "pending",
       status: "pending",

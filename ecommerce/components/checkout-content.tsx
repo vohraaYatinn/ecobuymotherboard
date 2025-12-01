@@ -9,10 +9,57 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useCart } from "@/lib/cart-context"
 import { MapPin, Plus, Loader2, Check, CheckCircle, Sparkles } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
+
+// All Indian States and Union Territories
+const INDIAN_STATES = [
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chhattisgarh",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+  "Andaman and Nicobar Islands",
+  "Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu",
+  "Delhi",
+  "Jammu and Kashmir",
+  "Ladakh",
+  "Lakshadweep",
+  "Puducherry",
+]
 
 interface Address {
   _id: string
@@ -181,8 +228,32 @@ export function CheckoutContent() {
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const shipping = subtotal > 500 ? 0 : 50
-  const total = subtotal + shipping
+  const shipping = 125 // Fixed shipping charges as per requirements
+  
+  // Calculate GST preview based on selected address
+  const selectedAddress = addresses.find((addr) => addr._id === selectedAddressId)
+  const shippingState = selectedAddress?.state?.trim().toUpperCase() || ""
+  const isTelangana = shippingState === "TELANGANA" || shippingState === "TS"
+  
+  // GST is calculated on (subtotal + shipping)
+  const taxableAmount = subtotal + shipping
+  let cgst = 0
+  let sgst = 0
+  let igst = 0
+  
+  if (selectedAddress) {
+    if (isTelangana) {
+      // Intra-State: CGST 9% + SGST 9%
+      cgst = Math.round((taxableAmount * 9) / 100)
+      sgst = Math.round((taxableAmount * 9) / 100)
+    } else {
+      // Inter-State: IGST 18%
+      igst = Math.round((taxableAmount * 18) / 100)
+    }
+  }
+  
+  const gstTotal = cgst + sgst + igst
+  const total = subtotal + shipping + gstTotal
 
   if (cartLoading || fetchingAddresses) {
     return (
@@ -370,13 +441,22 @@ export function CheckoutContent() {
                     </div>
                     <div>
                       <Label htmlFor="state" className="text-sm">State *</Label>
-                      <Input
-                        id="state"
+                      <Select
                         value={formData.state}
-                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                        onValueChange={(value) => setFormData({ ...formData, state: value })}
                         required
-                        className="h-10 sm:h-11 text-sm mt-1.5"
-                      />
+                      >
+                        <SelectTrigger id="state" className="h-10 sm:h-11 text-sm mt-1.5 w-full">
+                          <SelectValue placeholder="Select State" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {INDIAN_STATES.map((state) => (
+                            <SelectItem key={state} value={state}>
+                              {state}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div>
                       <Label htmlFor="postcode" className="text-sm">Postcode *</Label>
@@ -454,9 +534,39 @@ export function CheckoutContent() {
                   <span className="font-semibold">₹{subtotal.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-xs sm:text-sm">
-                  <span className="text-muted-foreground">Shipping</span>
-                  <span className="font-semibold">{shipping === 0 ? "FREE" : `₹${shipping}`}</span>
+                  <span className="text-muted-foreground">Shipping/Handling Charges</span>
+                  <span className="font-semibold">₹{shipping.toLocaleString()}</span>
                 </div>
+                
+                {/* GST Breakdown */}
+                {selectedAddress && (
+                  <>
+                    {isTelangana ? (
+                      <>
+                        <div className="flex justify-between text-xs sm:text-sm">
+                          <span className="text-muted-foreground">CGST (9%)</span>
+                          <span className="font-semibold">₹{cgst.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-xs sm:text-sm">
+                          <span className="text-muted-foreground">SGST (9%)</span>
+                          <span className="font-semibold">₹{sgst.toLocaleString()}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex justify-between text-xs sm:text-sm">
+                        <span className="text-muted-foreground">IGST (18%)</span>
+                        <span className="font-semibold">₹{igst.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                {!selectedAddress && (
+                  <div className="text-xs text-muted-foreground italic">
+                    Select address to see GST breakdown
+                  </div>
+                )}
+                
                 <div className="flex justify-between text-base sm:text-lg font-bold pt-2 border-t">
                   <span>Total</span>
                   <span className="text-primary">₹{total.toLocaleString()}</span>

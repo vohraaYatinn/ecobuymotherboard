@@ -5,11 +5,14 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Star, ShoppingCart, Heart, Plus, Minus, Loader2 } from "lucide-react"
+import { Star, ShoppingCart, Heart, Plus, Minus, Loader2, MapPin, CheckCircle2, XCircle, Truck } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
 
 interface ProductDetailProps {
   productId: string
@@ -49,6 +52,9 @@ export function ProductDetail({ productId }: ProductDetailProps) {
       const [error, setError] = useState("")
       const [addingToCart, setAddingToCart] = useState(false)
       const [togglingFavorite, setTogglingFavorite] = useState(false)
+      const [pincode, setPincode] = useState("")
+      const [checkingPincode, setCheckingPincode] = useState(false)
+      const [pincodeResult, setPincodeResult] = useState<any>(null)
       const { addToCart } = useCart()
       const { isFavorite, addToWishlist, removeFromWishlist } = useWishlist()
 
@@ -110,6 +116,44 @@ export function ProductDetail({ productId }: ProductDetailProps) {
         .join(" ")
     }
     return "Unknown Category"
+  }
+
+  const handleCheckPincode = async () => {
+    if (!pincode.trim() || !/^\d{6}$/.test(pincode.trim())) {
+      setPincodeResult({
+        success: false,
+        serviceable: false,
+        message: "Please enter a valid 6-digit pincode",
+      })
+      return
+    }
+
+    try {
+      setCheckingPincode(true)
+      setPincodeResult(null)
+
+      const response = await fetch(`${API_URL}/api/dtdc/check-pincode?pincode=${pincode.trim()}`)
+      const data = await response.json()
+
+      if (data.success) {
+        setPincodeResult(data.data)
+      } else {
+        setPincodeResult({
+          success: false,
+          serviceable: false,
+          message: data.message || "Failed to check delivery availability",
+        })
+      }
+    } catch (err) {
+      console.error("Error checking pincode:", err)
+      setPincodeResult({
+        success: false,
+        serviceable: false,
+        message: "Network error. Please try again.",
+      })
+    } finally {
+      setCheckingPincode(false)
+    }
   }
 
   if (loading) {
@@ -321,6 +365,92 @@ export function ProductDetail({ productId }: ProductDetailProps) {
             <p>
               <strong className="text-foreground">Stock:</strong> {product.stock} units
             </p>
+          </div>
+
+          {/* Pincode Delivery Check */}
+          <div className="mt-6 sm:mt-8 p-4 sm:p-5 border border-border rounded-lg bg-muted/30">
+            <div className="flex items-center gap-2 mb-3 sm:mb-4">
+              <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              <h3 className="text-sm sm:text-base font-semibold">Check Delivery</h3>
+            </div>
+            <div className="space-y-3">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <Input
+                    type="text"
+                    placeholder="Enter pincode"
+                    value={pincode}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, "").slice(0, 6)
+                      setPincode(value)
+                      if (pincodeResult) {
+                        setPincodeResult(null)
+                      }
+                    }}
+                    maxLength={6}
+                    className="h-10 sm:h-11 text-sm sm:text-base"
+                  />
+                </div>
+                <Button
+                  onClick={handleCheckPincode}
+                  disabled={checkingPincode || !pincode.trim() || pincode.length !== 6}
+                  className="h-10 sm:h-11 px-4 sm:px-6 text-xs sm:text-sm"
+                >
+                  {checkingPincode ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Checking...
+                    </>
+                  ) : (
+                    "Check"
+                  )}
+                </Button>
+              </div>
+
+              {pincodeResult && (
+                <div className="mt-3">
+                  {pincodeResult.serviceable ? (
+                    <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-sm sm:text-base">
+                        <div className="space-y-1.5">
+                          <p className="font-semibold text-green-700 dark:text-green-400">
+                            ✓ Delivery available to {pincodeResult.pincode}
+                          </p>
+                          {pincodeResult.estimatedDays && (
+                            <p className="text-green-600 dark:text-green-500">
+                              Estimated delivery: {pincodeResult.estimatedDays} {pincodeResult.estimatedDays === 1 ? "day" : "days"}
+                            </p>
+                          )}
+                          {pincodeResult.deliveryCharges !== null && (
+                            <p className="text-green-600 dark:text-green-500">
+                              Delivery charges: ₹{pincodeResult.deliveryCharges}
+                            </p>
+                          )}
+                          {pincodeResult.fallback && (
+                            <p className="text-xs text-green-600 dark:text-green-500 italic">
+                              {pincodeResult.note || "Estimated delivery time"}
+                            </p>
+                          )}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  ) : (
+                    <Alert variant="destructive">
+                      <XCircle className="h-4 w-4" />
+                      <AlertDescription className="text-sm sm:text-base">
+                        <p className="font-semibold">
+                          Delivery not available to {pincodeResult.pincode}
+                        </p>
+                        <p className="text-xs mt-1">
+                          {pincodeResult.message || "We currently don't deliver to this pincode. Please contact support for alternatives."}
+                        </p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

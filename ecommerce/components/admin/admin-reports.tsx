@@ -17,7 +17,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
 
 interface YesterdaySummary {
   ordersReceived: number
@@ -576,6 +576,10 @@ export function AdminReports() {
     </div>
   )
 }
+
+
+
+
 
 
 
