@@ -5,6 +5,7 @@ import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Vendor from "../models/Vendor.js"
 import { verifyVendorToken } from "../middleware/auth.js"
+import { createShipmentForOrder } from "../services/dtdcService.js"
 
 const router = express.Router()
 
@@ -476,6 +477,27 @@ router.put("/:id/status", verifyVendorToken, async (req, res) => {
     // Update status
     order.status = status
     await order.save()
+
+    // Auto-create DTDC shipment when vendor marks order as shipped (packed)
+    if (status === "shipped" && !order.awbNumber) {
+      try {
+        // Ensure required relations are populated for shipment creation
+        await order.populate("shippingAddress")
+        await order.populate("customerId", "name email mobile")
+
+        const shipmentResult = await createShipmentForOrder(order)
+
+        order.awbNumber = shipmentResult.awbNumber
+        order.dtdcTrackingData = shipmentResult.trackingData || shipmentResult
+        order.trackingLastUpdated = new Date()
+        await order.save()
+
+        console.log(`✅ [DTDC] Shipment created for order ${order.orderNumber} with AWB ${shipmentResult.awbNumber}`)
+      } catch (shipError) {
+        console.error("❌ [DTDC] Failed to create shipment for order", order._id, shipError)
+        // Do NOT fail the vendor status update if DTDC call fails
+      }
+    }
 
     // Populate before returning
     await order.populate("customerId", "name mobile email")

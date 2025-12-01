@@ -365,8 +365,14 @@ router.post("/", authenticate, async (req, res) => {
                     </table>
                     <div style="margin-top: 15px; text-align: right;">
                       <p><strong>Subtotal:</strong> ₹${order.subtotal.toLocaleString("en-IN")}</p>
-                      <p><strong>Shipping:</strong> ₹${order.shipping.toLocaleString("en-IN")}</p>
-                      <p><strong>Grand Total:</strong> ₹${order.total.toLocaleString("en-IN")}</p>
+                      <p><strong>Shipping/Handling Charges:</strong> ₹${order.shipping.toLocaleString("en-IN")}</p>
+                      ${order.cgst > 0 && order.sgst > 0 ? `
+                        <p><strong>CGST (9%):</strong> ₹${order.cgst.toLocaleString("en-IN")}</p>
+                        <p><strong>SGST (9%):</strong> ₹${order.sgst.toLocaleString("en-IN")}</p>
+                      ` : order.igst > 0 ? `
+                        <p><strong>IGST (18%):</strong> ₹${order.igst.toLocaleString("en-IN")}</p>
+                      ` : ''}
+                      <p style="margin-top: 10px; font-size: 18px; border-top: 2px solid #ddd; padding-top: 10px;"><strong>Grand Total:</strong> ₹${order.total.toLocaleString("en-IN")}</p>
                     </div>
                     <h3>Shipping Address</h3>
                     ${addressHtml}
