@@ -20,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, CheckCircle } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export function VendorRegistrationForm() {
   const { toast } = useToast()

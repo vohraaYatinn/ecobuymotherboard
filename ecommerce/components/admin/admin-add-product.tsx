@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, Save, Package, ImageIcon, FileText, DollarSign, Loader2, X } from "lucide-react"
 import Image from "next/image"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.36:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export function AdminAddProduct() {
   const router = useRouter()

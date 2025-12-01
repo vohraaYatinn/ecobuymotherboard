@@ -43,11 +43,11 @@ const PORT = process.env.PORT || 5000
 connectDB()
 
 // Middleware - CORS configuration
-const BACKEND_URL = process.env.BACKEND_URL || "http://192.168.1.36:5000"
+const BACKEND_URL = process.env.BACKEND_URL || "https://api.elecobuy.com"
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "http://192.168.1.36:5000",
+  "https://api.elecobuy.com",
   "https://elecobuy.com",
   "https://www.elecobuy.com",
   "http://127.0.0.1:5000",
@@ -95,7 +95,7 @@ if (process.env.NODE_ENV !== "production") {
       } else if (
         origin === "https://elecobuy.com" ||
         origin === "https://www.elecobuy.com" ||
-        origin === "http://192.168.1.36:5000"
+        origin === "https://api.elecobuy.com"
       ) {
         callback(null, true)
       } else {
