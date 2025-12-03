@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Search, Eye, Filter, Download, ChevronLeft, ChevronRight, UserPlus, Store } from "lucide-react"
+import { Loader2, Search, Eye, Filter, Download, ChevronLeft, ChevronRight, UserPlus, Store, FileDown } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
@@ -133,6 +133,7 @@ export function AdminOrdersList() {
     paymentStatus: "",
     paymentMethod: "",
   })
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     fetchOrders()
@@ -345,6 +346,135 @@ export function AdminOrdersList() {
     return null
   }
 
+  const handleExportOrders = async () => {
+    try {
+      setExporting(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login to export orders")
+        return
+      }
+
+      // Fetch all orders matching current filters (without pagination)
+      const params = new URLSearchParams({
+        page: "1",
+        limit: "10000", // Large limit to get all orders
+        ...(search && { search }),
+        ...(statusFilter !== "all" && { status: statusFilter }),
+        ...(paymentMethodFilter !== "all" && { paymentMethod: paymentMethodFilter }),
+        ...(paymentStatusFilter !== "all" && { paymentStatus: paymentStatusFilter }),
+        ...(vendorFilter !== "all" && { vendorId: vendorFilter }),
+        ...(assignmentModeFilter !== "all" && { assignmentMode: assignmentModeFilter }),
+      })
+
+      const response = await fetch(`${API_URL}/api/admin/orders?${params}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch orders for export")
+      }
+
+      const data = await response.json()
+      if (!data.success || !data.data) {
+        throw new Error("No orders data available")
+      }
+
+      const orders = data.data
+
+      // Convert orders to CSV
+      const csvHeaders = [
+        "Order Number",
+        "Order Date",
+        "Customer Name",
+        "Customer Mobile",
+        "Customer Email",
+        "Vendor Name",
+        "Vendor Phone",
+        "Assignment Mode",
+        "Items",
+        "Item Details",
+        "Quantity",
+        "Subtotal",
+        "Shipping",
+        "Total",
+        "Payment Method",
+        "Payment Status",
+        "Order Status",
+        "Shipping Address",
+        "City",
+        "State",
+        "Postcode",
+        "Phone",
+      ]
+
+      const csvRows = orders.map((order: Order) => {
+        const customer = getCustomerInfo(order)
+        const vendor = getVendorInfo(order)
+        const address = getAddressInfo(order)
+        const itemsList = order.items.map((item) => `${item.name} (${item.brand})`).join("; ")
+        const itemDetails = order.items
+          .map((item) => `${item.name} (${item.brand}) - Qty: ${item.quantity} - ₹${item.price}`)
+          .join("; ")
+        const totalQuantity = order.items.reduce((sum, item) => sum + item.quantity, 0)
+
+        return [
+          order.orderNumber || "",
+          new Date(order.createdAt).toLocaleDateString("en-IN"),
+          customer.name || "",
+          customer.mobile || "",
+          typeof order.customerId === "object" && order.customerId !== null ? order.customerId.email || "" : "",
+          vendor?.name || "Unassigned",
+          vendor?.phone || "",
+          order.assignmentMode
+            ? order.assignmentMode === "assigned-by-admin"
+              ? "By Admin"
+              : "By Vendor"
+            : "",
+          itemsList,
+          itemDetails,
+          totalQuantity.toString(),
+          `₹${order.subtotal.toLocaleString()}`,
+          `₹${order.shipping.toLocaleString()}`,
+          `₹${order.total.toLocaleString()}`,
+          order.paymentMethod.toUpperCase(),
+          formatStatus(order.paymentStatus),
+          formatStatus(order.status),
+          address ? `${address.address1 || ""}` : "",
+          address?.city || "",
+          address?.state || "",
+          address?.postcode || "",
+          address?.phone || "",
+        ]
+      })
+
+      // Create CSV content
+      const csvContent = [
+        csvHeaders.join(","),
+        ...csvRows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")),
+      ].join("\n")
+
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      const timestamp = new Date().toISOString().split("T")[0]
+      a.href = url
+      a.download = `orders_export_${timestamp}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error("Error exporting orders:", error)
+      alert("Failed to export orders. Please try again.")
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -353,6 +483,25 @@ export function AdminOrdersList() {
           <p className="text-sm text-muted-foreground mt-1">View and manage all customer orders</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 bg-transparent"
+            onClick={handleExportOrders}
+            disabled={exporting}
+          >
+            {exporting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="hidden sm:inline">Exporting...</span>
+              </>
+            ) : (
+              <>
+                <FileDown className="h-4 w-4" />
+                <span className="hidden sm:inline">Export</span>
+              </>
+            )}
+          </Button>
           <Button variant="outline" size="sm" className="gap-2 bg-transparent" onClick={fetchOrders}>
             <Download className="h-4 w-4" />
             <span className="hidden sm:inline">Refresh</span>

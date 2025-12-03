@@ -344,16 +344,16 @@ export function AdminLearningResources() {
               </div>
               <div>
                 <Label htmlFor="file">
-                  File * ({formData.type === "manual" ? "PDF" : formData.type === "video" ? "AVI" : "ZIP"})
+                  File * ({formData.type === "manual" ? "PDF, AVIF" : formData.type === "video" ? "AVI, MP4, MOV, AVIF" : "ZIP"})
                 </Label>
                 <Input
                   id="file"
                   type="file"
                   accept={
                     formData.type === "manual"
-                      ? ".pdf"
+                      ? ".pdf,.avif"
                       : formData.type === "video"
-                        ? ".avi,.mp4,.mov"
+                        ? ".avi,.mp4,.mov,.mkv,.webm,.avif"
                         : ".zip"
                   }
                   onChange={handleFileChange}
@@ -552,6 +552,8 @@ export function AdminLearningResources() {
     </div>
   )
 }
+
+
 
 
 

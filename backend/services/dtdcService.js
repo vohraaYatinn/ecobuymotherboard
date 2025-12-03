@@ -17,6 +17,7 @@ const DTDC_CONFIG = {
     authenticate: "https://blktracksvc.dtdc.com/dtdc-api/api/dtdc/authenticate",
     track: "https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails",
     serviceability: "https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails", // placeholder for pincode service
+    orderUpload: "https://dtdcapi.shipsy.io/api/customer/integration/consignment/softdata",
   },
 
   // environment: "production" or "staging"
@@ -176,12 +177,157 @@ export function clearAuthCache() {
   authTokenCache.expiresAt = null
 }
 
-// Stub for auto-sync shipment creation. Does nothing yet, avoids breaking vendor flow.
+// Auto-sync shipment creation for DTDC Order Upload API (B2C / Express)
 export async function createShipmentForOrder(order) {
-  console.log("[DTDC] createShipmentForOrder stub called for order", order && order.orderNumber)
-  return {
-    awbNumber: null,
-    trackingData: null,
+  console.log(`🔵 [DTDC-DEBUG] ========================================`)
+  console.log(`🔵 [DTDC-DEBUG] createShipmentForOrder called`)
+  console.log(`🔵 [DTDC-DEBUG] Order Number: ${order?.orderNumber || "N/A"}`)
+  console.log(`🔵 [DTDC-DEBUG] Order ID: ${order?._id || "N/A"}`)
+
+  try {
+    // Validate order data
+    if (!order) {
+      throw new Error("Order is required")
+    }
+
+    if (!order.shippingAddress) {
+      throw new Error("Order shipping address is missing")
+    }
+
+    const shippingAddress = order.shippingAddress
+    const customer = order.customerId || {}
+
+    console.log(`🔵 [DTDC-DEBUG] Shipping Address:`, {
+      name: `${shippingAddress.firstName || ""} ${shippingAddress.lastName || ""}`.trim(),
+      address1: shippingAddress.address1,
+      city: shippingAddress.city,
+      state: shippingAddress.state,
+      pincode: shippingAddress.postcode,
+      phone: shippingAddress.phone,
+    })
+
+    // Use hard-coded production URL
+    const url = DTDC_CONFIG.production.orderUpload || "https://dtdcapi.shipsy.io/api/customer/integration/consignment/softdata"
+    console.log(`🔵 [DTDC-DEBUG] DTDC Order Upload URL: ${url}`)
+    console.log(`🔵 [DTDC-DEBUG] API Key: ${DTDC_CONFIG.apiKey ? "***" + DTDC_CONFIG.apiKey.slice(-4) : "MISSING"}`)
+
+    // Calculate total pieces
+    const totalPieces = Array.isArray(order.items)
+      ? order.items.reduce((sum, item) => sum + (item.quantity || 0), 0)
+      : 1
+
+    // Build payload according to DTDC Order Upload API spec
+    const payload = {
+      consignments: [
+        {
+          customer_code: process.env.DTDC_CUSTOMER_CODE || "", // You may need to set this
+          service_type_id: "B2C PRIORITY",
+          load_type: "NON-DOCUMENT",
+          description: `Order ${order.orderNumber}`,
+          dimension_unit: "cm",
+          length: "70.0",
+          width: "70.0",
+          height: "55.0",
+          weight_unit: "kg",
+          weight: "1.0",
+          declared_value: String(order.total || 0),
+          num_pieces: String(totalPieces || 1),
+          origin_details: {
+            name: "ELECOBUY",
+            phone: "8639979558",
+            alternate_phone: "",
+            address_line_1: "H N O 3-122/6, Chengicherla Road",
+            address_line_2: "Besides Growel Feed Supplements and Mineral Mixtures, Boudha Nagar",
+            pincode: "500098",
+            city: "Hyderabad",
+            state: "Telangana",
+          },
+          destination_details: {
+            name: `${shippingAddress.firstName || ""} ${shippingAddress.lastName || ""}`.trim(),
+            phone: shippingAddress.phone || "",
+            alternate_phone: "",
+            address_line_1: shippingAddress.address1 || "",
+            address_line_2: shippingAddress.address2 || "",
+            pincode: shippingAddress.postcode || "",
+            city: shippingAddress.city || "",
+            state: shippingAddress.state || "",
+          },
+          customer_reference_number: order.orderNumber,
+          cod_collection_mode: order.paymentMethod === "cod" ? "CASH" : "",
+          cod_amount: order.paymentMethod === "cod" ? String(order.total || 0) : "",
+          commodity_id: "99",
+          eway_bill: "",
+          is_risk_surcharge_applicable: "false",
+          invoice_number: order.invoiceNumber || order.orderNumber,
+          invoice_date: new Date(order.createdAt).toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+          reference_number: "",
+        },
+      ],
+    }
+
+    console.log(`🔵 [DTDC-DEBUG] Payload prepared:`, JSON.stringify(payload, null, 2))
+
+    const headers = {
+      "Content-Type": "application/json",
+      "api-key": DTDC_CONFIG.apiKey,
+    }
+
+    console.log(`🔵 [DTDC-DEBUG] Making POST request to DTDC...`)
+    const response = await axios.post(url, payload, {
+      headers,
+      timeout: 15000,
+    })
+
+    console.log(`🔵 [DTDC-DEBUG] DTDC Response Status: ${response.status}`)
+    console.log(`🔵 [DTDC-DEBUG] DTDC Response Data:`, JSON.stringify(response.data, null, 2))
+
+    const data = response.data || {}
+
+    // Extract AWB from response (DTDC returns in data array)
+    let awbNumber = null
+    if (data.status === "OK" && Array.isArray(data.data) && data.data.length > 0) {
+      const consignment = data.data[0]
+      if (consignment.success === true) {
+        awbNumber = consignment.reference_number || null
+        console.log(`✅ [DTDC-DEBUG] ✅ DTDC shipment created successfully!`)
+        console.log(`✅ [DTDC-DEBUG] AWB Number: ${awbNumber}`)
+      } else {
+        console.error(`❌ [DTDC-DEBUG] DTDC returned success=false`)
+        console.error(`❌ [DTDC-DEBUG] Error message:`, consignment.message)
+        console.error(`❌ [DTDC-DEBUG] Error reason:`, consignment.reason)
+      }
+    } else {
+      console.error(`❌ [DTDC-DEBUG] Unexpected response format`)
+    }
+
+    if (!awbNumber) {
+      console.error(`❌ [DTDC-DEBUG] No AWB number found in response`)
+      throw new Error("DTDC shipment created but AWB number not found in response")
+    }
+
+    console.log(`✅ [DTDC-DEBUG] Returning success with AWB: ${awbNumber}`)
+    console.log(`🔵 [DTDC-DEBUG] ========================================`)
+
+    return {
+      awbNumber,
+      trackingData: data,
+    }
+  } catch (error) {
+    console.error(`❌ [DTDC-DEBUG] ========================================`)
+    console.error(`❌ [DTDC-DEBUG] ERROR in createShipmentForOrder`)
+    console.error(`❌ [DTDC-DEBUG] Order: ${order?.orderNumber || "N/A"}`)
+    console.error(`❌ [DTDC-DEBUG] Error: ${error.message}`)
+    if (error.response) {
+      console.error(`❌ [DTDC-DEBUG] HTTP Status: ${error.response.status}`)
+      console.error(`❌ [DTDC-DEBUG] Response:`, JSON.stringify(error.response.data, null, 2))
+    }
+    console.error(`❌ [DTDC-DEBUG] Stack:`, error.stack)
+    console.error(`❌ [DTDC-DEBUG] ========================================`)
+    throw error
   }
 }
 

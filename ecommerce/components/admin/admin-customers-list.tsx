@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Search, Eye, Download, Filter, Loader2, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, Eye, Download, Filter, Loader2, AlertCircle, ChevronLeft, ChevronRight, FileDown } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
@@ -34,6 +34,7 @@ export function AdminCustomersList() {
     total: 0,
     pages: 0,
   })
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     fetchCustomers()
@@ -97,6 +98,91 @@ export function AdminCustomersList() {
   const getCustomerId = (customer: Customer) => {
     return customer._id.slice(-6).toUpperCase()
   }
+
+  const handleExportCustomers = async () => {
+    try {
+      setExporting(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login to export customers")
+        return
+      }
+
+      // Fetch all customers matching current filters (without pagination)
+      const params = new URLSearchParams({
+        page: "1",
+        limit: "10000", // Large limit to get all customers
+        ...(search && { search }),
+      })
+
+      const response = await fetch(`${API_URL}/api/admin/customers?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch customers for export")
+      }
+
+      const data = await response.json()
+      if (!data.success || !data.data) {
+        throw new Error("No customers data available")
+      }
+
+      const customers = data.data
+
+      // Convert customers to CSV
+      const csvHeaders = [
+        "Customer ID",
+        "Name",
+        "Email",
+        "Phone",
+        "City",
+        "Total Orders",
+        "Total Spent (₹)",
+        "Status",
+        "Joined Date",
+      ]
+
+      const csvRows = customers.map((customer: Customer) => {
+        return [
+          `CUST${getCustomerId(customer)}`,
+          customer.name || "",
+          customer.email || "",
+          customer.mobile || "",
+          customer.city || "",
+          customer.totalOrders.toString(),
+          customer.totalSpent.toString(),
+          "Active",
+          new Date(customer.createdAt).toLocaleDateString("en-IN"),
+        ]
+      })
+
+      // Create CSV content
+      const csvContent = [
+        csvHeaders.join(","),
+        ...csvRows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")),
+      ].join("\n")
+
+      // Create blob and download
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      const timestamp = new Date().toISOString().split("T")[0]
+      a.href = url
+      a.download = `customers_export_${timestamp}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error("Error exporting customers:", error)
+      alert("Failed to export customers. Please try again.")
+    } finally {
+      setExporting(false)
+    }
+  }
   if (loading && customers.length === 0) {
     return (
       <div className="space-y-6">
@@ -119,9 +205,24 @@ export function AdminCustomersList() {
           <p className="text-sm text-muted-foreground mt-1">View and manage all registered customers</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2 bg-transparent">
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 bg-transparent"
+            onClick={handleExportCustomers}
+            disabled={exporting}
+          >
+            {exporting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="hidden sm:inline">Exporting...</span>
+              </>
+            ) : (
+              <>
+                <FileDown className="h-4 w-4" />
+                <span className="hidden sm:inline">Export</span>
+              </>
+            )}
           </Button>
         </div>
       </div>

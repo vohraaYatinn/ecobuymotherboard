@@ -28,6 +28,17 @@ FRONTEND_URL=http://localhost:3000
 # Backend URL (for network access - Android app development)
 # Replace with your local network IP address
 BACKEND_URL=https://api.elecobuy.com
+
+# Email Configuration (for vendor approval, order confirmations, etc.)
+# SMTP settings - required for sending emails
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+# Alternative: Use ADMIN_EMAIL and ADMIN_EMAIL_PASSWORD
+ADMIN_EMAIL=your-email@gmail.com
+ADMIN_EMAIL_PASSWORD=your-app-password
 ```
 
 **Note:** 
@@ -90,7 +101,28 @@ The server will run on `https://api.elecobuy.com` by default.
 - `JWT_SECRET` - Secret key for JWT tokens
 - `JWT_EXPIRES_IN` - Token expiration time (default: 7d)
 - `FRONTEND_URL` - Frontend URL for CORS (default: http://localhost:3000)
+- `BACKEND_URL` - Backend URL for network access (default: https://api.elecobuy.com)
 - `MESSAGE_CENTRAL_AUTH_TOKEN` - MessageCentral API auth token
 - `MESSAGE_CENTRAL_CUSTOMER_ID` - MessageCentral customer ID
 - `OTP_DEVELOPMENT` - Set to "true" to bypass MessageCentral (use OTP: 0000)
+
+### Email Configuration (SMTP)
+
+For sending emails (vendor approval, order confirmations, contact form, etc.):
+
+- `SMTP_HOST` - SMTP server host (default: smtp.gmail.com)
+- `SMTP_PORT` - SMTP server port (default: 587)
+- `SMTP_SECURE` - Use secure connection (default: false, set to "true" for port 465)
+- `SMTP_USER` - SMTP username/email
+- `SMTP_PASS` - SMTP password or app password
+- `ADMIN_EMAIL` - Admin email address (alternative to SMTP_USER)
+- `ADMIN_EMAIL_PASSWORD` - Admin email password (alternative to SMTP_PASS)
+
+**Note:** For Gmail, you need to use an [App Password](https://support.google.com/accounts/answer/185833) instead of your regular password. Enable 2-factor authentication first, then generate an app password.
+
+**Email Features:**
+- ✅ Vendor approval confirmation emails
+- ✅ Order confirmation emails
+- ✅ Contact form notifications
+- ✅ Product enquiry notifications
 

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, AlertCircle, FileText, Calendar, TrendingUp, Package, Truck, CheckCircle, Clock } from "lucide-react"
+import { AdminVendorAnalytics } from "./admin-vendor-analytics"
 import {
   LineChart,
   Line,
@@ -302,6 +303,7 @@ export function AdminReports() {
           <TabsTrigger value="daily">Daily</TabsTrigger>
           <TabsTrigger value="weekly">Weekly</TabsTrigger>
           <TabsTrigger value="monthly">Monthly</TabsTrigger>
+          <TabsTrigger value="vendor-analytics">Vendor Analytics</TabsTrigger>
         </TabsList>
 
         <TabsContent value="daily" className="space-y-4">
@@ -468,6 +470,10 @@ export function AdminReports() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="vendor-analytics" className="space-y-4">
+          <AdminVendorAnalytics />
+        </TabsContent>
       </Tabs>
 
       {/* Full Orders Report */}
@@ -576,6 +582,8 @@ export function AdminReports() {
     </div>
   )
 }
+
+
 
 
 

@@ -480,23 +480,58 @@ router.put("/:id/status", verifyVendorToken, async (req, res) => {
 
     // Auto-create DTDC shipment when vendor marks order as shipped (packed)
     if (status === "shipped" && !order.awbNumber) {
+      console.log(`🔵 [VENDOR-DEBUG] Starting DTDC shipment creation for order ${order.orderNumber} (ID: ${order._id})`)
+      
       try {
         // Ensure required relations are populated for shipment creation
         await order.populate("shippingAddress")
         await order.populate("customerId", "name email mobile")
 
+        console.log(`🔵 [VENDOR-DEBUG] Order populated. Shipping address:`, {
+          name: order.shippingAddress?.firstName + " " + order.shippingAddress?.lastName,
+          city: order.shippingAddress?.city,
+          state: order.shippingAddress?.state,
+          pincode: order.shippingAddress?.postcode,
+        })
+        console.log(`🔵 [VENDOR-DEBUG] Customer:`, {
+          name: order.customerId?.name,
+          email: order.customerId?.email,
+        })
+        console.log(`🔵 [VENDOR-DEBUG] Order total: ₹${order.total}, Payment method: ${order.paymentMethod}`)
+
+        console.log(`🔵 [VENDOR-DEBUG] Calling createShipmentForOrder...`)
         const shipmentResult = await createShipmentForOrder(order)
+        console.log(`🔵 [VENDOR-DEBUG] createShipmentForOrder returned:`, {
+          hasAwbNumber: !!shipmentResult.awbNumber,
+          awbNumber: shipmentResult.awbNumber,
+          hasTrackingData: !!shipmentResult.trackingData,
+        })
 
-        order.awbNumber = shipmentResult.awbNumber
-        order.dtdcTrackingData = shipmentResult.trackingData || shipmentResult
-        order.trackingLastUpdated = new Date()
-        await order.save()
+        if (shipmentResult.awbNumber) {
+          order.awbNumber = shipmentResult.awbNumber
+          order.dtdcTrackingData = shipmentResult.trackingData || shipmentResult
+          order.trackingLastUpdated = new Date()
+          await order.save()
 
-        console.log(`✅ [DTDC] Shipment created for order ${order.orderNumber} with AWB ${shipmentResult.awbNumber}`)
+          console.log(`✅ [VENDOR-DEBUG] ✅ DTDC shipment SUCCESS for order ${order.orderNumber}`)
+          console.log(`✅ [VENDOR-DEBUG] AWB Number: ${shipmentResult.awbNumber}`)
+          console.log(`✅ [VENDOR-DEBUG] Order saved with DTDC data`)
+        } else {
+          console.warn(`⚠️ [VENDOR-DEBUG] ⚠️ DTDC shipment created but NO AWB number returned`)
+          console.warn(`⚠️ [VENDOR-DEBUG] Response:`, JSON.stringify(shipmentResult, null, 2))
+        }
       } catch (shipError) {
-        console.error("❌ [DTDC] Failed to create shipment for order", order._id, shipError)
+        console.error(`❌ [VENDOR-DEBUG] ❌ DTDC shipment FAILED for order ${order.orderNumber}`)
+        console.error(`❌ [VENDOR-DEBUG] Error message:`, shipError.message)
+        console.error(`❌ [VENDOR-DEBUG] Error stack:`, shipError.stack)
+        if (shipError.response) {
+          console.error(`❌ [VENDOR-DEBUG] HTTP Status:`, shipError.response.status)
+          console.error(`❌ [VENDOR-DEBUG] Response data:`, JSON.stringify(shipError.response.data, null, 2))
+        }
         // Do NOT fail the vendor status update if DTDC call fails
       }
+    } else if (status === "shipped" && order.awbNumber) {
+      console.log(`ℹ️ [VENDOR-DEBUG] Order ${order.orderNumber} already has AWB: ${order.awbNumber}. Skipping DTDC creation.`)
     }
 
     // Populate before returning
@@ -578,10 +613,22 @@ router.put("/:id/status", verifyVendorToken, async (req, res) => {
       // Don't fail the status update if notifications fail
     }
 
+    // Prepare response with DTDC status info
+    const responseData = {
+      ...order.toObject(),
+      dtdcStatus: status === "shipped" ? {
+        awbNumber: order.awbNumber || null,
+        shipmentCreated: !!order.awbNumber,
+        message: order.awbNumber 
+          ? `DTDC shipment created successfully. AWB: ${order.awbNumber}`
+          : "DTDC shipment creation attempted but AWB not available. Check server logs for details.",
+      } : null,
+    }
+
     res.status(200).json({
       success: true,
       message: `Order status updated to ${status}`,
-      data: order,
+      data: responseData,
     })
   } catch (error) {
     console.error("Update order status error:", error)

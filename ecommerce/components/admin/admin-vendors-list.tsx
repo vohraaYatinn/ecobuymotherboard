@@ -6,8 +6,19 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Eye, Plus, Store, MapPin, Loader2, Smartphone } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useToast } from "@/hooks/use-toast"
+import { Search, Eye, Plus, Store, MapPin, Loader2, Smartphone, Download, Percent } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
@@ -27,6 +38,7 @@ interface Vendor {
   phone: string
   username: string
   status: string
+  commission?: number
   address: {
     city: string
     state: string
@@ -58,11 +70,17 @@ const getStatusLabel = (status: string) => {
 }
 
 export function AdminVendorsList() {
+  const { toast } = useToast()
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [selectedVendors, setSelectedVendors] = useState<string[]>([])
+  const [isCommissionDialogOpen, setIsCommissionDialogOpen] = useState(false)
+  const [commissionValue, setCommissionValue] = useState("")
+  const [updatingCommission, setUpdatingCommission] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useEffect(() => {
     const fetchVendors = async () => {
@@ -106,6 +124,170 @@ export function AdminVendorsList() {
     })
   }
 
+  const handleSelectVendor = (vendorId: string) => {
+    if (selectedVendors.includes(vendorId)) {
+      setSelectedVendors(selectedVendors.filter((id) => id !== vendorId))
+    } else {
+      setSelectedVendors([...selectedVendors, vendorId])
+    }
+  }
+
+  const handleSelectAll = () => {
+    if (selectedVendors.length === vendors.length) {
+      setSelectedVendors([])
+    } else {
+      setSelectedVendors(vendors.map((v) => v._id))
+    }
+  }
+
+  const handleOpenCommissionDialog = () => {
+    if (selectedVendors.length === 0) {
+      toast({
+        title: "No vendors selected",
+        description: "Please select at least one vendor to assign commission.",
+        variant: "destructive",
+      })
+      return
+    }
+    setIsCommissionDialogOpen(true)
+  }
+
+  const handleUpdateCommission = async () => {
+    if (!commissionValue || isNaN(parseFloat(commissionValue))) {
+      toast({
+        title: "Invalid commission",
+        description: "Please enter a valid commission percentage (0-100).",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const commission = parseFloat(commissionValue)
+    if (commission < 0 || commission > 100) {
+      toast({
+        title: "Invalid commission",
+        description: "Commission must be between 0 and 100.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setUpdatingCommission(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in again.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendors/update-commissions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          vendorIds: selectedVendors,
+          commission: commission,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Commission updated",
+          description: `Commission set to ${commission}% for ${data.data.updatedCount} vendor(s).`,
+        })
+        setIsCommissionDialogOpen(false)
+        setCommissionValue("")
+        setSelectedVendors([])
+        // Refresh vendors list
+        const params = new URLSearchParams()
+        if (search) params.append("search", search)
+        if (statusFilter && statusFilter !== "all") params.append("status", statusFilter)
+        params.append("limit", "50")
+        const refreshResponse = await fetch(`${API_URL}/api/vendors?${params.toString()}`)
+        const refreshData = await refreshResponse.json()
+        if (refreshData.success) {
+          setVendors(refreshData.data)
+        }
+      } else {
+        toast({
+          title: "Failed to update commission",
+          description: data.message || "An error occurred.",
+          variant: "destructive",
+        })
+      }
+    } catch (err) {
+      console.error("Error updating commission:", err)
+      toast({
+        title: "Error",
+        description: "Failed to update commission. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUpdatingCommission(false)
+    }
+  }
+
+  const handleExportVendors = async () => {
+    try {
+      setExporting(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in again.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const params = new URLSearchParams()
+      if (search) params.append("search", search)
+      if (statusFilter && statusFilter !== "all") params.append("status", statusFilter)
+
+      const response = await fetch(`${API_URL}/api/vendors/export/csv?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Export failed")
+      }
+
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = downloadUrl
+      link.download = `vendors-export-${Date.now()}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+
+      toast({
+        title: "Export successful",
+        description: "Vendor list has been downloaded.",
+      })
+    } catch (err) {
+      console.error("Error exporting vendors:", err)
+      toast({
+        title: "Export failed",
+        description: "Failed to export vendors. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -113,12 +295,27 @@ export function AdminVendorsList() {
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Vendors Management</h1>
           <p className="text-sm text-muted-foreground mt-1">View and manage all vendors</p>
         </div>
-        <Link href="/admin/vendors/add">
-          <Button className="gap-2">
-            <Plus className="h-4 w-4" />
-            Add Vendor
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExportVendors}
+            disabled={exporting}
+            className="gap-2"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Export
           </Button>
-        </Link>
+          <Link href="/admin/vendors/add">
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Add Vendor
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -160,6 +357,35 @@ export function AdminVendorsList() {
         </div>
       )}
 
+      {/* Bulk Actions */}
+      {!loading && !error && vendors.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg border">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="select-all"
+                checked={selectedVendors.length === vendors.length && vendors.length > 0}
+                onCheckedChange={handleSelectAll}
+              />
+              <Label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                Select All ({selectedVendors.length} selected)
+              </Label>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={handleOpenCommissionDialog}
+              disabled={selectedVendors.length === 0}
+              className="gap-2"
+            >
+              <Percent className="h-4 w-4" />
+              Assign Commission
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Vendors Grid */}
       {!loading && !error && (
         <>
@@ -176,6 +402,11 @@ export function AdminVendorsList() {
                       {/* Header */}
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div className="flex items-start gap-3 flex-1">
+                          <Checkbox
+                            checked={selectedVendors.includes(vendor._id)}
+                            onCheckedChange={() => handleSelectVendor(vendor._id)}
+                            className="mt-1"
+                          />
                           <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
                             <Store className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
                           </div>
@@ -193,7 +424,7 @@ export function AdminVendorsList() {
                       </div>
 
                       {/* Details */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Vendor ID</p>
                           <p className="font-medium text-xs">{vendor._id.slice(-8)}</p>
@@ -201,6 +432,12 @@ export function AdminVendorsList() {
                         <div>
                           <p className="text-muted-foreground">Total Products</p>
                           <p className="font-medium">{vendor.totalProducts}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground flex items-center gap-1">
+                            <Percent className="h-3 w-3" /> Commission
+                          </p>
+                          <p className="font-medium">{vendor.commission || 0}%</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground flex items-center gap-1">
@@ -284,6 +521,58 @@ export function AdminVendorsList() {
           )}
         </>
       )}
+
+      {/* Commission Assignment Dialog */}
+      <Dialog open={isCommissionDialogOpen} onOpenChange={setIsCommissionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Commission</DialogTitle>
+            <DialogDescription>
+              Set commission percentage for {selectedVendors.length} selected vendor(s). Commission must be between 0 and 100.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="commission">Commission Percentage (%)</Label>
+              <Input
+                id="commission"
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                placeholder="Enter commission percentage (0-100)"
+                value={commissionValue}
+                onChange={(e) => setCommissionValue(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter a value between 0 and 100. This will be applied to all selected vendors.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCommissionDialogOpen(false)
+                setCommissionValue("")
+              }}
+              disabled={updatingCommission}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateCommission} disabled={updatingCommission}>
+              {updatingCommission ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                "Update Commission"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

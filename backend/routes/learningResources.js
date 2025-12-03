@@ -102,7 +102,32 @@ router.post("/:id/download", async (req, res) => {
 router.post(
   "/upload",
   verifyAdminToken,
-  learningUpload.single("file"),
+  (req, res, next) => {
+    learningUpload.single("file")(req, res, (err) => {
+      if (err) {
+        console.error("Multer error:", err)
+        // Handle multer errors
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            success: false,
+            message: "File size exceeds 500MB limit",
+          })
+        }
+        // Handle file filter errors
+        if (err.message) {
+          return res.status(400).json({
+            success: false,
+            message: err.message,
+          })
+        }
+        return res.status(400).json({
+          success: false,
+          message: "File upload error: " + (err.message || "Unknown error"),
+        })
+      }
+      next()
+    })
+  },
   async (req, res) => {
     try {
       if (!req.file) {
@@ -158,9 +183,21 @@ router.post(
       })
     } catch (error) {
       console.error("Error uploading resource:", error)
+      // Delete uploaded file if database save fails
+      if (req.file) {
+        const filePath = path.join(__dirname, "../uploads/learning-resources", req.file.filename)
+        if (fs.existsSync(filePath)) {
+          try {
+            fs.unlinkSync(filePath)
+          } catch (unlinkError) {
+            console.error("Error deleting file:", unlinkError)
+          }
+        }
+      }
       res.status(500).json({
         success: false,
-        message: "Error uploading resource",
+        message: "Error uploading resource: " + (error.message || "Unknown error"),
+        error: process.env.NODE_ENV === "development" ? error.stack : undefined,
       })
     }
   }
@@ -267,6 +304,8 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
 })
 
 export default router
+
+
 
 
 

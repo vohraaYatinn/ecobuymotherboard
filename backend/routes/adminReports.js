@@ -1,5 +1,6 @@
 import express from "express"
 import Order from "../models/Order.js"
+import Vendor from "../models/Vendor.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 
 const router = express.Router()
@@ -401,7 +402,462 @@ router.get("/summary", verifyAdminToken, async (req, res) => {
   }
 })
 
+// Get vendor analytics for a specific vendor
+router.get("/vendor/:vendorId", verifyAdminToken, async (req, res) => {
+  try {
+    const { vendorId } = req.params
+    const { startDate = "", endDate = "" } = req.query
+
+    // Verify vendor exists
+    const vendor = await Vendor.findById(vendorId)
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found",
+      })
+    }
+
+    // Build date filter
+    const filter = { vendorId }
+    if (startDate || endDate) {
+      filter.createdAt = {}
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate)
+      }
+      if (endDate) {
+        const end = new Date(endDate)
+        end.setHours(23, 59, 59, 999)
+        filter.createdAt.$lte = end
+      }
+    }
+
+    // Get all orders for this vendor
+    const orders = await Order.find(filter)
+      .populate("customerId", "name mobile email")
+      .populate("items.productId", "name brand sku")
+      .sort({ createdAt: -1 })
+      .lean()
+
+    // Calculate statistics
+    const totalOrders = orders.length
+    const pendingOrders = orders.filter((o) => o.status === "pending").length
+    const processingOrders = orders.filter((o) => o.status === "processing").length
+    const shippedOrders = orders.filter((o) => o.status === "shipped").length
+    const deliveredOrders = orders.filter((o) => o.status === "delivered").length
+    const cancelledOrders = orders.filter((o) => o.status === "cancelled").length
+
+    // Calculate revenue (from delivered orders)
+    const totalRevenue = orders
+      .filter((o) => o.status === "delivered")
+      .reduce((sum, o) => sum + (o.total || 0), 0)
+
+    // Calculate total income (all orders regardless of status)
+    const totalIncome = orders.reduce((sum, o) => sum + (o.total || 0), 0)
+
+    // Calculate average order value
+    const avgOrderValue = totalOrders > 0 ? totalIncome / totalOrders : 0
+
+    // Revenue by status
+    const revenueByStatus = {
+      pending: orders
+        .filter((o) => o.status === "pending")
+        .reduce((sum, o) => sum + (o.total || 0), 0),
+      processing: orders
+        .filter((o) => o.status === "processing")
+        .reduce((sum, o) => sum + (o.total || 0), 0),
+      shipped: orders
+        .filter((o) => o.status === "shipped")
+        .reduce((sum, o) => sum + (o.total || 0), 0),
+      delivered: totalRevenue,
+      cancelled: orders
+        .filter((o) => o.status === "cancelled")
+        .reduce((sum, o) => sum + (o.total || 0), 0),
+    }
+
+    // Revenue over time (daily breakdown)
+    const revenueByDate = {}
+    const ordersByDate = {}
+
+    orders.forEach((order) => {
+      const date = new Date(order.createdAt).toISOString().split("T")[0]
+
+      if (!revenueByDate[date]) {
+        revenueByDate[date] = 0
+        ordersByDate[date] = 0
+      }
+
+      if (order.status === "delivered") {
+        revenueByDate[date] += order.total || 0
+      }
+      ordersByDate[date]++
+    })
+
+    const revenueData = Object.entries(revenueByDate)
+      .map(([date, revenue]) => ({
+        date,
+        revenue: Math.round(revenue),
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    const ordersData = Object.entries(ordersByDate)
+      .map(([date, count]) => ({
+        date,
+        orders: count,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    // Get unique product count from orders (products sold by this vendor)
+    const uniqueProducts = new Set()
+    orders.forEach((order) => {
+      order.items.forEach((item) => {
+        if (item.productId?._id) {
+          uniqueProducts.add(item.productId._id.toString())
+        }
+      })
+    })
+    const productCount = uniqueProducts.size
+
+    // Get unique customers count
+    const uniqueCustomers = new Set(orders.map((o) => o.customerId?._id?.toString()).filter(Boolean))
+      .size
+
+    // Payment method breakdown
+    const paymentMethodBreakdown = {
+      cod: orders.filter((o) => o.paymentMethod === "cod").length,
+      online: orders.filter((o) => o.paymentMethod === "online").length,
+      wallet: orders.filter((o) => o.paymentMethod === "wallet").length,
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        vendor: {
+          _id: vendor._id,
+          name: vendor.name,
+          email: vendor.email,
+          phone: vendor.phone,
+          status: vendor.status,
+          createdAt: vendor.createdAt,
+        },
+        summary: {
+          totalOrders,
+          totalRevenue: Math.round(totalRevenue),
+          totalIncome: Math.round(totalIncome),
+          avgOrderValue: Math.round(avgOrderValue),
+          productCount,
+          uniqueCustomers,
+        },
+        ordersByStatus: {
+          pending: pendingOrders,
+          processing: processingOrders,
+          shipped: shippedOrders,
+          delivered: deliveredOrders,
+          cancelled: cancelledOrders,
+        },
+        revenueByStatus: {
+          pending: Math.round(revenueByStatus.pending),
+          processing: Math.round(revenueByStatus.processing),
+          shipped: Math.round(revenueByStatus.shipped),
+          delivered: Math.round(revenueByStatus.delivered),
+          cancelled: Math.round(revenueByStatus.cancelled),
+        },
+        revenueOverTime: revenueData,
+        ordersOverTime: ordersData,
+        paymentMethodBreakdown,
+        orders: orders.map((order) => ({
+          _id: order._id,
+          orderNumber: order.orderNumber,
+          customer: order.customerId
+            ? {
+                name: order.customerId.name,
+                mobile: order.customerId.mobile,
+                email: order.customerId.email,
+              }
+            : null,
+          total: order.total,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          paymentMethod: order.paymentMethod,
+          createdAt: order.createdAt,
+          items: order.items.map((item) => ({
+            name: item.name,
+            brand: item.brand,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+        })),
+      },
+    })
+  } catch (error) {
+    console.error("Get vendor analytics error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error fetching vendor analytics",
+      error: error.message,
+    })
+  }
+})
+
+// Get top 10 vendors by performance
+router.get("/vendors/top-10", verifyAdminToken, async (req, res) => {
+  try {
+    const { period = "all" } = req.query // all, 7d, 30d, 90d, 1y
+
+    // Build date filter
+    let dateFilter = {}
+    if (period !== "all") {
+      const now = new Date()
+      let startDate = new Date()
+
+      switch (period) {
+        case "7d":
+          startDate.setDate(now.getDate() - 7)
+          break
+        case "30d":
+          startDate.setDate(now.getDate() - 30)
+          break
+        case "90d":
+          startDate.setDate(now.getDate() - 90)
+          break
+        case "1y":
+          startDate.setFullYear(now.getFullYear() - 1)
+          break
+      }
+      startDate.setHours(0, 0, 0, 0)
+      dateFilter.createdAt = { $gte: startDate }
+    }
+
+    // Aggregate vendor performance
+    const vendorPerformance = await Order.aggregate([
+      {
+        $match: {
+          vendorId: { $exists: true, $ne: null },
+          ...dateFilter,
+        },
+      },
+      {
+        $group: {
+          _id: "$vendorId",
+          totalOrders: { $sum: 1 },
+          totalRevenue: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "delivered"] }, "$total", 0],
+            },
+          },
+          totalIncome: { $sum: "$total" },
+          deliveredOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] },
+          },
+          pendingOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] },
+          },
+          processingOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "processing"] }, 1, 0] },
+          },
+          shippedOrders: {
+            $sum: { $cond: [{ $eq: ["$status", "shipped"] }, 1, 0] },
+          },
+        },
+      },
+      {
+        $sort: { totalRevenue: -1 },
+      },
+      {
+        $limit: 10,
+      },
+    ])
+
+    // Get vendor details
+    const vendorIds = vendorPerformance.map((v) => v._id)
+    const vendors = await Vendor.find({ _id: { $in: vendorIds } })
+      .select("name email phone status createdAt totalProducts")
+      .lean()
+
+    const vendorMap = {}
+    vendors.forEach((v) => {
+      vendorMap[v._id.toString()] = v
+    })
+
+    // Combine performance data with vendor details
+    const topVendors = vendorPerformance.map((perf) => {
+      const vendor = vendorMap[perf._id.toString()]
+      return {
+        vendorId: perf._id,
+        vendorName: vendor?.name || "Unknown",
+        vendorEmail: vendor?.email || "N/A",
+        vendorPhone: vendor?.phone || "N/A",
+        vendorStatus: vendor?.status || "N/A",
+        totalProducts: vendor?.totalProducts || 0,
+        totalOrders: perf.totalOrders,
+        deliveredOrders: perf.deliveredOrders,
+        pendingOrders: perf.pendingOrders,
+        processingOrders: perf.processingOrders,
+        shippedOrders: perf.shippedOrders,
+        totalRevenue: Math.round(perf.totalRevenue),
+        totalIncome: Math.round(perf.totalIncome),
+        avgOrderValue: perf.totalOrders > 0 ? Math.round(perf.totalIncome / perf.totalOrders) : 0,
+        deliveryRate:
+          perf.totalOrders > 0
+            ? Math.round((perf.deliveredOrders / perf.totalOrders) * 100)
+            : 0,
+      }
+    })
+
+    res.status(200).json({
+      success: true,
+      data: {
+        period,
+        vendors: topVendors,
+      },
+    })
+  } catch (error) {
+    console.error("Get top vendors error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error fetching top vendors",
+      error: error.message,
+    })
+  }
+})
+
+// Export vendor analytics data (CSV format)
+router.get("/vendor/:vendorId/export", verifyAdminToken, async (req, res) => {
+  try {
+    const { vendorId } = req.params
+    const { startDate = "", endDate = "", format = "csv" } = req.query
+
+    // Verify vendor exists
+    const vendor = await Vendor.findById(vendorId)
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found",
+      })
+    }
+
+    // Build date filter
+    const filter = { vendorId }
+    if (startDate || endDate) {
+      filter.createdAt = {}
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate)
+      }
+      if (endDate) {
+        const end = new Date(endDate)
+        end.setHours(23, 59, 59, 999)
+        filter.createdAt.$lte = end
+      }
+    }
+
+    // Get all orders for this vendor
+    const orders = await Order.find(filter)
+      .populate("customerId", "name mobile email")
+      .populate("items.productId", "name brand sku")
+      .sort({ createdAt: -1 })
+      .lean()
+
+    if (format === "csv") {
+      // Generate CSV
+      const csvRows = []
+      
+      // Header
+      csvRows.push([
+        "Order Number",
+        "Date",
+        "Customer Name",
+        "Customer Email",
+        "Customer Mobile",
+        "Status",
+        "Payment Status",
+        "Payment Method",
+        "Subtotal",
+        "Shipping",
+        "Total",
+        "Items",
+      ].join(","))
+
+      // Data rows
+      orders.forEach((order) => {
+        const items = order.items.map((item) => `${item.name} (x${item.quantity})`).join("; ")
+        csvRows.push([
+          order.orderNumber || "",
+          new Date(order.createdAt).toISOString().split("T")[0],
+          order.customerId?.name || "",
+          order.customerId?.email || "",
+          order.customerId?.mobile || "",
+          order.status || "",
+          order.paymentStatus || "",
+          order.paymentMethod || "",
+          order.subtotal || 0,
+          order.shipping || 0,
+          order.total || 0,
+          `"${items}"`,
+        ].join(","))
+      })
+
+      const csv = csvRows.join("\n")
+
+      res.setHeader("Content-Type", "text/csv")
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="vendor-${vendor.name}-analytics-${Date.now()}.csv"`
+      )
+      res.send(csv)
+    } else {
+      // JSON format
+      res.status(200).json({
+        success: true,
+        data: {
+          vendor: {
+            _id: vendor._id,
+            name: vendor.name,
+            email: vendor.email,
+            phone: vendor.phone,
+          },
+          period: {
+            startDate: startDate || null,
+            endDate: endDate || null,
+          },
+          orders: orders.map((order) => ({
+            orderNumber: order.orderNumber,
+            date: order.createdAt,
+            customer: order.customerId
+              ? {
+                  name: order.customerId.name,
+                  email: order.customerId.email,
+                  mobile: order.customerId.mobile,
+                }
+              : null,
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+            paymentMethod: order.paymentMethod,
+            subtotal: order.subtotal,
+            shipping: order.shipping,
+            total: order.total,
+            items: order.items.map((item) => ({
+              name: item.name,
+              brand: item.brand,
+              sku: item.productId?.sku || "",
+              quantity: item.quantity,
+              price: item.price,
+            })),
+          })),
+        },
+      })
+    }
+  } catch (error) {
+    console.error("Export vendor analytics error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error exporting vendor analytics",
+      error: error.message,
+    })
+  }
+})
+
 export default router
+
+
 
 
 

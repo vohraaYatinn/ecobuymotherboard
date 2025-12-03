@@ -29,31 +29,69 @@ const storage = multer.diskStorage({
 
 // File filter based on type
 const fileFilter = (req, file, cb) => {
-  const fileType = req.body.type || req.query.type
+  try {
+    const fileType = req.body.type || req.query.type
+    const fileName = file.originalname.toLowerCase()
+    const ext = path.extname(fileName)
 
-  if (fileType === "manual") {
-    // Accept only PDF files
-    if (file.mimetype === "application/pdf") {
-      cb(null, true)
-    } else {
-      cb(new Error("Only PDF files are allowed for service manuals"), false)
+    // Log for debugging
+    console.log("File filter - Type:", fileType, "MIME:", file.mimetype, "Extension:", ext, "Filename:", file.originalname)
+
+    if (!fileType) {
+      return cb(new Error("File type is required. Please specify type (manual, video, or software)"), false)
     }
-  } else if (fileType === "video") {
-    // Accept video files (AVI and other common formats)
-    if (file.mimetype.startsWith("video/") || file.originalname.toLowerCase().endsWith(".avi")) {
-      cb(null, true)
+
+    if (fileType === "manual") {
+      // Accept PDF files - check both MIME type and extension
+      const isPDFMimeType = file.mimetype === "application/pdf" || 
+                           file.mimetype === "application/x-pdf" ||
+                           file.mimetype === "application/acrobat" ||
+                           file.mimetype === "applications/vnd.pdf"
+      const isPDFExtension = ext === ".pdf"
+      
+      // Also accept AVIF files for image-based manuals
+      const isAVIFMimeType = file.mimetype === "image/avif"
+      const isAVIFExtension = ext === ".avif"
+      
+      if ((isPDFMimeType || isPDFExtension) || (isAVIFMimeType || isAVIFExtension)) {
+        cb(null, true)
+      } else {
+        cb(new Error("Only PDF or AVIF files are allowed for service manuals"), false)
+      }
+    } else if (fileType === "video") {
+      // Accept video files (AVI, MP4, MOV, and other common formats)
+      // Also accept AVIF as it can be used for video thumbnails or image sequences
+      const isVideoMimeType = file.mimetype.startsWith("video/") || 
+                             file.mimetype === "image/avif"
+      const isVideoExtension = [".avi", ".mp4", ".mov", ".mkv", ".webm", ".flv", ".wmv", ".avif"].includes(ext)
+      
+      if (isVideoMimeType || isVideoExtension) {
+        cb(null, true)
+      } else {
+        cb(new Error("Only video files (AVI, MP4, MOV, etc.) or AVIF files are allowed for training videos"), false)
+      }
+    } else if (fileType === "software") {
+      // Accept ZIP files - check multiple MIME types and extension
+      const isZipMimeType = file.mimetype === "application/zip" || 
+                           file.mimetype === "application/x-zip-compressed" ||
+                           file.mimetype === "application/x-zip" ||
+                           file.mimetype === "application/zip-compressed" ||
+                           file.mimetype === "application/x-compress" ||
+                           file.mimetype === "application/x-compressed" ||
+                           file.mimetype === "multipart/x-zip"
+      const isZipExtension = ext === ".zip"
+      
+      if (isZipMimeType || isZipExtension) {
+        cb(null, true)
+      } else {
+        cb(new Error("Only ZIP files are allowed for software downloads"), false)
+      }
     } else {
-      cb(new Error("Only video files (AVI format) are allowed for training videos"), false)
+      cb(new Error("Invalid file type. Must be manual, video, or software"), false)
     }
-  } else if (fileType === "software") {
-    // Accept ZIP files
-    if (file.mimetype === "application/zip" || file.mimetype === "application/x-zip-compressed" || file.originalname.toLowerCase().endsWith(".zip")) {
-      cb(null, true)
-    } else {
-      cb(new Error("Only ZIP files are allowed for software downloads"), false)
-    }
-  } else {
-    cb(new Error("Invalid file type. Must be manual, video, or software"), false)
+  } catch (error) {
+    console.error("File filter error:", error)
+    cb(new Error("Error validating file: " + (error.message || "Unknown error")), false)
   }
 }
 
@@ -67,6 +105,8 @@ const learningUpload = multer({
 })
 
 export default learningUpload
+
+
 
 
 

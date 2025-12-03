@@ -1,8 +1,30 @@
 import express from "express"
 import Vendor from "../models/Vendor.js"
 import { verifyAdminToken } from "../middleware/auth.js"
+import nodemailer from "nodemailer"
 
 const router = express.Router()
+
+// Configure nodemailer transporter
+const getTransporter = () => {
+  // If SMTP credentials are not provided, return null (email won't be sent but vendor will still be updated)
+  if (!process.env.SMTP_USER && !process.env.ADMIN_EMAIL) {
+    console.warn("⚠️  [VENDOR] SMTP credentials not configured. Vendor approval emails will not be sent.")
+    return null
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: parseInt(process.env.SMTP_PORT || "587"),
+    secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
+    auth: {
+      user: process.env.SMTP_USER || process.env.ADMIN_EMAIL || "info@elecobuy.com",
+      pass: process.env.SMTP_PASS || process.env.ADMIN_EMAIL_PASSWORD,
+    },
+  })
+
+  return transporter
+}
 
 // Get all vendors with filters and pagination
 router.get("/", async (req, res) => {
@@ -225,6 +247,10 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
       }
     }
 
+    // Track if status is changing to approved
+    const previousStatus = vendor.status
+    const isBeingApproved = status === "approved" && previousStatus !== "approved"
+
     // Update fields
     if (name) vendor.name = name
     if (username) vendor.username = username.toLowerCase()
@@ -245,6 +271,95 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
     }
 
     await vendor.save()
+
+    // Send approval email if status changed to approved
+    if (isBeingApproved) {
+      try {
+        const transporter = getTransporter()
+        if (transporter) {
+          const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER || "info@elecobuy.com"
+          const vendorEmail = vendor.email
+          const vendorName = vendor.name || `${vendor.address.firstName} ${vendor.address.lastName}`
+
+          const mailOptions = {
+            from: process.env.SMTP_USER || adminEmail,
+            to: vendorEmail,
+            subject: "🎉 Your Vendor Account Has Been Approved!",
+            html: `
+              <!DOCTYPE html>
+              <html>
+              <head>
+                <meta charset="utf-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Vendor Account Approved</title>
+              </head>
+              <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+                <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 0;">
+                  <!-- Header -->
+                  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: bold;">Congratulations!</h1>
+                    <p style="color: #ffffff; margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Your Vendor Account Has Been Approved</p>
+                  </div>
+
+                  <!-- Content -->
+                  <div style="padding: 40px 30px;">
+                    <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                      Dear ${vendorName},
+                    </p>
+                    
+                    <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                      We are pleased to inform you that your vendor account has been <strong style="color: #10b981;">approved</strong>! You can now start selling on our platform.
+                    </p>
+
+                    <div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 20px; margin: 30px 0; border-radius: 4px;">
+                      <h2 style="color: #065f46; font-size: 18px; margin: 0 0 10px 0;">Account Details:</h2>
+                      <p style="color: #047857; font-size: 14px; margin: 5px 0;"><strong>Username:</strong> ${vendor.username}</p>
+                      <p style="color: #047857; font-size: 14px; margin: 5px 0;"><strong>Email:</strong> ${vendorEmail}</p>
+                      <p style="color: #047857; font-size: 14px; margin: 5px 0;"><strong>Status:</strong> Approved ✅</p>
+                    </div>
+
+                    <p style="color: #333333; font-size: 16px; line-height: 1.6; margin: 20px 0;">
+                      <strong>What's Next?</strong>
+                    </p>
+                    <ul style="color: #333333; font-size: 16px; line-height: 1.8; margin: 0 0 30px 0; padding-left: 20px;">
+                      <li>Log in to your vendor dashboard</li>
+                      <li>Start adding your products</li>
+                      <li>Manage your orders and inventory</li>
+                      <li>Track your sales and earnings</li>
+                    </ul>
+
+                    <p style="color: #666666; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0;">
+                      If you have any questions or need assistance, please don't hesitate to contact our support team.
+                    </p>
+
+                    <p style="color: #666666; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;">
+                      Best regards,<br>
+                      <strong>The EcoBuy Team</strong>
+                    </p>
+                  </div>
+
+                  <!-- Footer -->
+                  <div style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+                    <p style="color: #6b7280; font-size: 12px; margin: 0;">
+                      This is an automated email. Please do not reply to this message.
+                    </p>
+                  </div>
+                </div>
+              </body>
+              </html>
+            `,
+          }
+
+          await transporter.sendMail(mailOptions)
+          console.log(`✅ [VENDOR] Approval email sent successfully to ${vendorEmail}`)
+        } else {
+          console.warn("⚠️  [VENDOR] Approval email not sent - SMTP not configured")
+        }
+      } catch (emailError) {
+        console.error("❌ [VENDOR] Error sending approval email:", emailError)
+        // Don't fail the request if email fails - vendor is still updated
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -430,6 +545,141 @@ router.get("/:id/stats", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching vendor statistics",
+    })
+  }
+})
+
+// Bulk update vendor commissions (Admin only)
+router.post("/update-commissions", verifyAdminToken, async (req, res) => {
+  try {
+    const { vendorIds, commission } = req.body
+
+    // Validate input
+    if (!vendorIds || !Array.isArray(vendorIds) || vendorIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor IDs array is required",
+      })
+    }
+
+    if (commission === undefined || commission === null || isNaN(commission)) {
+      return res.status(400).json({
+        success: false,
+        message: "Commission value is required and must be a number",
+      })
+    }
+
+    if (commission < 0 || commission > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Commission must be between 0 and 100",
+      })
+    }
+
+    // Update vendors
+    const result = await Vendor.updateMany(
+      { _id: { $in: vendorIds }, isActive: true },
+      { $set: { commission: parseFloat(commission) } }
+    )
+
+    res.status(200).json({
+      success: true,
+      message: `Commission updated for ${result.modifiedCount} vendor(s)`,
+      data: {
+        updatedCount: result.modifiedCount,
+        commission: parseFloat(commission),
+      },
+    })
+  } catch (error) {
+    console.error("Update commissions error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error updating vendor commissions",
+    })
+  }
+})
+
+// Export vendors list as CSV (Admin only)
+router.get("/export/csv", verifyAdminToken, async (req, res) => {
+  try {
+    const { search = "", status = "" } = req.query
+
+    // Build filter object
+    const filter = { isActive: true }
+
+    // Search filter
+    if (search) {
+      filter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+        { phone: { $regex: search, $options: "i" } },
+        { username: { $regex: search, $options: "i" } },
+      ]
+    }
+
+    // Status filter
+    if (status && status !== "all") {
+      filter.status = status
+    }
+
+    // Get all vendors matching filters
+    const vendors = await Vendor.find(filter).sort({ createdAt: -1 }).lean()
+
+    // Generate CSV
+    const csvRows = []
+
+    // Header
+    csvRows.push([
+      "Vendor ID",
+      "Name",
+      "Username",
+      "Email",
+      "Phone",
+      "Status",
+      "Commission (%)",
+      "Total Products",
+      "Orders Fulfilled",
+      "City",
+      "State",
+      "Country",
+      "Postcode",
+      "Joined Date",
+    ].join(","))
+
+    // Data rows
+    vendors.forEach((vendor) => {
+      const address = vendor.address || {}
+      csvRows.push([
+        vendor._id.toString(),
+        `"${(vendor.name || "").replace(/"/g, '""')}"`,
+        `"${(vendor.username || "").replace(/"/g, '""')}"`,
+        `"${(vendor.email || "").replace(/"/g, '""')}"`,
+        `"${(vendor.phone || "").replace(/"/g, '""')}"`,
+        vendor.status || "",
+        vendor.commission || 0,
+        vendor.totalProducts || 0,
+        vendor.ordersFulfilled || 0,
+        `"${(address.city || "").replace(/"/g, '""')}"`,
+        `"${(address.state || "").replace(/"/g, '""')}"`,
+        `"${(address.country || "").replace(/"/g, '""')}"`,
+        `"${(address.postcode || "").replace(/"/g, '""')}"`,
+        new Date(vendor.createdAt).toISOString().split("T")[0],
+      ].join(","))
+    })
+
+    const csv = csvRows.join("\n")
+
+    res.setHeader("Content-Type", "text/csv")
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="vendors-export-${Date.now()}.csv"`
+    )
+    res.send(csv)
+  } catch (error) {
+    console.error("Export vendors error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error exporting vendors",
     })
   }
 })

@@ -84,6 +84,12 @@ const vendorSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    commission: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
     isActive: {
       type: Boolean,
       default: true,
