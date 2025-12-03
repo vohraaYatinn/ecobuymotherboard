@@ -121,8 +121,32 @@ export function AdminLearningResources() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFormData({ ...formData, file: e.target.files[0] })
+      const selectedFile = e.target.files[0]
+      const fileExt = selectedFile.name.toLowerCase().split('.').pop()
+      
+      // Validate file extension matches the selected type
+      let isValid = false
+      if (formData.type === "manual") {
+        isValid = fileExt === "pdf" || fileExt === "avif"
+      } else if (formData.type === "video") {
+        isValid = ["avi", "mp4", "mov", "mkv", "webm", "avif"].includes(fileExt)
+      } else if (formData.type === "software") {
+        isValid = fileExt === "zip"
+      }
+      
+      if (!isValid) {
+        alert(`Invalid file type. Please select a ${formData.type === "manual" ? "PDF or AVIF" : formData.type === "video" ? "video file (AVI, MP4, MOV, etc.) or AVIF" : "ZIP"} file.`)
+        e.target.value = "" // Reset file input
+        return
+      }
+      
+      setFormData({ ...formData, file: selectedFile })
     }
+  }
+
+  const handleTypeChange = (value: "manual" | "video" | "software") => {
+    // Reset file when type changes
+    setFormData({ ...formData, type: value, file: null })
   }
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -308,16 +332,14 @@ export function AdminLearningResources() {
                 <Label htmlFor="type">Resource Type *</Label>
                 <Select
                   value={formData.type}
-                  onValueChange={(value: "manual" | "video" | "software") =>
-                    setFormData({ ...formData, type: value })
-                  }
+                  onValueChange={handleTypeChange}
                 >
                   <SelectTrigger id="type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="manual">Service Manual (PDF)</SelectItem>
-                    <SelectItem value="video">Training Video (AVI)</SelectItem>
+                    <SelectItem value="manual">Service Manual (PDF, AVIF)</SelectItem>
+                    <SelectItem value="video">Training Video (AVI, MP4, MOV, AVIF)</SelectItem>
                     <SelectItem value="software">Software Download (ZIP)</SelectItem>
                   </SelectContent>
                 </Select>
@@ -349,12 +371,13 @@ export function AdminLearningResources() {
                 <Input
                   id="file"
                   type="file"
+                  key={formData.type} // Reset input when type changes
                   accept={
                     formData.type === "manual"
-                      ? ".pdf,.avif"
+                      ? ".pdf,.avif,application/pdf,image/avif"
                       : formData.type === "video"
-                        ? ".avi,.mp4,.mov,.mkv,.webm,.avif"
-                        : ".zip"
+                        ? ".avi,.mp4,.mov,.mkv,.webm,.avif,video/*,image/avif"
+                        : ".zip,application/zip,application/x-zip-compressed"
                   }
                   onChange={handleFileChange}
                   required
