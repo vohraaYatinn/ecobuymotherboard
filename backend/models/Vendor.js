@@ -124,6 +124,55 @@ const vendorSchema = new mongoose.Schema(
         },
       },
     ],
+    // New fields for vendor registration
+    gstNo: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
+    bankAccountNumber: {
+      type: String,
+      trim: true,
+    },
+    ifscCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
+    pan: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
+    tan: {
+      type: String,
+      trim: true,
+      uppercase: true,
+    },
+    referral: {
+      type: String,
+      trim: true,
+    },
+    documents: [
+      {
+        filename: {
+          type: String,
+          required: true,
+        },
+        originalName: {
+          type: String,
+          required: true,
+        },
+        path: {
+          type: String,
+          required: true,
+        },
+        uploadedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

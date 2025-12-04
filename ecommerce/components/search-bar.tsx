@@ -52,21 +52,36 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
       clearTimeout(debounceTimer.current)
     }
 
-    if (searchQuery.trim().length < 2) {
+    const trimmedQuery = searchQuery.trim()
+    
+    if (trimmedQuery.length < 1) {
       setSuggestions([])
       setShowSuggestions(false)
       setSearchCompleted(false)
+      setLoading(false)
       return
     }
 
+    // Show suggestions dropdown immediately when typing starts (even with 1 character)
+    setShowSuggestions(true)
+    
+    // Only fetch from API if we have 2+ characters (backend requirement)
+    if (trimmedQuery.length < 2) {
+      setSuggestions([])
+      setSearchCompleted(true)
+      setLoading(false)
+      return
+    }
+
+    // Fetch suggestions from API
     debounceTimer.current = setTimeout(async () => {
       setLoading(true)
       try {
-        const response = await fetch(`${API_URL}/api/search/suggestions?q=${encodeURIComponent(searchQuery)}&limit=8`)
+        const response = await fetch(`${API_URL}/api/search/suggestions?q=${encodeURIComponent(trimmedQuery)}&limit=8`)
         const data = await response.json()
         if (data.success) {
-          setSuggestions(data.data)
-          setShowSuggestions(true) // Always show dropdown when we have a query
+          setSuggestions(data.data || [])
+          setShowSuggestions(true)
           setSelectedIndex(-1)
           setSearchCompleted(true)
         }
@@ -77,7 +92,7 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
       } finally {
         setLoading(false)
       }
-    }, 300) // 300ms debounce
+    }, 200) // 200ms debounce for faster response
 
     return () => {
       if (debounceTimer.current) {
@@ -138,7 +153,7 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onFocus={() => {
-            if (searchQuery.trim().length >= 2 && searchCompleted) {
+            if (searchQuery.trim().length > 0) {
               setShowSuggestions(true)
             }
           }}
@@ -157,10 +172,26 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
       </form>
 
       {/* Suggestions Dropdown */}
-      {showSuggestions && (
+      {showSuggestions && searchQuery.trim().length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-border rounded-lg shadow-lg z-50 max-h-[500px] overflow-y-auto">
           <div className="p-2">
-            {suggestions.length > 0 ? (
+            {loading ? (
+              <div className="p-4 text-center space-y-3">
+                <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Searching...</p>
+                {/* Show enquiry button even while loading */}
+                <button
+                  onClick={() => {
+                    setEnquiryModalOpen(true)
+                    setShowSuggestions(false)
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors mt-2"
+                >
+                  <MessageSquarePlus className="h-4 w-4" />
+                  Enquire About "{searchQuery}"
+                </button>
+              </div>
+            ) : suggestions.length > 0 ? (
               <>
                 {suggestions.map((product, index) => (
                   <Link
@@ -192,21 +223,30 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
                     </div>
                   </Link>
                 ))}
-                {searchQuery.trim().length > 0 && (
-                  <div className="border-t border-border mt-2 pt-2">
-                    <button
-                      onClick={() => handleSearch()}
-                      className="w-full text-left px-3 py-2 text-sm font-medium text-primary hover:bg-muted rounded-lg transition-colors"
-                    >
-                      View all results for "{searchQuery}"
-                    </button>
-                  </div>
-                )}
+                <div className="border-t border-border mt-2 pt-2 space-y-2">
+                  <button
+                    onClick={() => handleSearch()}
+                    className="w-full text-left px-3 py-2 text-sm font-medium text-primary hover:bg-muted rounded-lg transition-colors"
+                  >
+                    View all results for "{searchQuery}"
+                  </button>
+                  {/* Always show Enquiry button when there's a search query */}
+                  <button
+                    onClick={() => {
+                      setEnquiryModalOpen(true)
+                      setShowSuggestions(false)
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors"
+                  >
+                    <MessageSquarePlus className="h-4 w-4" />
+                    Enquire About "{searchQuery}"
+                  </button>
+                </div>
               </>
-            ) : searchCompleted && !loading ? (
-              // No results found - show Enquiry button
-              <div className="p-4 text-center">
-                <p className="text-sm text-muted-foreground mb-3">
+            ) : searchQuery.trim().length >= 2 && searchCompleted && !loading ? (
+              // No results found (only show this if we actually searched with 2+ chars)
+              <div className="p-4 text-center space-y-3">
+                <p className="text-sm text-muted-foreground">
                   No products found for "<span className="font-medium">{searchQuery}</span>"
                 </p>
                 <Button
@@ -214,17 +254,30 @@ export function SearchBar({ className = "", mobile = false }: { className?: stri
                     setEnquiryModalOpen(true)
                     setShowSuggestions(false)
                   }}
-                  className="gap-2"
+                  className="gap-2 w-full"
                   variant="default"
                 >
                   <MessageSquarePlus className="h-4 w-4" />
                   Enquire About This Product
                 </Button>
               </div>
-            ) : loading ? (
-              <div className="p-4 text-center">
-                <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-                <p className="text-sm text-muted-foreground mt-2">Searching...</p>
+            ) : searchQuery.trim().length === 1 ? (
+              // Show enquiry button immediately when typing first character
+              <div className="p-4 text-center space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Type more to see suggestions...
+                </p>
+                <Button
+                  onClick={() => {
+                    setEnquiryModalOpen(true)
+                    setShowSuggestions(false)
+                  }}
+                  className="gap-2 w-full"
+                  variant="default"
+                >
+                  <MessageSquarePlus className="h-4 w-4" />
+                  Enquire About "{searchQuery}"
+                </Button>
               </div>
             ) : null}
           </div>

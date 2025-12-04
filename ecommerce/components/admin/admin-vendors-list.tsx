@@ -18,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Search, Eye, Plus, Store, MapPin, Loader2, Smartphone, Download, Percent } from "lucide-react"
+import { Search, Eye, Plus, Store, MapPin, Loader2, Smartphone, Download, Percent, Building2, FileText } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
@@ -46,6 +46,14 @@ interface Vendor {
   }
   totalProducts: number
   createdAt: string
+  gstNo?: string
+  pan?: string
+  documents?: Array<{
+    filename: string
+    originalName: string
+    path: string
+    uploadedAt: string
+  }>
   pushTokens?: PushToken[]
 }
 
@@ -448,6 +456,36 @@ export function AdminVendorsList() {
                           </p>
                         </div>
                       </div>
+
+                      {/* Business Information */}
+                      {(vendor.gstNo || vendor.pan || vendor.documents) && (
+                        <div className="border-t border-border pt-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                            {vendor.gstNo && (
+                              <div>
+                                <p className="text-muted-foreground flex items-center gap-1">
+                                  <Building2 className="h-3 w-3" /> GST No
+                                </p>
+                                <p className="font-medium">{vendor.gstNo}</p>
+                              </div>
+                            )}
+                            {vendor.pan && (
+                              <div>
+                                <p className="text-muted-foreground">PAN</p>
+                                <p className="font-medium">{vendor.pan}</p>
+                              </div>
+                            )}
+                            {vendor.documents && vendor.documents.length > 0 && (
+                              <div>
+                                <p className="text-muted-foreground flex items-center gap-1">
+                                  <FileText className="h-3 w-3" /> Documents
+                                </p>
+                                <p className="font-medium">{vendor.documents.length} file(s)</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* FCM Tokens */}
                       {vendor.pushTokens && vendor.pushTokens.length > 0 && (

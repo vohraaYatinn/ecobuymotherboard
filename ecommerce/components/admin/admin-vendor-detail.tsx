@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Save, Store, MapPin, Package, CheckCircle, Loader2, Smartphone } from "lucide-react"
+import { ArrowLeft, Save, Store, MapPin, Package, CheckCircle, Loader2, Smartphone, FileText, Download, Building2, CreditCard, Hash } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
@@ -37,6 +37,18 @@ interface Vendor {
   totalProducts: number
   ordersFulfilled: number
   createdAt: string
+  gstNo?: string
+  bankAccountNumber?: string
+  ifscCode?: string
+  pan?: string
+  tan?: string
+  referral?: string
+  documents?: Array<{
+    filename: string
+    originalName: string
+    path: string
+    uploadedAt: string
+  }>
   pushTokens?: Array<{
     token: string
     platform: string
@@ -68,6 +80,12 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
     state: "",
     postcode: "",
     country: "india",
+    gstNo: "",
+    bankAccountNumber: "",
+    ifscCode: "",
+    pan: "",
+    tan: "",
+    referral: "",
   })
 
   useEffect(() => {
@@ -93,6 +111,12 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
             state: vendorData.address?.state || "",
             postcode: vendorData.address?.postcode || "",
             country: vendorData.address?.country || "india",
+            gstNo: vendorData.gstNo || "",
+            bankAccountNumber: vendorData.bankAccountNumber || "",
+            ifscCode: vendorData.ifscCode || "",
+            pan: vendorData.pan || "",
+            tan: vendorData.tan || "",
+            referral: vendorData.referral || "",
           })
         } else {
           setError(data.message || "Vendor not found")
@@ -145,6 +169,12 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
           postcode: formData.postcode,
           country: formData.country,
         },
+        gstNo: formData.gstNo || undefined,
+        bankAccountNumber: formData.bankAccountNumber || undefined,
+        ifscCode: formData.ifscCode || undefined,
+        pan: formData.pan || undefined,
+        tan: formData.tan || undefined,
+        referral: formData.referral || undefined,
       }
 
       const response = await fetch(`${API_URL}/api/vendors/${vendorId}`, {
@@ -183,6 +213,12 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
           state: refreshData.data.address?.state || "",
           postcode: refreshData.data.address?.postcode || "",
           country: refreshData.data.address?.country || "india",
+          gstNo: refreshData.data.gstNo || "",
+          bankAccountNumber: refreshData.data.bankAccountNumber || "",
+          ifscCode: refreshData.data.ifscCode || "",
+          pan: refreshData.data.pan || "",
+          tan: refreshData.data.tan || "",
+          referral: refreshData.data.referral || "",
         })
       }
 
@@ -456,7 +492,131 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
               </div>
             </CardContent>
           </Card>
+
+          {/* Business & Financial Information */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Business & Financial Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="gstNo">GST No</Label>
+                  <Input
+                    id="gstNo"
+                    name="gstNo"
+                    value={formData.gstNo}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    placeholder="15-digit GST number"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pan">PAN</Label>
+                  <Input
+                    id="pan"
+                    name="pan"
+                    value={formData.pan}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    placeholder="10-character PAN"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="tan">TAN</Label>
+                  <Input
+                    id="tan"
+                    name="tan"
+                    value={formData.tan}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    placeholder="10-character TAN"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="bankAccountNumber">Bank Account Number</Label>
+                  <Input
+                    id="bankAccountNumber"
+                    name="bankAccountNumber"
+                    value={formData.bankAccountNumber}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    placeholder="Bank account number"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ifscCode">IFSC Code</Label>
+                  <Input
+                    id="ifscCode"
+                    name="ifscCode"
+                    value={formData.ifscCode}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    placeholder="11-character IFSC code"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="referral">Referral Code</Label>
+                  <Input
+                    id="referral"
+                    name="referral"
+                    value={formData.referral}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    placeholder="Referral code"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Documents Section */}
+        {vendor && vendor.documents && vendor.documents.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Uploaded Documents ({vendor.documents.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {vendor.documents.map((doc, index) => (
+                  <div
+                    key={index}
+                    className="border rounded-lg p-4 bg-muted/50 hover:bg-muted transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <FileText className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{doc.originalName}</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Uploaded: {new Date(doc.uploadedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <a
+                        href={`${API_URL}${doc.path}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-shrink-0"
+                      >
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Vendor Stats */}
         {vendor && (

@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Search, Eye, Filter, Download, ChevronLeft, ChevronRight, UserPlus, Store, FileDown } from "lucide-react"
+import { Loader2, Search, Eye, Filter, Download, ChevronLeft, ChevronRight, UserPlus, Store, FileDown, Trash2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -134,10 +135,18 @@ export function AdminOrdersList() {
     paymentMethod: "",
   })
   const [exporting, setExporting] = useState(false)
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([])
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
   useEffect(() => {
     fetchOrders()
   }, [page, statusFilter, paymentMethodFilter, paymentStatusFilter, vendorFilter, assignmentModeFilter])
+
+  // Clear selected orders when orders change
+  useEffect(() => {
+    setSelectedOrders([])
+  }, [orders])
 
   useEffect(() => {
     fetchVendors()
@@ -309,6 +318,65 @@ export function AdminOrdersList() {
     } catch (error) {
       console.error("Error deleting order:", error)
       alert("Network error. Please try again.")
+    }
+  }
+
+  const handleSelectOrder = (orderId: string) => {
+    if (selectedOrders.includes(orderId)) {
+      setSelectedOrders(selectedOrders.filter((id) => id !== orderId))
+    } else {
+      setSelectedOrders([...selectedOrders, orderId])
+    }
+  }
+
+  const handleSelectAll = () => {
+    if (selectedOrders.length === orders.length) {
+      setSelectedOrders([])
+    } else {
+      setSelectedOrders(orders.map((order) => order._id))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedOrders.length === 0) {
+      alert("Please select at least one order to delete")
+      return
+    }
+
+    try {
+      setBulkDeleting(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login again")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/orders/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          orderIds: selectedOrders,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setBulkDeleteDialogOpen(false)
+        setSelectedOrders([])
+        fetchOrders()
+        alert(`Successfully cancelled ${data.data.deletedCount} order(s)`)
+      } else {
+        alert(data.message || "Failed to cancel orders")
+      }
+    } catch (error) {
+      console.error("Error bulk deleting orders:", error)
+      alert("Network error. Please try again.")
+    } finally {
+      setBulkDeleting(false)
     }
   }
 
@@ -613,11 +681,55 @@ export function AdminOrdersList() {
             </div>
           ) : (
             <>
+              {/* Bulk Actions */}
+              {!loading && orders.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-muted/50 border-b">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="select-all"
+                        checked={selectedOrders.length === orders.length && orders.length > 0}
+                        onCheckedChange={handleSelectAll}
+                      />
+                      <Label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                        Select All ({selectedOrders.length} selected)
+                      </Label>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="destructive"
+                      onClick={() => setBulkDeleteDialogOpen(true)}
+                      disabled={selectedOrders.length === 0 || bulkDeleting}
+                      className="gap-2"
+                    >
+                      {bulkDeleting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="h-4 w-4" />
+                          Bulk Delete ({selectedOrders.length})
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Desktop Table View */}
               <div className="hidden lg:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold w-12">
+                        <Checkbox
+                          checked={selectedOrders.length === orders.length && orders.length > 0}
+                          onCheckedChange={handleSelectAll}
+                        />
+                      </TableHead>
                       <TableHead className="font-semibold">Order Number</TableHead>
                       <TableHead className="font-semibold">Customer</TableHead>
                       <TableHead className="font-semibold">Vendor</TableHead>
@@ -637,6 +749,12 @@ export function AdminOrdersList() {
                       const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)
                       return (
                         <TableRow key={order._id} className="hover:bg-muted/30 transition-colors">
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedOrders.includes(order._id)}
+                              onCheckedChange={() => handleSelectOrder(order._id)}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium text-primary">
                             <Link href={`/admin/orders/${order._id}`} className="hover:underline">
                               {order.orderNumber}
@@ -771,9 +889,15 @@ export function AdminOrdersList() {
                     <div key={order._id} className="p-4 hover:bg-muted/30 transition-colors">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <Link href={`/admin/orders/${order._id}`}>
-                            <h3 className="font-semibold text-primary hover:underline">{order.orderNumber}</h3>
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={selectedOrders.includes(order._id)}
+                              onCheckedChange={() => handleSelectOrder(order._id)}
+                            />
+                            <Link href={`/admin/orders/${order._id}`}>
+                              <h3 className="font-semibold text-primary hover:underline">{order.orderNumber}</h3>
+                            </Link>
+                          </div>
                           <Badge className={getStatusColor(order.status)}>{formatStatus(order.status)}</Badge>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-sm">
@@ -1058,6 +1182,41 @@ export function AdminOrdersList() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Bulk Delete</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel {selectedOrders.length} order(s)? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 pt-4">
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleting || selectedOrders.length === 0}
+              className="flex-1"
+            >
+              {bulkDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete {selectedOrders.length} Order(s)
+                </>
+              )}
+            </Button>
+            <Button variant="outline" onClick={() => setBulkDeleteDialogOpen(false)} disabled={bulkDeleting}>
+              Cancel
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

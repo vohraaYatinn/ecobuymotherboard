@@ -136,18 +136,34 @@ router.get("/yesterday-summary", verifyAdminToken, async (req, res) => {
 // Get daily orders for chart (last N days)
 router.get("/daily-orders", verifyAdminToken, async (req, res) => {
   try {
-    const days = parseInt(req.query.days) || 30
+    let startDate
+    let endDate = null
 
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - days)
-    startDate.setHours(0, 0, 0, 0)
+    // Support custom date range
+    if (req.query.startDate && req.query.endDate) {
+      startDate = new Date(req.query.startDate)
+      startDate.setHours(0, 0, 0, 0)
+      endDate = new Date(req.query.endDate)
+      endDate.setHours(23, 59, 59, 999)
+    } else {
+      const days = parseInt(req.query.days) || 30
+      startDate = new Date()
+      startDate.setDate(startDate.getDate() - days)
+      startDate.setHours(0, 0, 0, 0)
+    }
+
+    // Build match filter
+    const matchFilter = {
+      createdAt: { $gte: startDate },
+    }
+    if (endDate) {
+      matchFilter.createdAt.$lte = endDate
+    }
 
     // Aggregate orders by day
     const dailyOrders = await Order.aggregate([
       {
-        $match: {
-          createdAt: { $gte: startDate },
-        },
+        $match: matchFilter,
       },
       {
         $group: {
@@ -195,18 +211,34 @@ router.get("/daily-orders", verifyAdminToken, async (req, res) => {
 // Get weekly orders for chart (last N weeks)
 router.get("/weekly-orders", verifyAdminToken, async (req, res) => {
   try {
-    const weeks = parseInt(req.query.weeks) || 12
+    let startDate
+    let endDate = null
 
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - weeks * 7)
-    startDate.setHours(0, 0, 0, 0)
+    // Support custom date range
+    if (req.query.startDate && req.query.endDate) {
+      startDate = new Date(req.query.startDate)
+      startDate.setHours(0, 0, 0, 0)
+      endDate = new Date(req.query.endDate)
+      endDate.setHours(23, 59, 59, 999)
+    } else {
+      const weeks = parseInt(req.query.weeks) || 12
+      startDate = new Date()
+      startDate.setDate(startDate.getDate() - weeks * 7)
+      startDate.setHours(0, 0, 0, 0)
+    }
+
+    // Build match filter
+    const matchFilter = {
+      createdAt: { $gte: startDate },
+    }
+    if (endDate) {
+      matchFilter.createdAt.$lte = endDate
+    }
 
     // Aggregate orders by week
     const weeklyOrders = await Order.aggregate([
       {
-        $match: {
-          createdAt: { $gte: startDate },
-        },
+        $match: matchFilter,
       },
       {
         $group: {
@@ -256,19 +288,35 @@ router.get("/weekly-orders", verifyAdminToken, async (req, res) => {
 // Get monthly orders for chart (last N months)
 router.get("/monthly-orders", verifyAdminToken, async (req, res) => {
   try {
-    const months = parseInt(req.query.months) || 12
+    let startDate
+    let endDate = null
 
-    const startDate = new Date()
-    startDate.setMonth(startDate.getMonth() - months)
-    startDate.setDate(1)
-    startDate.setHours(0, 0, 0, 0)
+    // Support custom date range
+    if (req.query.startDate && req.query.endDate) {
+      startDate = new Date(req.query.startDate)
+      startDate.setHours(0, 0, 0, 0)
+      endDate = new Date(req.query.endDate)
+      endDate.setHours(23, 59, 59, 999)
+    } else {
+      const months = parseInt(req.query.months) || 12
+      startDate = new Date()
+      startDate.setMonth(startDate.getMonth() - months)
+      startDate.setDate(1)
+      startDate.setHours(0, 0, 0, 0)
+    }
+
+    // Build match filter
+    const matchFilter = {
+      createdAt: { $gte: startDate },
+    }
+    if (endDate) {
+      matchFilter.createdAt.$lte = endDate
+    }
 
     // Aggregate orders by month
     const monthlyOrders = await Order.aggregate([
       {
-        $match: {
-          createdAt: { $gte: startDate },
-        },
+        $match: matchFilter,
       },
       {
         $group: {

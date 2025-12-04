@@ -29,6 +29,8 @@ import contactRoutes from "./routes/contact.js"
 import categoryRoutes from "./routes/categories.js"
 import dtdcRoutes from "./routes/dtdc.js"
 import invoiceRoutes from "./routes/invoices.js"
+import { startOrderResetCron } from "./services/orderResetCron.js"
+import { startAdminReviewCron } from "./services/adminReviewCron.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -150,9 +152,13 @@ app.get("/api/health", (req, res) => {
 const HOST = process.env.HOST || "0.0.0.0"
 app.listen(PORT, HOST, () => {
   console.log(`🚀 Server is running on http://${HOST}:${PORT}`)
-  console.log(`🌐 Network access: http://192.168.1.36:${PORT}`)
+  console.log(`🌐 Network access: http://192.168.1.34:${PORT}`)
   console.log(`📍 Local access: http://localhost:${PORT}`)
   console.log(`Environment: ${process.env.NODE_ENV || "development"}`)
   console.log(`CORS: Allowing requests from local network IPs`)
+  
+  // Start cron jobs
+  startOrderResetCron()
+  startAdminReviewCron()
 })
 

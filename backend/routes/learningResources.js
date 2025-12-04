@@ -138,6 +138,10 @@ router.post(
       }
 
       const { title, description, type } = req.body
+      
+      console.log("Upload request - body:", req.body)
+      console.log("Upload request - type:", type)
+      console.log("Upload request - file:", req.file)
 
       if (!title || !type) {
         // Delete uploaded file if validation fails
@@ -160,6 +164,30 @@ router.post(
         return res.status(400).json({
           success: false,
           message: "Invalid type. Must be manual, video, or software",
+        })
+      }
+
+      // Validate file extension matches the type
+      const fileExt = path.extname(req.file.originalname).toLowerCase()
+      let isValidFile = false
+      
+      if (type === "manual") {
+        isValidFile = fileExt === ".pdf" || fileExt === ".avif"
+      } else if (type === "video") {
+        isValidFile = [".avi", ".mp4", ".mov", ".mkv", ".webm", ".flv", ".wmv", ".m4v", ".3gp", ".avif"].includes(fileExt)
+      } else if (type === "software") {
+        isValidFile = fileExt === ".zip"
+      }
+
+      if (!isValidFile) {
+        // Delete uploaded file if validation fails
+        const filePath = path.join(__dirname, "../uploads/learning-resources", req.file.filename)
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath)
+        }
+        return res.status(400).json({
+          success: false,
+          message: `File type mismatch. Expected ${type === "manual" ? "PDF or AVIF" : type === "video" ? "video file (AVI, MP4, MOV, etc.) or AVIF" : "ZIP"} but got ${fileExt}`,
         })
       }
 

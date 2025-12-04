@@ -3,8 +3,11 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, AlertCircle, FileText, Calendar, TrendingUp, Package, Truck, CheckCircle, Clock } from "lucide-react"
+import { Loader2, AlertCircle, FileText, Calendar, TrendingUp, Package, Truck, CheckCircle, Clock, Download } from "lucide-react"
 import { AdminVendorAnalytics } from "./admin-vendor-analytics"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   LineChart,
   Line,
@@ -61,9 +64,12 @@ interface Order {
     mobile: string
     email?: string
   }
+  subtotal?: number
+  shipping?: number
   total: number
   status: string
   paymentStatus: string
+  paymentMethod?: string
   createdAt: string
   items: Array<{
     name: string
@@ -83,6 +89,9 @@ export function AdminReports() {
   const [totalOrders, setTotalOrders] = useState(0)
   const [ordersPage, setOrdersPage] = useState(1)
   const [ordersLoading, setOrdersLoading] = useState(false)
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+  const [dateRangeApplied, setDateRangeApplied] = useState(false)
 
   useEffect(() => {
     fetchAllData()
@@ -90,9 +99,9 @@ export function AdminReports() {
 
   useEffect(() => {
     fetchOrdersReport()
-  }, [ordersPage])
+  }, [ordersPage, startDate, endDate])
 
-  const fetchAllData = async () => {
+  const fetchAllData = async (useDateRange = false) => {
     try {
       setLoading(true)
       setError("")
@@ -102,18 +111,36 @@ export function AdminReports() {
         return
       }
 
+      // Build query params
+      const params = new URLSearchParams()
+      if (useDateRange && startDate && endDate) {
+        // Calculate days/weeks/months based on date range
+        const start = new Date(startDate)
+        const end = new Date(endDate)
+        const diffTime = Math.abs(end.getTime() - start.getTime())
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        
+        params.append("startDate", startDate)
+        params.append("endDate", endDate)
+      } else {
+        // Default values
+        params.append("days", "30")
+        params.append("weeks", "12")
+        params.append("months", "12")
+      }
+
       // Fetch all data in parallel
       const [summaryRes, dailyRes, weeklyRes, monthlyRes] = await Promise.all([
         fetch(`${API_URL}/api/admin/reports/yesterday-summary`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${API_URL}/api/admin/reports/daily-orders?days=30`, {
+        fetch(`${API_URL}/api/admin/reports/daily-orders?${useDateRange && startDate && endDate ? `startDate=${startDate}&endDate=${endDate}` : "days=30"}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${API_URL}/api/admin/reports/weekly-orders?weeks=12`, {
+        fetch(`${API_URL}/api/admin/reports/weekly-orders?${useDateRange && startDate && endDate ? `startDate=${startDate}&endDate=${endDate}` : "weeks=12"}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`${API_URL}/api/admin/reports/monthly-orders?months=12`, {
+        fetch(`${API_URL}/api/admin/reports/monthly-orders?${useDateRange && startDate && endDate ? `startDate=${startDate}&endDate=${endDate}` : "months=12"}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ])
@@ -148,18 +175,44 @@ export function AdminReports() {
     }
   }
 
+  const applyDateRange = () => {
+    if (startDate && endDate) {
+      if (new Date(startDate) > new Date(endDate)) {
+        setError("Start date must be before end date")
+        return
+      }
+      setDateRangeApplied(true)
+      fetchAllData(true)
+      setOrdersPage(1)
+      fetchOrdersReport()
+    } else {
+      setError("Please select both start and end dates")
+    }
+  }
+
+  const clearDateRange = () => {
+    setStartDate("")
+    setEndDate("")
+    setDateRangeApplied(false)
+    fetchAllData(false)
+    setOrdersPage(1)
+    fetchOrdersReport()
+  }
+
   const fetchOrdersReport = async () => {
     try {
       setOrdersLoading(true)
       const token = localStorage.getItem("adminToken")
       if (!token) return
 
-      const response = await fetch(
-        `${API_URL}/api/admin/reports/orders?page=${ordersPage}&limit=50`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      )
+      let url = `${API_URL}/api/admin/reports/orders?page=${ordersPage}&limit=50`
+      if (dateRangeApplied && startDate && endDate) {
+        url += `&startDate=${startDate}&endDate=${endDate}`
+      }
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
 
       const data = await response.json()
 
@@ -171,6 +224,101 @@ export function AdminReports() {
       console.error("Error fetching orders report:", err)
     } finally {
       setOrdersLoading(false)
+    }
+  }
+
+  const handleExportOrders = async (format: "csv" | "json" = "csv") => {
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) return
+
+      // Fetch all orders for export (not paginated)
+      let url = `${API_URL}/api/admin/reports/orders?limit=10000`
+      if (dateRangeApplied && startDate && endDate) {
+        url += `&startDate=${startDate}&endDate=${endDate}`
+      }
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      const data = await response.json()
+
+      if (!data.success) {
+        setError("Failed to fetch orders for export")
+        return
+      }
+
+      const orders = data.data
+
+      if (format === "csv") {
+        // Generate CSV
+        const csvRows = []
+        
+        // Header
+        csvRows.push([
+          "Order Number",
+          "Date",
+          "Customer Name",
+          "Customer Email",
+          "Customer Mobile",
+          "Status",
+          "Payment Status",
+          "Payment Method",
+          "Subtotal",
+          "Shipping",
+          "Total",
+          "Items",
+        ].join(","))
+
+        // Data rows
+        orders.forEach((order: Order) => {
+          const customer = typeof order.customerId === "object" ? order.customerId : null
+          const items = order.items?.map((item) => `${item.name} (x${item.quantity})`).join("; ") || ""
+          csvRows.push([
+            order.orderNumber || "",
+            new Date(order.createdAt).toISOString().split("T")[0],
+            customer?.name || "",
+            customer?.email || "",
+            customer?.mobile || "",
+            order.status || "",
+            order.paymentStatus || "",
+            order.paymentMethod || "N/A",
+            order.subtotal || 0,
+            order.shipping || 0,
+            order.total || 0,
+            `"${items}"`,
+          ].join(","))
+        })
+
+        const csv = csvRows.join("\n")
+
+        // Download CSV
+        const blob = new Blob([csv], { type: "text/csv" })
+        const downloadUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.href = downloadUrl
+        link.download = `orders-report-${dateRangeApplied ? `${startDate}-to-${endDate}-` : ""}${Date.now()}.csv`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(downloadUrl)
+      } else {
+        // JSON format
+        const jsonStr = JSON.stringify(orders, null, 2)
+        const blob = new Blob([jsonStr], { type: "application/json" })
+        const downloadUrl = window.URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.href = downloadUrl
+        link.download = `orders-report-${dateRangeApplied ? `${startDate}-to-${endDate}-` : ""}${Date.now()}.json`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(downloadUrl)
+      }
+    } catch (err) {
+      console.error("Error exporting orders:", err)
+      setError("Failed to export orders")
     }
   }
 
@@ -241,10 +389,77 @@ export function AdminReports() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Reports</h1>
-        <p className="text-sm text-muted-foreground mt-1">Order analytics and insights</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Reports</h1>
+          <p className="text-sm text-muted-foreground mt-1">Order analytics and insights</p>
+        </div>
       </div>
+
+      {/* Date Range Filter */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Custom Date Range</CardTitle>
+          <CardDescription>Filter reports by date range</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value)
+                  setError("")
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="endDate">End Date</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value)
+                  setError("")
+                }}
+                min={startDate}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>&nbsp;</Label>
+              <div className="flex gap-2">
+                <Button onClick={applyDateRange} disabled={!startDate || !endDate}>
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Apply Filter
+                </Button>
+                {dateRangeApplied && (
+                  <Button variant="outline" onClick={clearDateRange}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>&nbsp;</Label>
+              {dateRangeApplied && (
+                <div className="text-sm text-muted-foreground pt-2">
+                  Filtered: {new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()}
+                </div>
+              )}
+            </div>
+          </div>
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-destructive mt-2">
+              <AlertCircle className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Yesterday's Summary */}
       {yesterdaySummary && (
@@ -309,7 +524,12 @@ export function AdminReports() {
         <TabsContent value="daily" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Daily Orders (Last 30 Days)</CardTitle>
+              <CardTitle>
+                Daily Orders
+                {dateRangeApplied && startDate && endDate
+                  ? ` (${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()})`
+                  : " (Last 30 Days)"}
+              </CardTitle>
               <CardDescription>Order volume and revenue trends</CardDescription>
             </CardHeader>
             <CardContent>
@@ -364,7 +584,12 @@ export function AdminReports() {
         <TabsContent value="weekly" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Weekly Orders (Last 12 Weeks)</CardTitle>
+              <CardTitle>
+                Weekly Orders
+                {dateRangeApplied && startDate && endDate
+                  ? ` (${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()})`
+                  : " (Last 12 Weeks)"}
+              </CardTitle>
               <CardDescription>Weekly order volume and revenue</CardDescription>
             </CardHeader>
             <CardContent>
@@ -419,7 +644,12 @@ export function AdminReports() {
         <TabsContent value="monthly" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Monthly Orders (Last 12 Months)</CardTitle>
+              <CardTitle>
+                Monthly Orders
+                {dateRangeApplied && startDate && endDate
+                  ? ` (${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()})`
+                  : " (Last 12 Months)"}
+              </CardTitle>
               <CardDescription>Monthly order volume and revenue</CardDescription>
             </CardHeader>
             <CardContent>
@@ -482,9 +712,26 @@ export function AdminReports() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Full Orders Report</CardTitle>
-              <CardDescription>Complete list of all orders ({totalOrders.toLocaleString()} total)</CardDescription>
+              <CardDescription>
+                Complete list of all orders ({totalOrders.toLocaleString()} total)
+                {dateRangeApplied && startDate && endDate && (
+                  <span className="ml-2 text-xs">
+                    (Filtered: {new Date(startDate).toLocaleDateString()} - {new Date(endDate).toLocaleDateString()})
+                  </span>
+                )}
+              </CardDescription>
             </div>
-            <FileText className="h-5 w-5 text-muted-foreground" />
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => handleExportOrders("csv")}>
+                <Download className="mr-2 h-4 w-4" />
+                Export CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleExportOrders("json")}>
+                <Download className="mr-2 h-4 w-4" />
+                Export JSON
+              </Button>
+              <FileText className="h-5 w-5 text-muted-foreground" />
+            </div>
           </div>
         </CardHeader>
         <CardContent>

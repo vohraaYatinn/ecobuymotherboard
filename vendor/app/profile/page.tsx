@@ -171,6 +171,13 @@ export default function ProfilePage() {
 
       // Update vendor business info if vendor is linked
       if (vendor) {
+        // Split name into firstName and lastName
+        // If no lastName exists, use firstName as lastName to satisfy backend validation
+        const nameParts = (formData.name || "").trim().split(" ").filter(Boolean)
+        const firstName = nameParts[0] || ""
+        // If lastName is empty, use firstName to satisfy backend's required lastName validation
+        const lastName = nameParts.slice(1).join(" ") || firstName || ""
+
         const vendorUpdateResponse = await fetch(`${API_URL}/api/vendor-auth/profile/vendor`, {
           method: "PUT",
           headers: {
@@ -181,8 +188,8 @@ export default function ProfilePage() {
             name: formData.businessName,
             phone: formData.phone,
             address: {
-              firstName: formData.name.split(" ")[0] || "",
-              lastName: formData.name.split(" ").slice(1).join(" ") || "",
+              firstName: firstName,
+              lastName: lastName,
               address1: formData.address1,
               address2: formData.address2,
               city: formData.city,

@@ -23,6 +23,7 @@ const notificationSchema = new mongoose.Schema(
         "order_delivered",
         "order_cancelled",
         "new_order_available",
+        "admin_review_required",
       ],
       required: true,
     },

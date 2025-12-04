@@ -430,6 +430,14 @@ export function Header() {
                   {/* Additional Links */}
                   <div className="space-y-1">
                     <Link
+                      href="/learning-center"
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors group"
+                      onClick={() => setIsOpen(false)}
+                    >
+                      <Info className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      <span>Learning Center</span>
+                    </Link>
+                    <Link
                       href="/become-seller"
                       className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors group"
                       onClick={() => setIsOpen(false)}
@@ -529,6 +537,9 @@ export function Header() {
                   My Orders
                 </Link>
               )}
+              <Link href="/learning-center" className="text-sm font-medium hover:text-primary whitespace-nowrap">
+                Learning Center
+              </Link>
               <Link href="/contact" className="text-sm font-medium hover:text-primary whitespace-nowrap">
                 Contact Us
               </Link>

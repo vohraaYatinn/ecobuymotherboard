@@ -16,19 +16,48 @@ router.get("/suggestions", async (req, res) => {
     }
 
     const searchQuery = q.trim()
+    
+    // Split search query into individual words for better matching
+    const searchWords = searchQuery.split(/\s+/).filter(word => word.length > 0)
+    
+    // Build search conditions: try exact phrase match first, then individual word matches
+    // For multi-word queries, match products where ALL words appear somewhere in searchable fields
+    const searchConditions = []
+    
+    // First, try exact phrase match (higher priority)
+    searchConditions.push({
+      $or: [
+        { name: { $regex: searchQuery, $options: "i" } },
+        { brand: { $regex: searchQuery, $options: "i" } },
+        { sku: { $regex: searchQuery, $options: "i" } },
+        { model: { $regex: searchQuery, $options: "i" } },
+        { description: { $regex: searchQuery, $options: "i" } },
+      ]
+    })
+    
+    // Then, for multi-word queries, also match products where all words appear
+    if (searchWords.length > 1) {
+      // Each word must appear in at least one of the searchable fields
+      const wordConditions = searchWords.map(word => ({
+        $or: [
+          { name: { $regex: word, $options: "i" } },
+          { brand: { $regex: word, $options: "i" } },
+          { sku: { $regex: word, $options: "i" } },
+          { model: { $regex: word, $options: "i" } },
+          { description: { $regex: word, $options: "i" } },
+        ]
+      }))
+      // All words must match (using $and)
+      searchConditions.push({ $and: wordConditions })
+    }
 
-    // Search in name, brand, SKU, and category
+    // Search in name, brand, SKU, and description (category is ObjectId, not searchable as string)
     const products = await Product.find({
       $and: [
         { status: "in-stock" }, // Only show in-stock products
+        { isActive: true }, // Only show active products
         {
-          $or: [
-            { name: { $regex: searchQuery, $options: "i" } },
-            { brand: { $regex: searchQuery, $options: "i" } },
-            { sku: { $regex: searchQuery, $options: "i" } },
-            { category: { $regex: searchQuery, $options: "i" } },
-            { description: { $regex: searchQuery, $options: "i" } },
-          ],
+          $or: searchConditions,
         },
       ],
     })
@@ -71,18 +100,47 @@ router.get("/", async (req, res) => {
     const searchQuery = q.trim()
     const skip = (parseInt(page) - 1) * parseInt(limit)
 
-    // Search in name, brand, SKU, category, and description
+    // Split search query into individual words for better matching
+    const searchWords = searchQuery.split(/\s+/).filter(word => word.length > 0)
+    
+    // Build search conditions: try exact phrase match first, then individual word matches
+    // For multi-word queries, match products where ALL words appear somewhere in searchable fields
+    const searchConditions = []
+    
+    // First, try exact phrase match (higher priority)
+    searchConditions.push({
+      $or: [
+        { name: { $regex: searchQuery, $options: "i" } },
+        { brand: { $regex: searchQuery, $options: "i" } },
+        { sku: { $regex: searchQuery, $options: "i" } },
+        { model: { $regex: searchQuery, $options: "i" } },
+        { description: { $regex: searchQuery, $options: "i" } },
+      ]
+    })
+    
+    // Then, for multi-word queries, also match products where all words appear
+    if (searchWords.length > 1) {
+      // Each word must appear in at least one of the searchable fields
+      const wordConditions = searchWords.map(word => ({
+        $or: [
+          { name: { $regex: word, $options: "i" } },
+          { brand: { $regex: word, $options: "i" } },
+          { sku: { $regex: word, $options: "i" } },
+          { model: { $regex: word, $options: "i" } },
+          { description: { $regex: word, $options: "i" } },
+        ]
+      }))
+      // All words must match (using $and)
+      searchConditions.push({ $and: wordConditions })
+    }
+
+    // Search in name, brand, SKU, and description (category is ObjectId, not searchable as string)
     const query = {
       $and: [
         { status: "in-stock" },
+        { isActive: true }, // Only show active products
         {
-          $or: [
-            { name: { $regex: searchQuery, $options: "i" } },
-            { brand: { $regex: searchQuery, $options: "i" } },
-            { sku: { $regex: searchQuery, $options: "i" } },
-            { category: { $regex: searchQuery, $options: "i" } },
-            { description: { $regex: searchQuery, $options: "i" } },
-          ],
+          $or: searchConditions,
         },
       ],
     }

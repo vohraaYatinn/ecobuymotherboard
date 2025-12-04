@@ -30,15 +30,23 @@ const storage = multer.diskStorage({
 // File filter based on type
 const fileFilter = (req, file, cb) => {
   try {
-    const fileType = req.body.type || req.query.type
+    // Try to get type from body (may not be available yet during multer parsing)
+    // Also check if it's been parsed already
+    const fileType = req.body?.type || req.query?.type || (req.body && req.body.type)
     const fileName = file.originalname.toLowerCase()
     const ext = path.extname(fileName).toLowerCase()
 
     // Log for debugging
     console.log("File filter - Type:", fileType, "MIME:", file.mimetype, "Extension:", ext, "Filename:", file.originalname)
+    console.log("File filter - req.body:", req.body)
+    console.log("File filter - req.body keys:", req.body ? Object.keys(req.body) : "no body")
 
+    // If type is not available yet, allow the file through and validate in route handler
+    // This is because multer's fileFilter may run before body fields are fully parsed
     if (!fileType) {
-      return cb(new Error("File type is required. Please specify type (manual, video, or software)"), false)
+      console.log("Warning: File type not found in req.body, allowing file through for later validation")
+      // Allow file through - we'll validate in the route handler
+      return cb(null, true)
     }
 
     if (fileType === "manual") {

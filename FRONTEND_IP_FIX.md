@@ -1,7 +1,7 @@
 # Frontend IP Address Configuration
 
 ## Issue
-The frontend was trying to connect to `192.168.1.36:5000` but the server IP changed to `api.elecobuy.com`, causing `ERR_CONNECTION_TIMED_OUT` errors.
+The frontend was trying to connect to `api.elecobuy.com` but the server IP changed to `api.elecobuy.com`, causing `ERR_CONNECTION_TIMED_OUT` errors.
 
 ## Solution
 
