@@ -18,14 +18,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, CheckCircle, Upload, X, FileText } from "lucide-react"
+import { Loader2, CheckCircle } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
-
-interface UploadedFile {
-  file: File
-  preview?: string
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 export function VendorRegistrationForm() {
   const { toast } = useToast()
@@ -33,7 +28,6 @@ export function VendorRegistrationForm() {
   const [isSuccess, setIsSuccess] = useState(false)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [formData, setFormData] = useState({
     username: "",
     email: "",
@@ -46,12 +40,6 @@ export function VendorRegistrationForm() {
     state: "",
     postcode: "",
     storePhone: "",
-    gstNo: "",
-    bankAccountNumber: "",
-    ifscCode: "",
-    pan: "",
-    tan: "",
-    referral: "",
   })
 
   // Validate form fields
@@ -117,46 +105,17 @@ export function VendorRegistrationForm() {
     setShowConfirmDialog(true)
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files)
-      const newFiles: UploadedFile[] = files.map((file) => ({
-        file,
-        preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
-      }))
-      setUploadedFiles([...uploadedFiles, ...newFiles])
-    }
-  }
-
-  const removeFile = (index: number) => {
-    const file = uploadedFiles[index]
-    if (file.preview) {
-      URL.revokeObjectURL(file.preview)
-    }
-    setUploadedFiles(uploadedFiles.filter((_, i) => i !== index))
-  }
-
   const handleConfirmSubmit = async () => {
     setShowConfirmDialog(false)
     setIsLoading(true)
 
     try {
-      // Create FormData for file upload
-      const formDataToSend = new FormData()
-      
-      // Add text fields
-      Object.keys(formData).forEach((key) => {
-        formDataToSend.append(key, formData[key as keyof typeof formData])
-      })
-
-      // Add files
-      uploadedFiles.forEach((uploadedFile, index) => {
-        formDataToSend.append("documents", uploadedFile.file)
-      })
-
       const response = await fetch(`${API_URL}/api/vendors/register`, {
         method: "POST",
-        body: formDataToSend,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
       })
 
       const data = await response.json()
@@ -180,20 +139,7 @@ export function VendorRegistrationForm() {
           state: "",
           postcode: "",
           storePhone: "",
-          gstNo: "",
-          bankAccountNumber: "",
-          ifscCode: "",
-          pan: "",
-          tan: "",
-          referral: "",
         })
-        // Clean up file previews
-        uploadedFiles.forEach((file) => {
-          if (file.preview) {
-            URL.revokeObjectURL(file.preview)
-          }
-        })
-        setUploadedFiles([])
       } else {
         toast({
           title: "Registration Failed",
@@ -396,166 +342,6 @@ export function VendorRegistrationForm() {
               </p>
             )}
           </div>
-
-          {/* New Fields Section */}
-          <div className="md:col-span-2 border-t pt-6 mt-6">
-            <h3 className="text-lg font-semibold mb-4">Business & Financial Information</h3>
-          </div>
-
-          <div>
-            <Label htmlFor="gstNo">GST No</Label>
-            <Input
-              id="gstNo"
-              value={formData.gstNo}
-              onChange={(e) => {
-                const value = e.target.value.toUpperCase().replace(/\s/g, "")
-                setFormData({ ...formData, gstNo: value })
-              }}
-              className="mt-2"
-              placeholder="15-digit GST number"
-              maxLength={15}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="pan">PAN</Label>
-            <Input
-              id="pan"
-              value={formData.pan}
-              onChange={(e) => {
-                const value = e.target.value.toUpperCase().replace(/\s/g, "")
-                setFormData({ ...formData, pan: value })
-              }}
-              className="mt-2"
-              placeholder="10-character PAN"
-              maxLength={10}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="tan">TAN</Label>
-            <Input
-              id="tan"
-              value={formData.tan}
-              onChange={(e) => {
-                const value = e.target.value.toUpperCase().replace(/\s/g, "")
-                setFormData({ ...formData, tan: value })
-              }}
-              className="mt-2"
-              placeholder="10-character TAN"
-              maxLength={10}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="bankAccountNumber">Bank Account Number</Label>
-            <Input
-              id="bankAccountNumber"
-              value={formData.bankAccountNumber}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, "")
-                setFormData({ ...formData, bankAccountNumber: value })
-              }}
-              className="mt-2"
-              placeholder="Bank account number"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="ifscCode">IFSC Code</Label>
-            <Input
-              id="ifscCode"
-              value={formData.ifscCode}
-              onChange={(e) => {
-                const value = e.target.value.toUpperCase().replace(/\s/g, "")
-                setFormData({ ...formData, ifscCode: value })
-              }}
-              className="mt-2"
-              placeholder="11-character IFSC code"
-              maxLength={11}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <Label htmlFor="referral">Referral Code (Optional)</Label>
-            <Input
-              id="referral"
-              value={formData.referral}
-              onChange={(e) => setFormData({ ...formData, referral: e.target.value })}
-              className="mt-2"
-              placeholder="Enter referral code if any"
-            />
-          </div>
-
-          {/* Document Upload Section */}
-          <div className="md:col-span-2 border-t pt-6 mt-6">
-            <h3 className="text-lg font-semibold mb-4">Upload Documents</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Upload relevant business documents (GST certificate, PAN card, bank statement, etc.). Accepted formats: PDF, Images, Word documents. Max file size: 10MB per file.
-            </p>
-            <div className="border-2 border-dashed border-border rounded-lg p-6">
-              <input
-                type="file"
-                id="documents"
-                multiple
-                accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <label
-                htmlFor="documents"
-                className="flex flex-col items-center justify-center cursor-pointer"
-              >
-                <Upload className="h-10 w-10 text-muted-foreground mb-2" />
-                <span className="text-sm font-medium text-foreground mb-1">
-                  Click to upload documents
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  PDF, Images, or Word documents (Max 10MB each)
-                </span>
-              </label>
-            </div>
-
-            {/* Uploaded Files Preview */}
-            {uploadedFiles.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <p className="text-sm font-medium">Uploaded Files ({uploadedFiles.length}):</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {uploadedFiles.map((uploadedFile, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center gap-2 p-2 border rounded-lg bg-muted/50"
-                    >
-                      {uploadedFile.preview ? (
-                        <img
-                          src={uploadedFile.preview}
-                          alt={uploadedFile.file.name}
-                          className="h-10 w-10 object-cover rounded"
-                        />
-                      ) : (
-                        <FileText className="h-10 w-10 text-muted-foreground" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{uploadedFile.file.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(uploadedFile.file.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeFile(index)}
-                        className="h-8 w-8"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="pt-6">
@@ -612,18 +398,6 @@ export function VendorRegistrationForm() {
               <strong>Email:</strong> {formData.email}
               <br />
               <strong>Store Phone:</strong> {formData.storePhone}
-              {formData.gstNo && (
-                <>
-                  <br />
-                  <strong>GST No:</strong> {formData.gstNo}
-                </>
-              )}
-              {uploadedFiles.length > 0 && (
-                <>
-                  <br />
-                  <strong>Documents:</strong> {uploadedFiles.length} file(s) uploaded
-                </>
-              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

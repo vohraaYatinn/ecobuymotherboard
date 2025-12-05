@@ -219,7 +219,7 @@ router.put("/:id/status", verifyAdminToken, async (req, res) => {
       })
     }
 
-    const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "admin_review_required"]
+    const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -328,7 +328,7 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
     }
 
     if (status) {
-      const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "admin_review_required"]
+      const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]
       if (validStatuses.includes(status)) {
         order.status = status
       }
@@ -366,10 +366,6 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
         // Only set assignment mode if not already set (preserve "accepted-by-vendor" if exists)
         if (!order.assignmentMode) {
           order.assignmentMode = "assigned-by-admin"
-        }
-        // If order was in admin_review_required status, change to processing
-        if (order.status === "admin_review_required") {
-          order.status = "processing"
         }
       }
     }
@@ -439,10 +435,6 @@ router.put("/:id/assign-vendor", verifyAdminToken, async (req, res) => {
       }
       order.vendorId = vendorId
       order.assignmentMode = "assigned-by-admin"
-      // If order was in admin_review_required status, change to processing
-      if (order.status === "admin_review_required") {
-        order.status = "processing"
-      }
     }
 
     await order.save()
@@ -466,51 +458,6 @@ router.put("/:id/assign-vendor", verifyAdminToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error assigning vendor",
-      error: error.message,
-    })
-  }
-})
-
-// Bulk delete orders (Admin only) - Soft delete by setting status to cancelled
-router.post("/bulk-delete", verifyAdminToken, async (req, res) => {
-  try {
-    const { orderIds } = req.body
-
-    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "orderIds array is required and must not be empty",
-      })
-    }
-
-    // Validate all order IDs are valid MongoDB ObjectIds
-    const invalidIds = orderIds.filter((id) => !mongoose.Types.ObjectId.isValid(id))
-    if (invalidIds.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Invalid order ID format: ${invalidIds.join(", ")}`,
-      })
-    }
-
-    // Update all orders to cancelled status (soft delete)
-    const result = await Order.updateMany(
-      { _id: { $in: orderIds } },
-      { $set: { status: "cancelled" } }
-    )
-
-    res.status(200).json({
-      success: true,
-      message: `Successfully cancelled ${result.modifiedCount} order(s)`,
-      data: {
-        deletedCount: result.modifiedCount,
-        totalRequested: orderIds.length,
-      },
-    })
-  } catch (error) {
-    console.error("Bulk delete orders error:", error)
-    res.status(500).json({
-      success: false,
-      message: "Error cancelling orders",
       error: error.message,
     })
   }
@@ -561,7 +508,6 @@ router.get("/stats/overview", verifyAdminToken, async (req, res) => {
     const shippedOrders = await Order.countDocuments({ status: "shipped" })
     const deliveredOrders = await Order.countDocuments({ status: "delivered" })
     const cancelledOrders = await Order.countDocuments({ status: "cancelled" })
-    const adminReviewRequiredOrders = await Order.countDocuments({ status: "admin_review_required" })
 
     // Calculate total revenue from delivered orders
     const revenueResult = await Order.aggregate([
@@ -579,7 +525,6 @@ router.get("/stats/overview", verifyAdminToken, async (req, res) => {
         shipped: shippedOrders,
         delivered: deliveredOrders,
         cancelled: cancelledOrders,
-        adminReviewRequired: adminReviewRequiredOrders,
         totalRevenue,
       },
     })

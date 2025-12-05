@@ -2,13 +2,6 @@ import express from "express"
 import Vendor from "../models/Vendor.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 import nodemailer from "nodemailer"
-import vendorUpload from "../middleware/vendorUpload.js"
-import fs from "fs"
-import path from "path"
-import { fileURLToPath } from "url"
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
 
 const router = express.Router()
 
@@ -276,13 +269,6 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
         country: address.country || vendor.address.country,
       }
     }
-    // Update new fields
-    if (req.body.gstNo !== undefined) vendor.gstNo = req.body.gstNo || undefined
-    if (req.body.bankAccountNumber !== undefined) vendor.bankAccountNumber = req.body.bankAccountNumber || undefined
-    if (req.body.ifscCode !== undefined) vendor.ifscCode = req.body.ifscCode || undefined
-    if (req.body.pan !== undefined) vendor.pan = req.body.pan || undefined
-    if (req.body.tan !== undefined) vendor.tan = req.body.tan || undefined
-    if (req.body.referral !== undefined) vendor.referral = req.body.referral || undefined
 
     await vendor.save()
 
@@ -443,7 +429,7 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Public vendor registration (no auth required)
-router.post("/register", vendorUpload.array("documents", 10), async (req, res) => {
+router.post("/register", async (req, res) => {
   try {
     const {
       username,
@@ -457,12 +443,6 @@ router.post("/register", vendorUpload.array("documents", 10), async (req, res) =
       state,
       postcode,
       storePhone,
-      gstNo,
-      bankAccountNumber,
-      ifscCode,
-      pan,
-      tan,
-      referral,
     } = req.body
 
     // Validate required fields
@@ -485,19 +465,6 @@ router.post("/register", vendorUpload.array("documents", 10), async (req, res) =
       })
     }
 
-    // Process uploaded documents
-    const documents = []
-    if (req.files && req.files.length > 0) {
-      req.files.forEach((file) => {
-        documents.push({
-          filename: file.filename,
-          originalName: file.originalname,
-          path: `/uploads/vendor-documents/${file.filename}`,
-          uploadedAt: new Date(),
-        })
-      })
-    }
-
     // Create vendor with pending status
     const vendor = new Vendor({
       name: `${firstName} ${lastName}`,
@@ -515,13 +482,6 @@ router.post("/register", vendorUpload.array("documents", 10), async (req, res) =
         postcode: postcode,
         country: country || "india",
       },
-      gstNo: gstNo || undefined,
-      bankAccountNumber: bankAccountNumber || undefined,
-      ifscCode: ifscCode || undefined,
-      pan: pan || undefined,
-      tan: tan || undefined,
-      referral: referral || undefined,
-      documents: documents,
     })
 
     await vendor.save()
@@ -541,21 +501,6 @@ router.post("/register", vendorUpload.array("documents", 10), async (req, res) =
     })
   } catch (error) {
     console.error("Vendor registration error:", error)
-    
-    // Clean up uploaded files if there's an error
-    if (req.files && req.files.length > 0) {
-      req.files.forEach((file) => {
-        const filePath = path.join(__dirname, "../uploads/vendor-documents", file.filename)
-        try {
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath)
-          }
-        } catch (unlinkError) {
-          console.error("Error deleting uploaded file:", unlinkError)
-        }
-      })
-    }
-    
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
