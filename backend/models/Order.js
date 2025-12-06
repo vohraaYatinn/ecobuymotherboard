@@ -73,6 +73,28 @@ const orderSchema = new mongoose.Schema(
       enum: ["pending", "paid", "failed", "refunded"],
       default: "pending",
     },
+    paymentGateway: {
+      type: String,
+      default: null,
+    },
+    paymentTransactionId: {
+      type: String,
+      default: null,
+      unique: true,
+      sparse: true,
+    },
+    paymentMeta: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    inventoryAdjusted: {
+      type: Boolean,
+      default: false,
+    },
+    postPaymentNotified: {
+      type: Boolean,
+      default: false,
+    },
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Vendor",

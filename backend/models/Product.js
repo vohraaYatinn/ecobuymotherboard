@@ -23,9 +23,9 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    // Accepts ObjectId (preferred) or legacy slug strings
     category: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Category",
+      type: mongoose.Schema.Types.Mixed,
       required: [true, "Category is required"],
     },
     description: {

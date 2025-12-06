@@ -8,10 +8,14 @@ import CustomerAddress from "../models/CustomerAddress.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Vendor from "../models/Vendor.js"
+import { createPhonePePayment, getPhonePePaymentStatus } from "../services/phonepeService.js"
 import jwt from "jsonwebtoken"
 import nodemailer from "nodemailer"
 
 const router = express.Router()
+
+const FRONTEND_URL = process.env.FRONTEND_URL || "https://elecobuy.com"
+const BACKEND_URL = process.env.BACKEND_URL || process.env.PUBLIC_BACKEND_URL || "https://api.elecobuy.com"
 
 // Email transporter helper (shared config with enquiries route)
 const getTransporter = () => {
@@ -34,262 +38,110 @@ const getTransporter = () => {
   return transporter
 }
 
-// Middleware to verify JWT token
-const authenticate = (req, res, next) => {
-  const token = req.headers.authorization?.replace("Bearer ", "")
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      message: "Authentication required",
-    })
-  }
+const buildHttpError = (status, message) => {
+  const error = new Error(message)
+  error.statusCode = status
+  return error
+}
+
+const sendOrderNotifications = async (order) => {
+  if (order.postPaymentNotified) return
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production")
-    req.userId = decoded.userId
-    next()
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid token",
+    await Notification.create({
+      userId: order.customerId,
+      userType: "customer",
+      type: "order_placed",
+      title: "Order Placed Successfully",
+      message: `Your order ${order.orderNumber} has been placed successfully. Total: ₹${order.total.toLocaleString("en-IN")}`,
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      customerId: order.customerId,
     })
+
+    const admin = await Admin.findOne({ isActive: true })
+    if (admin) {
+      await Notification.create({
+        userId: admin._id,
+        userType: "admin",
+        type: "order_placed",
+        title: "New Order Placed",
+        message: `New order ${order.orderNumber} has been placed by a customer. Total: ₹${order.total.toLocaleString("en-IN")}`,
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId,
+      })
+    }
+
+    const vendors = await Vendor.find({ status: "approved", isActive: true })
+    for (const vendor of vendors) {
+      const VendorUser = (await import("../models/VendorUser.js")).default
+      const vendorUser = await VendorUser.findOne({ vendorId: vendor._id, isActive: true })
+      if (vendorUser) {
+        await Notification.create({
+          userId: vendorUser._id,
+          userType: "vendor",
+          type: "new_order_available",
+          title: "New Order Available",
+          message: `New order ${order.orderNumber} is available to accept. Total: ₹${order.total.toLocaleString("en-IN")}`,
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          customerId: order.customerId,
+        })
+      }
+    }
+
+    try {
+      const { sendPushNotificationToAllVendors } = await import("../routes/pushNotifications.js")
+      const pushResult = await sendPushNotificationToAllVendors(
+        "New Order Available",
+        `New order ${order.orderNumber} is available to accept. Total: ₹${order.total.toLocaleString("en-IN")}`,
+        {
+          type: "new_order_available",
+          orderId: order._id.toString(),
+          orderNumber: order.orderNumber,
+        }
+      )
+
+      if (pushResult.success) {
+        console.log(`✅ [Order] Push notifications sent to ${pushResult.sent} vendor device(s)`)
+      } else {
+        console.warn(`⚠️ [Order] Push notification failed: ${pushResult.message}`)
+      }
+    } catch (pushError) {
+      console.error("❌ [Order] Error sending push notifications:", pushError)
+    }
+
+    order.postPaymentNotified = true
+    await order.save()
+  } catch (notifError) {
+    console.error("Error creating notifications:", notifError)
   }
 }
 
-// Create order
-router.post("/", authenticate, async (req, res) => {
+const sendOrderConfirmationEmail = async (order) => {
   try {
-    const { addressId, paymentMethod = "cod" } = req.body
+    const customer = await Customer.findById(order.customerId)
 
-    if (!addressId) {
-      return res.status(400).json({
-        success: false,
-        message: "Shipping address is required",
-      })
+    if (!customer || !customer.email) {
+      console.warn(`⚠️  [ORDER] Customer email not available. Skipping order confirmation email for order ${order.orderNumber}`)
+      return
     }
 
-    // Get customer cart
-    const cart = await Cart.findOne({ customerId: req.userId }).populate("items.productId")
+    const transporter = getTransporter()
 
-    if (!cart || cart.items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Cart is empty",
-      })
+    if (!transporter) {
+      console.warn(`⚠️  [ORDER] Transporter not configured. Skipping order confirmation email for order ${order.orderNumber}`)
+      return
     }
 
-    // Verify address belongs to customer
-    const address = await CustomerAddress.findOne({
-      _id: addressId,
-      customerId: req.userId,
-    })
+    const customerName = customer.name || `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`
+    const customerEmail = customer.email
+    const adminEmail = process.env.ADMIN_EMAIL || "info@elecobuy.com"
 
-    if (!address) {
-      return res.status(404).json({
-        success: false,
-        message: "Address not found",
-      })
-    }
-
-    // Calculate totals
-    let subtotal = 0
-    const orderItems = []
-
-    for (const item of cart.items) {
-      const product = item.productId
-      
-      // Check stock
-      if (product.stock < item.quantity) {
-        return res.status(400).json({
-          success: false,
-          message: `Insufficient stock for ${product.name}`,
-        })
-      }
-
-      const itemTotal = product.price * item.quantity
-      subtotal += itemTotal
-
-      orderItems.push({
-        productId: product._id,
-        name: product.name,
-        brand: product.brand,
-        quantity: item.quantity,
-        price: product.price,
-        image: product.images?.[0] || "",
-      })
-    }
-
-    // Shipping charges: ₹125 as per requirements
-    const shipping = 125
-
-    // Calculate GST based on shipping state
-    // Telangana (TS) -> CGST 9% + SGST 9%
-    // Other states -> IGST 18%
-    const shippingState = address.state?.trim().toUpperCase() || ""
-    const isTelangana = shippingState === "TELANGANA" || shippingState === "TS"
-    
-    // GST is calculated on (subtotal + shipping)
-    const taxableAmount = subtotal + shipping
-    let cgst = 0
-    let sgst = 0
-    let igst = 0
-    
-    if (isTelangana) {
-      // Intra-State: CGST 9% + SGST 9% = 18% total
-      cgst = Math.round((taxableAmount * 9) / 100)
-      sgst = Math.round((taxableAmount * 9) / 100)
-    } else {
-      // Inter-State: IGST 18%
-      igst = Math.round((taxableAmount * 18) / 100)
-    }
-    
-    const gstTotal = cgst + sgst + igst
-    const total = subtotal + shipping + gstTotal
-
-    // Generate unique order number
-    // Format: ORD-TIMESTAMP-RANDOM
-    const timestamp = Date.now()
-    const randomSuffix = Math.random().toString(36).substr(2, 9).toUpperCase()
-    const orderNumber = `ORD-${timestamp}-${randomSuffix}`
-
-    // Generate invoice number (sequential, 10 digits)
-    const orderCount = await Order.countDocuments()
-    const invoiceNumber = String(orderCount + 1).padStart(10, "0")
-
-    // Create order
-    const order = new Order({
-      orderNumber,
-      customerId: req.userId,
-      items: orderItems,
-      shippingAddress: addressId,
-      subtotal,
-      shipping,
-      cgst,
-      sgst,
-      igst,
-      total,
-      shippingState: address.state,
-      invoiceNumber,
-      paymentMethod,
-      paymentStatus: paymentMethod === "cod" ? "pending" : "pending",
-      status: "pending",
-    })
-
-    await order.save()
-
-    // Update product stock
-    for (const item of cart.items) {
-      await Product.findByIdAndUpdate(item.productId._id, {
-        $inc: { stock: -item.quantity },
-      })
-    }
-
-    // Clear cart
-    cart.items = []
-    await cart.save()
-
-    // Populate address for response
-    await order.populate("shippingAddress")
-
-    // Create notifications
-    try {
-      // Notification for customer
-      await Notification.create({
-        userId: req.userId,
-        userType: "customer",
-        type: "order_placed",
-        title: "Order Placed Successfully",
-        message: `Your order ${orderNumber} has been placed successfully. Total: ₹${total.toLocaleString("en-IN")}`,
-        orderId: order._id,
-        orderNumber: orderNumber,
-        customerId: req.userId,
-      })
-
-      // Notification for admin
-      const admin = await Admin.findOne({ isActive: true })
-      if (admin) {
-        await Notification.create({
-          userId: admin._id,
-          userType: "admin",
-          type: "order_placed",
-          title: "New Order Placed",
-          message: `New order ${orderNumber} has been placed by a customer. Total: ₹${total.toLocaleString("en-IN")}`,
-          orderId: order._id,
-          orderNumber: orderNumber,
-          customerId: req.userId,
-        })
-      }
-
-      // Notification for all active vendors (order available to accept)
-      const vendors = await Vendor.find({ status: "approved", isActive: true })
-      for (const vendor of vendors) {
-        // Find vendor user to get userId
-        const VendorUser = (await import("../models/VendorUser.js")).default
-        const vendorUser = await VendorUser.findOne({ vendorId: vendor._id, isActive: true })
-        if (vendorUser) {
-          await Notification.create({
-            userId: vendorUser._id,
-            userType: "vendor",
-            type: "new_order_available",
-            title: "New Order Available",
-            message: `New order ${orderNumber} is available to accept. Total: ₹${total.toLocaleString("en-IN")}`,
-            orderId: order._id,
-            orderNumber: orderNumber,
-            customerId: req.userId,
-          })
-        }
-      }
-
-      // Send push notifications to all vendors
-      try {
-        const { sendPushNotificationToAllVendors } = await import("../routes/pushNotifications.js")
-        const pushResult = await sendPushNotificationToAllVendors(
-          "New Order Available",
-          `New order ${orderNumber} is available to accept. Total: ₹${total.toLocaleString("en-IN")}`,
-          {
-            type: "new_order_available",
-            orderId: order._id.toString(),
-            orderNumber: orderNumber,
-          }
-        )
-        
-        if (pushResult.success) {
-          console.log(`✅ [Order] Push notifications sent to ${pushResult.sent} vendor device(s)`)
-        } else {
-          console.warn(`⚠️ [Order] Push notification failed: ${pushResult.message}`)
-        }
-      } catch (pushError) {
-        console.error("❌ [Order] Error sending push notifications:", pushError)
-        // Don't fail the order creation if push notifications fail
-      }
-    } catch (notifError) {
-      console.error("Error creating notifications:", notifError)
-      // Don't fail the order creation if notifications fail
-    }
-
-    // Send order confirmation email to customer (non-blocking for order success)
-    try {
-      const customer = await Customer.findById(req.userId)
-
-      if (!customer || !customer.email) {
-        console.warn(
-          `⚠️  [ORDER] Customer email not available. Skipping order confirmation email for order ${orderNumber}`
-        )
-      } else {
-        const transporter = getTransporter()
-
-        if (!transporter) {
-          console.warn(
-            `⚠️  [ORDER] Transporter not configured. Skipping order confirmation email for order ${orderNumber}`
-          )
-        } else {
-          const customerName = customer.name || `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`
-          const customerEmail = customer.email
-          const adminEmail = process.env.ADMIN_EMAIL || "info@elecobuy.com"
-
-          const orderItemsHtml = order.items
-            .map(
-              (item) => `
+    const orderItemsHtml = order.items
+      .map(
+        (item) => `
               <tr>
                 <td style="padding: 8px; border: 1px solid #ddd;">${item.name}</td>
                 <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${item.quantity}</td>
@@ -301,11 +153,11 @@ router.post("/", authenticate, async (req, res) => {
                 ).toLocaleString("en-IN")}</td>
               </tr>
             `
-            )
-            .join("")
+      )
+      .join("")
 
-          const address = order.shippingAddress
-          const addressHtml = `
+    const address = order.shippingAddress
+    const addressHtml = `
             <div style="margin-top: 10px;">
               <div><strong>${address.firstName} ${address.lastName}</strong></div>
               <div>${address.address1}${address.address2 ? ", " + address.address2 : ""}</div>
@@ -315,11 +167,11 @@ router.post("/", authenticate, async (req, res) => {
             </div>
           `
 
-          const mailOptions = {
-            from: process.env.SMTP_USER || adminEmail,
-            to: customerEmail,
-            subject: `Your Order Confirmation - ${orderNumber}`,
-            html: `
+    const mailOptions = {
+      from: process.env.SMTP_USER || adminEmail,
+      to: customerEmail,
+      subject: `Your Order Confirmation - ${order.orderNumber}`,
+      html: `
               <!DOCTYPE html>
               <html>
               <head>
@@ -343,11 +195,9 @@ router.post("/", authenticate, async (req, res) => {
                     <p>Hi ${customerName},</p>
                     <p>We have received your order. Here are your order details:</p>
                     <div class="summary">
-                      <p><strong>Order Number:</strong> ${orderNumber}</p>
+                      <p><strong>Order Number:</strong> ${order.orderNumber}</p>
                       <p><strong>Order Date:</strong> ${new Date(order.createdAt).toLocaleString("en-IN")}</p>
-                      <p><strong>Payment Method:</strong> ${
-                        order.paymentMethod === "cod" ? "Cash on Delivery" : order.paymentMethod.toUpperCase()
-                      }</p>
+                      <p><strong>Payment Method:</strong> ${order.paymentMethod === "cod" ? "Cash on Delivery" : order.paymentMethod.toUpperCase()}</p>
                     </div>
                     <h3>Items</h3>
                     <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
@@ -385,28 +235,367 @@ router.post("/", authenticate, async (req, res) => {
               </body>
               </html>
             `,
-          }
+    }
 
-          await transporter.sendMail(mailOptions)
-          console.log(`✅ [ORDER] Order confirmation email sent to ${customerEmail} for order ${orderNumber}`)
-        }
-      }
-    } catch (emailError) {
-      console.error("❌ [ORDER] Error sending order confirmation email:", emailError)
-      // Do not fail the order creation if email fails
+    await transporter.sendMail(mailOptions)
+    console.log(`✅ [ORDER] Order confirmation email sent to ${customerEmail} for order ${order.orderNumber}`)
+  } catch (emailError) {
+    console.error("❌ [ORDER] Error sending order confirmation email:", emailError)
+  }
+}
+
+const adjustInventoryAndCart = async (order) => {
+  if (order.inventoryAdjusted) {
+    return { inventoryAdjusted: true }
+  }
+
+  const insufficientItems = []
+
+  for (const item of order.items) {
+    const product = await Product.findById(item.productId)
+    if (!product || product.stock < item.quantity) {
+      insufficientItems.push(item.name || item.productId?.toString())
+    }
+  }
+
+  if (insufficientItems.length > 0) {
+    order.status = "admin_review_required"
+    await order.save()
+    return { inventoryAdjusted: false, insufficientItems }
+  }
+
+  for (const item of order.items) {
+    await Product.findByIdAndUpdate(item.productId, {
+      $inc: { stock: -item.quantity },
+    })
+  }
+
+  order.inventoryAdjusted = true
+  await order.save()
+
+  const cart = await Cart.findOne({ customerId: order.customerId })
+  if (cart) {
+    cart.items = []
+    await cart.save()
+  }
+
+  return { inventoryAdjusted: true }
+}
+
+const finalizeOrderAfterPayment = async (order) => {
+  await order.populate("shippingAddress")
+
+  const inventoryResult = await adjustInventoryAndCart(order)
+  await sendOrderNotifications(order)
+  await sendOrderConfirmationEmail(order)
+
+  return inventoryResult
+}
+
+const markOrderAsPaid = async (order, transactionId, paymentMeta) => {
+  if (order.paymentStatus === "paid") return order
+
+  order.paymentStatus = "paid"
+  order.paymentMethod = "online"
+  order.paymentGateway = "phonepe"
+  order.paymentTransactionId = transactionId || order.paymentTransactionId
+  order.paymentMeta = paymentMeta || order.paymentMeta
+  order.status = order.status === "cancelled" ? "pending" : order.status || "pending"
+
+  await order.save()
+  await finalizeOrderAfterPayment(order)
+
+  return order
+}
+
+const markOrderAsFailed = async (order, paymentMeta) => {
+  order.paymentStatus = "failed"
+  order.status = "cancelled"
+  order.paymentMeta = paymentMeta || order.paymentMeta
+  await order.save()
+  return order
+}
+
+const createOrderDraft = async ({ customerId, addressId }) => {
+  if (!addressId) {
+    throw buildHttpError(400, "Shipping address is required")
+  }
+
+  const cart = await Cart.findOne({ customerId }).populate("items.productId")
+
+  if (!cart || cart.items.length === 0) {
+    throw buildHttpError(400, "Cart is empty")
+  }
+
+  const address = await CustomerAddress.findOne({
+    _id: addressId,
+    customerId,
+  })
+
+  if (!address) {
+    throw buildHttpError(404, "Address not found")
+  }
+
+  let subtotal = 0
+  const orderItems = []
+
+  for (const item of cart.items) {
+    const product = item.productId
+
+    if (!product || product.stock < item.quantity) {
+      throw buildHttpError(400, `Insufficient stock for ${product?.name || "a product"}`)
+    }
+
+    const itemTotal = product.price * item.quantity
+    subtotal += itemTotal
+
+    orderItems.push({
+      productId: product._id,
+      name: product.name,
+      brand: product.brand,
+      quantity: item.quantity,
+      price: product.price,
+      image: product.images?.[0] || "",
+    })
+  }
+
+  const shipping = 1 // Fixed shipping charges as per requirements
+
+  const shippingState = address.state?.trim().toUpperCase() || ""
+  const isTelangana = shippingState === "TELANGANA" || shippingState === "TS"
+  const taxableAmount = subtotal + shipping
+  let cgst = 0
+  let sgst = 0
+  let igst = 0
+
+  if (isTelangana) {
+    cgst = Math.round((taxableAmount * 9) / 100)
+    sgst = Math.round((taxableAmount * 9) / 100)
+  } else {
+    igst = Math.round((taxableAmount * 18) / 100)
+  }
+
+  const gstTotal = cgst + sgst + igst
+  const total = subtotal + shipping + gstTotal
+
+  const timestamp = Date.now()
+  const randomSuffix = Math.random().toString(36).substr(2, 9).toUpperCase()
+  const orderNumber = `ORD-${timestamp}-${randomSuffix}`
+
+  const orderCount = await Order.countDocuments()
+  const invoiceNumber = String(orderCount + 1).padStart(10, "0")
+
+  const order = new Order({
+    orderNumber,
+    customerId,
+    items: orderItems,
+    shippingAddress: addressId,
+    subtotal,
+    shipping,
+    cgst,
+    sgst,
+    igst,
+    total,
+    shippingState: address.state,
+    invoiceNumber,
+    paymentMethod: "online",
+    paymentStatus: "pending",
+    paymentGateway: "phonepe",
+    paymentTransactionId: orderNumber,
+    status: "pending",
+  })
+
+  await order.save()
+  await order.populate("shippingAddress")
+
+  return { order, cart }
+}
+
+const resolvePhonePeStatus = async (merchantTransactionId) => {
+  const order = await Order.findOne({ paymentTransactionId: merchantTransactionId }).populate("shippingAddress")
+
+  if (!order) {
+    throw buildHttpError(404, "Order not found for this transaction")
+  }
+
+  const statusResponse = await getPhonePePaymentStatus(merchantTransactionId)
+
+  const state = statusResponse?.data?.state || statusResponse?.code || statusResponse?.data?.responseCode
+  const isSuccess =
+    state === "COMPLETED" ||
+    state === "PAYMENT_SUCCESS" ||
+    state === "PAYMENT_SUCCESS_V2" ||
+    statusResponse?.code === "PAYMENT_SUCCESS"
+  const isFailed =
+    state === "FAILED" ||
+    state === "PAYMENT_ERROR" ||
+    state === "INTERNAL_SERVER_ERROR" ||
+    statusResponse?.code === "PAYMENT_ERROR"
+
+  if (isSuccess) {
+    await markOrderAsPaid(order, merchantTransactionId, statusResponse)
+  } else if (isFailed) {
+    await markOrderAsFailed(order, statusResponse)
+  } else {
+    order.paymentStatus = "pending"
+    order.paymentMeta = statusResponse || order.paymentMeta
+    await order.save()
+  }
+
+  return { order, statusResponse, state }
+}
+
+const handlePhonePeInitiation = async (req, res) => {
+  try {
+    const { addressId } = req.body
+
+    const { order } = await createOrderDraft({
+      customerId: req.userId,
+      addressId,
+    })
+
+    const merchantTransactionId = order.paymentTransactionId || order.orderNumber
+    const redirectUrl = `${FRONTEND_URL}/order-confirmation/${order._id}?payment=phonepe&txn=${merchantTransactionId}`
+    const callbackUrl = `${BACKEND_URL}/api/orders/phonepe/callback`
+
+    const paymentResponse = await createPhonePePayment({
+      amountInPaise: Math.round(order.total * 100),
+      merchantTransactionId,
+      merchantUserId: req.userId.toString(),
+      redirectUrl,
+      callbackUrl,
+      mobileNumber: order.shippingAddress?.phone,
+    })
+
+    const phonePeRedirect = paymentResponse?.data?.instrumentResponse?.redirectInfo?.url
+
+    if (!phonePeRedirect) {
+      throw buildHttpError(500, "Failed to generate PhonePe payment link")
+    }
+
+    order.paymentMeta = {
+      ...(order.paymentMeta || {}),
+      phonePeInit: paymentResponse?.data || paymentResponse,
+    }
+
+    await order.save()
+
+    res.json({
+      success: true,
+      message: "PhonePe payment initiated. Redirecting to payment page.",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        merchantTransactionId,
+        redirectUrl: phonePeRedirect,
+        providerResponse: paymentResponse,
+      },
+    })
+  } catch (error) {
+    const statusCode = error.statusCode || error.response?.status || 500
+    const providerData = error.providerData || error.response?.data
+    console.error("Error initiating PhonePe payment:", statusCode, providerData || error)
+    res.status(statusCode).json({
+      success: false,
+      message:
+        providerData?.message ||
+        providerData?.code ||
+        error.message ||
+        "Failed to initiate PhonePe payment",
+      providerData,
+    })
+  }
+}
+
+// Middleware to verify JWT token
+const authenticate = (req, res, next) => {
+  const token = req.headers.authorization?.replace("Bearer ", "")
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: "Authentication required",
+    })
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "your-secret-key-change-in-production")
+    req.userId = decoded.userId
+    next()
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid token",
+    })
+  }
+}
+
+router.post("/phonepe/initiate", authenticate, handlePhonePeInitiation)
+router.post("/", authenticate, handlePhonePeInitiation)
+
+// PhonePe callback webhook (no auth - called by PhonePe)
+router.post("/phonepe/callback", async (req, res) => {
+  try {
+    const merchantTransactionId =
+      req.body?.transactionId ||
+      req.body?.merchantTransactionId ||
+      req.body?.data?.merchantTransactionId ||
+      req.query?.transactionId
+
+    if (!merchantTransactionId) {
+      throw buildHttpError(400, "Missing transactionId")
+    }
+
+    const { order, statusResponse, state } = await resolvePhonePeStatus(merchantTransactionId)
+
+    res.json({
+      success: true,
+      message: "PhonePe callback processed",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        state,
+        statusResponse,
+      },
+    })
+  } catch (error) {
+    const statusCode = error.statusCode || error.response?.status || 500
+    const providerData = error.providerData || error.response?.data
+    console.error("Error processing PhonePe callback:", statusCode, providerData || error)
+    res.status(statusCode).json({
+      success: false,
+      message: providerData?.message || providerData?.code || error.message || "Failed to process callback",
+      providerData,
+    })
+  }
+})
+
+// PhonePe status polling (authenticated)
+router.get("/phonepe/status/:transactionId", authenticate, async (req, res) => {
+  try {
+    const { transactionId } = req.params
+    const { order, statusResponse, state } = await resolvePhonePeStatus(transactionId)
+
+    if (order.customerId.toString() !== req.userId.toString()) {
+      throw buildHttpError(403, "You are not allowed to view this payment status")
     }
 
     res.json({
       success: true,
-      message: "Order placed successfully",
-      data: order,
+      message: "Payment status fetched",
+      data: {
+        order,
+        state,
+        statusResponse,
+      },
     })
   } catch (error) {
-    console.error("Error creating order:", error)
-    res.status(500).json({
+    const statusCode = error.statusCode || error.response?.status || 500
+    const providerData = error.providerData || error.response?.data
+    console.error("Error fetching PhonePe status:", statusCode, providerData || error)
+    res.status(statusCode).json({
       success: false,
-      message: "Internal server error",
-      error: error.message,
+      message: providerData?.message || providerData?.code || error.message || "Failed to fetch payment status",
+      providerData,
     })
   }
 })
@@ -425,6 +614,37 @@ router.get("/", authenticate, async (req, res) => {
     })
   } catch (error) {
     console.error("Error fetching orders:", error)
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    })
+  }
+})
+
+// Get order statistics for dashboard
+router.get("/stats", authenticate, async (req, res) => {
+  try {
+    const totalOrders = await Order.countDocuments({ customerId: req.userId })
+    const pendingOrders = await Order.countDocuments({ customerId: req.userId, status: "pending" })
+    const processingOrders = await Order.countDocuments({ customerId: req.userId, status: "processing" })
+    const shippedOrders = await Order.countDocuments({ customerId: req.userId, status: "shipped" })
+    const deliveredOrders = await Order.countDocuments({ customerId: req.userId, status: "delivered" })
+    const cancelledOrders = await Order.countDocuments({ customerId: req.userId, status: "cancelled" })
+
+    res.json({
+      success: true,
+      data: {
+        total: totalOrders,
+        pending: pendingOrders,
+        processing: processingOrders,
+        shipped: shippedOrders,
+        delivered: deliveredOrders,
+        cancelled: cancelledOrders,
+      },
+    })
+  } catch (error) {
+    console.error("Error fetching order stats:", error)
     res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -471,37 +691,6 @@ router.get("/:id", authenticate, async (req, res) => {
         message: "Invalid order ID",
       })
     }
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    })
-  }
-})
-
-// Get order statistics for dashboard
-router.get("/stats", authenticate, async (req, res) => {
-  try {
-    const totalOrders = await Order.countDocuments({ customerId: req.userId })
-    const pendingOrders = await Order.countDocuments({ customerId: req.userId, status: "pending" })
-    const processingOrders = await Order.countDocuments({ customerId: req.userId, status: "processing" })
-    const shippedOrders = await Order.countDocuments({ customerId: req.userId, status: "shipped" })
-    const deliveredOrders = await Order.countDocuments({ customerId: req.userId, status: "delivered" })
-    const cancelledOrders = await Order.countDocuments({ customerId: req.userId, status: "cancelled" })
-
-    res.json({
-      success: true,
-      data: {
-        total: totalOrders,
-        pending: pendingOrders,
-        processing: processingOrders,
-        shipped: shippedOrders,
-        delivered: deliveredOrders,
-        cancelled: cancelledOrders,
-      },
-    })
-  } catch (error) {
-    console.error("Error fetching order stats:", error)
     res.status(500).json({
       success: false,
       message: "Internal server error",

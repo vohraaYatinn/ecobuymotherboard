@@ -19,7 +19,7 @@ import {
 import { useCart } from "@/lib/cart-context"
 import { MapPin, Plus, Loader2, Check, CheckCircle, Sparkles } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.33:5000"
 
 // All Indian States and Union Territories
 const INDIAN_STATES = [
@@ -86,7 +86,6 @@ export function CheckoutContent() {
   const [error, setError] = useState("")
   const [fetchingAddresses, setFetchingAddresses] = useState(true)
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
-  const [orderId, setOrderId] = useState<string | null>(null)
 
   // Form state for new address
   const [formData, setFormData] = useState({
@@ -196,7 +195,7 @@ export function CheckoutContent() {
 
     try {
       const token = localStorage.getItem("customerToken")
-      const response = await fetch(`${API_URL}/api/orders`, {
+      const response = await fetch(`${API_URL}/api/orders/phonepe/initiate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -204,20 +203,16 @@ export function CheckoutContent() {
         },
         body: JSON.stringify({
           addressId: selectedAddressId,
-          paymentMethod: "cod",
         }),
       })
 
       const data = await response.json()
-      if (data.success) {
-        setOrderId(data.data._id)
-        setShowSuccessAnimation(true)
-        // Show animation for 2 seconds then redirect
-        setTimeout(() => {
-          router.push(`/order-confirmation/${data.data._id}`)
-        }, 2000)
+      if (data.success && data.data?.redirectUrl) {
+        // Redirect to PhonePe payment page
+        window.location.href = data.data.redirectUrl
+        return
       } else {
-        setError(data.message || "Failed to place order")
+        setError(data.message || "Failed to initiate payment")
       }
     } catch (err) {
       console.error("Error placing order:", err)
@@ -228,7 +223,7 @@ export function CheckoutContent() {
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const shipping = 125 // Fixed shipping charges as per requirements
+  const shipping = 1 // Fixed shipping charges as per requirements
   
   // Calculate GST preview based on selected address
   const selectedAddress = addresses.find((addr) => addr._id === selectedAddressId)
@@ -580,9 +575,12 @@ export function CheckoutContent() {
                     Placing Order...
                   </>
                 ) : (
-                  "Place Order"
+                  "Pay with PhonePe"
                 )}
               </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Prepaid only — you will be redirected to PhonePe to complete payment.
+              </p>
             </CardContent>
           </Card>
         </div>

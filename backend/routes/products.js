@@ -14,6 +14,36 @@ const __dirname = path.dirname(__filename)
 
 const router = express.Router()
 
+/**
+ * Resolve a category value (ObjectId or slug/alias) to an active Category doc
+ */
+const resolveCategoryDoc = async (categoryValue) => {
+  if (!categoryValue) return null
+
+  // Already an ObjectId
+  if (mongoose.Types.ObjectId.isValid(categoryValue)) {
+    const categoryDoc = await Category.findById(categoryValue)
+    if (categoryDoc && categoryDoc.isActive) return categoryDoc
+  }
+
+  // Try slug lookups, including legacy aliases
+  const slugValue = categoryValue.toString().trim().toLowerCase()
+  const reverseMap = {
+    "tv-pcb": "television-pcb",
+    "tv-motherboard": "television-motherboard",
+    "tv-inverter": "television-inverter",
+  }
+  const candidateSlugs = [slugValue]
+  if (reverseMap[slugValue]) candidateSlugs.push(reverseMap[slugValue])
+
+  const categoryDoc = await Category.findOne({
+    slug: { $in: candidateSlugs },
+    isActive: true,
+  })
+
+  return categoryDoc || null
+}
+
 // Get all products with filters and pagination
 router.get("/", async (req, res) => {
   try {
@@ -430,15 +460,10 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
       }
     }
 
-    // Validate category if being updated - can be ObjectId or slug
-    if (category) {
-      let categoryDoc
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        categoryDoc = await Category.findById(category)
-      } else {
-        categoryDoc = await Category.findOne({ slug: category, isActive: true })
-      }
-
+    // Validate/normalize category (handles ObjectId, slug, or legacy aliases)
+    const categoryToUse = category !== undefined ? category : product.category
+    if (categoryToUse) {
+      const categoryDoc = await resolveCategoryDoc(categoryToUse)
       if (!categoryDoc || !categoryDoc.isActive) {
         return res.status(400).json({
           success: false,

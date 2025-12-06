@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -43,15 +43,19 @@ interface Order {
   status: string
   paymentMethod: string
   paymentStatus: string
+  paymentGateway?: string
+  paymentTransactionId?: string
   createdAt: string
 }
 
 export function OrderConfirmationContent({ orderId }: { orderId: string }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [showAnimation, setShowAnimation] = useState(true)
+  const [checkingPayment, setCheckingPayment] = useState(false)
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -90,8 +94,11 @@ export function OrderConfirmationContent({ orderId }: { orderId: string }) {
         if (data.success && data.data) {
           console.log("Order fetched successfully:", data.data)
           setOrder(data.data)
-          // Hide animation after 3 seconds
-          setTimeout(() => setShowAnimation(false), 3000)
+          if (data.data.paymentStatus === "paid") {
+            setTimeout(() => setShowAnimation(false), 3000)
+          } else {
+            setShowAnimation(false)
+          }
         } else {
           console.error("Order fetch failed:", data)
           setError(data.message || "Failed to load order details")
@@ -108,6 +115,47 @@ export function OrderConfirmationContent({ orderId }: { orderId: string }) {
 
     fetchOrder()
   }, [orderId, router])
+
+  const verifyPaymentStatus = async (transactionId: string) => {
+    try {
+      setCheckingPayment(true)
+      const token = localStorage.getItem("customerToken")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/orders/phonepe/status/${transactionId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (data.success && data.data?.order) {
+        setOrder(data.data.order)
+        if (data.data.order.paymentStatus === "paid") {
+          setShowAnimation(false)
+        }
+      } else {
+        setError(data.message || "Unable to verify payment status.")
+      }
+    } catch (err: any) {
+      console.error("Error verifying payment status:", err)
+      setError("Payment verification failed. Please contact support with your transaction ID.")
+    } finally {
+      setCheckingPayment(false)
+    }
+  }
+
+  const transactionId = searchParams.get("txn") || order?.paymentTransactionId
+
+  useEffect(() => {
+    if (!transactionId || !order) return
+    if (order.paymentStatus === "paid" || checkingPayment) return
+    verifyPaymentStatus(transactionId)
+  }, [transactionId, order?.paymentStatus, checkingPayment])
 
   if (loading) {
     return (
@@ -144,9 +192,21 @@ export function OrderConfirmationContent({ orderId }: { orderId: string }) {
     )
   }
 
+  const paymentComplete = order.paymentStatus === "paid"
+
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="max-w-3xl mx-auto">
+        {!paymentComplete && (
+          <div className="mb-6 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+            {order.paymentStatus === "failed"
+              ? "Your payment could not be confirmed. If amount is debited, please contact support with the transaction ID below."
+              : checkingPayment
+                ? "Verifying payment with PhonePe. This may take a few seconds..."
+                : "Payment is pending. If you completed payment, please wait while we confirm with PhonePe."}
+          </div>
+        )}
+
         {/* Animated Success Message */}
         <div className="text-center mb-8 relative">
           {showAnimation && (
@@ -184,8 +244,12 @@ export function OrderConfirmationContent({ orderId }: { orderId: string }) {
                 <CheckCircle className="h-12 w-12 text-green-600" />
               </div>
             </div>
-            <h1 className="text-3xl font-bold mb-2">Order Placed Successfully!</h1>
-            <p className="text-muted-foreground">Thank you for your purchase. We've received your order.</p>
+            <h1 className="text-3xl font-bold mb-2">{paymentComplete ? "Payment Confirmed!" : "Order Created"}</h1>
+            <p className="text-muted-foreground">
+              {paymentComplete
+                ? "Thank you for your purchase. We've received your order."
+                : "We have your order. Please complete/confirm the PhonePe payment to proceed."}
+            </p>
           </div>
         </div>
 
@@ -217,6 +281,13 @@ export function OrderConfirmationContent({ orderId }: { orderId: string }) {
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Payment Method</p>
                 <p className="font-medium uppercase">{order.paymentMethod}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Payment Status</p>
+                <p className="font-medium uppercase">{order.paymentStatus}</p>
+                {order.paymentTransactionId && (
+                  <p className="text-xs text-muted-foreground break-all">Txn ID: {order.paymentTransactionId}</p>
+                )}
               </div>
             </div>
           </CardContent>

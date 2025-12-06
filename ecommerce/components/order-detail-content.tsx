@@ -12,7 +12,7 @@ import { Loader2, Package, CheckCircle2, MapPin, Phone, Mail, ArrowLeft, Downloa
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.33:5000"
 
 interface OrderItem {
   productId: {
