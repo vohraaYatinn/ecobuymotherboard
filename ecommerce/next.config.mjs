@@ -3,6 +3,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    turbo: false,
+  },
   images: {
     unoptimized: true,
     remotePatterns: [
