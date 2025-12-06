@@ -10,7 +10,7 @@ Create a `.env.local` file in the `ecommerce` directory:
 
 ```bash
 cd ecommerce
-echo "NEXT_PUBLIC_API_URL=https://api.safartax.com" > .env.local
+echo "NEXT_PUBLIC_API_URL=https://api.elecobuy.com" > .env.local
 ```
 
 Then restart your Next.js dev server.
@@ -52,7 +52,7 @@ echo "Updated API URL to: http://${CURRENT_IP}:5000"
 After updating, verify the connection:
 
 ```bash
-curl https://api.safartax.com/api/health
+curl https://api.elecobuy.com/api/health
 ```
 
 Should return: `{"status":"OK","message":"Server is running"}`

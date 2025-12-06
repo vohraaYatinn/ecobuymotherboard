@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/accordion"
 import { FileText, Loader2, Edit, RotateCcw, Plus, Trash2, GripVertical, Eye, Save, ArrowUp, ArrowDown } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface Section {
   heading: string
