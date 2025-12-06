@@ -45,11 +45,11 @@ const PORT = process.env.PORT || 5000
 connectDB()
 
 // Middleware - CORS configuration
-const BACKEND_URL = process.env.BACKEND_URL || "http://192.168.1.33:5000"
+const BACKEND_URL = process.env.BACKEND_URL || "https://api.safartax.com"
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "http://192.168.1.33:5000",
+  "https://api.safartax.com",
   "https://elecobuy.com",
   "https://www.elecobuy.com",
   "http://127.0.0.1:5000",
@@ -97,7 +97,7 @@ if (process.env.NODE_ENV !== "production") {
       } else if (
         origin === "https://elecobuy.com" ||
         origin === "https://www.elecobuy.com" ||
-        origin === "http://192.168.1.33:5000"
+        origin === "https://api.safartax.com"
       ) {
         callback(null, true)
       } else {

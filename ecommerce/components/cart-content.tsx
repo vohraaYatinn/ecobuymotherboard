@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Trash2, Plus, Minus, ShoppingBag, Loader2 } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.33:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
 
 export function CartContent() {
   const router = useRouter()

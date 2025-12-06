@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.33:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
 
 interface CartItem {
   _id?: string

@@ -27,7 +27,7 @@ FRONTEND_URL=http://localhost:3000
 
 # Backend URL (for network access - Android app development)
 # Replace with your local network IP address
-BACKEND_URL=http://192.168.1.33:5000
+BACKEND_URL=https://api.safartax.com
 
 # Email Configuration (for vendor approval, order confirmations, etc.)
 # SMTP settings - required for sending emails
@@ -66,7 +66,7 @@ Production mode:
 npm start
 ```
 
-The server will run on `http://192.168.1.33:5000` by default.
+The server will run on `https://api.safartax.com` by default.
 
 ## API Endpoints
 
@@ -101,7 +101,7 @@ The server will run on `http://192.168.1.33:5000` by default.
 - `JWT_SECRET` - Secret key for JWT tokens
 - `JWT_EXPIRES_IN` - Token expiration time (default: 7d)
 - `FRONTEND_URL` - Frontend URL for CORS (default: http://localhost:3000)
-- `BACKEND_URL` - Backend URL for network access (default: http://192.168.1.33:5000)
+- `BACKEND_URL` - Backend URL for network access (default: https://api.safartax.com)
 - `MESSAGE_CENTRAL_AUTH_TOKEN` - MessageCentral API auth token
 - `MESSAGE_CENTRAL_CUSTOMER_ID` - MessageCentral customer ID
 - `OTP_DEVELOPMENT` - Set to "true" to bypass MessageCentral (use OTP: 0000)

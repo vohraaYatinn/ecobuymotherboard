@@ -4,12 +4,12 @@
 
 export const API_URL = 
   typeof window !== 'undefined' 
-    ? (process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.33:5000")
-    : (process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.33:5000");
+    ? (process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com")
+    : (process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com");
 
 // For server-side rendering compatibility
 export const getApiUrl = () => {
-  return process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.33:5000";
+  return process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com";
 };
 
 

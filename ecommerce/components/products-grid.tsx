@@ -11,7 +11,7 @@ import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
 import { EnquiryModal } from "@/components/enquiry-modal"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.33:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
 
 interface Product {
   _id: string

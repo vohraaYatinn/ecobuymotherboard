@@ -11,7 +11,7 @@ import { ArrowLeft, Save, Package, User, CreditCard, Truck, Loader2, AlertCircle
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.33:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
 
 interface OrderItem {
   name: string
