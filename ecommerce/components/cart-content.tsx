@@ -30,7 +30,7 @@ export function CartContent() {
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const shipping = subtotal > 500 ? 0 : 50
+  const shipping = 150 // Fixed shipping charges
   const total = subtotal + shipping
 
   const handleCheckout = () => {
@@ -153,9 +153,8 @@ export function CartContent() {
               </div>
               <div className="flex justify-between text-xs sm:text-sm">
                 <span className="text-muted-foreground">Shipping</span>
-                <span className="font-semibold">{shipping === 0 ? "FREE" : `₹${shipping}`}</span>
+                <span className="font-semibold">₹{shipping.toLocaleString()}</span>
               </div>
-              {shipping === 0 && <p className="text-xs text-green-600">You've qualified for free shipping!</p>}
               <div className="border-t border-border pt-2.5 sm:pt-3 flex justify-between">
                 <span className="font-bold text-sm sm:text-base">Total</span>
                 <span className="text-lg sm:text-xl font-bold text-primary">₹{total.toLocaleString()}</span>

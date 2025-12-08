@@ -331,7 +331,7 @@ export function CheckoutContent() {
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const shipping = 1 // Fixed shipping charges as per requirements
+  const shipping = 150 // Fixed shipping charges
   
   // Calculate GST preview based on selected address
   const selectedAddress = addresses.find((addr) => addr._id === selectedAddressId)
