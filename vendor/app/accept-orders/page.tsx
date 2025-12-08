@@ -81,12 +81,19 @@ export default function AcceptOrdersPage() {
     }
   }, [isPlaying])
 
+  const logDebug = (...args: any[]) => {
+    // Centralized debug logger for this screen
+    console.log("[ACCEPT-ORDERS]", ...args)
+  }
+
   const fetchUnassignedOrders = async () => {
     try {
+      logDebug("Fetching unassigned orders...")
       setLoading(true)
       setError("")
       const token = localStorage.getItem("vendorToken")
       if (!token) {
+        logDebug("No vendorToken found, redirecting to login")
         router.push("/login")
         return
       }
@@ -99,6 +106,14 @@ export default function AcceptOrdersPage() {
 
       const data = await response.json()
 
+      logDebug("Unassigned orders response", {
+        status: response.status,
+        ok: response.ok,
+        success: data?.success,
+        count: data?.data?.length,
+        message: data?.message,
+      })
+
       if (!response.ok || !data.success) {
         if (response.status === 401) {
           localStorage.removeItem("vendorToken")
@@ -106,7 +121,7 @@ export default function AcceptOrdersPage() {
           router.push("/login")
           return
         }
-        setError(data.message || "Failed to load orders")
+        setError(data.message || `Failed to load orders (status ${response.status})`)
         return
       }
 
@@ -126,6 +141,7 @@ export default function AcceptOrdersPage() {
     } catch (err) {
       console.error("Error fetching orders:", err)
       setError("Network error. Please try again.")
+      logDebug("Fetch unassigned orders failed", err)
     } finally {
       setLoading(false)
     }
@@ -133,9 +149,11 @@ export default function AcceptOrdersPage() {
 
   const handleAccept = async (orderId: string) => {
     try {
+      logDebug("Accepting order", { orderId })
       setAcceptingOrderId(orderId)
       const token = localStorage.getItem("vendorToken")
       if (!token) {
+        logDebug("No vendorToken found while accepting, redirecting to login")
         router.push("/login")
         return
       }
@@ -150,6 +168,14 @@ export default function AcceptOrdersPage() {
 
       const data = await response.json()
 
+      logDebug("Accept order response", {
+        orderId,
+        status: response.status,
+        ok: response.ok,
+        success: data?.success,
+        message: data?.message,
+      })
+
       if (!response.ok || !data.success) {
         if (response.status === 401) {
           localStorage.removeItem("vendorToken")
@@ -157,7 +183,7 @@ export default function AcceptOrdersPage() {
           router.push("/login")
           return
         }
-        alert(data.message || "Failed to accept order")
+        alert(data.message || `Failed to accept order (status ${response.status})`)
         return
       }
 
@@ -175,6 +201,7 @@ export default function AcceptOrdersPage() {
     } catch (err) {
       console.error("Error accepting order:", err)
       alert("Network error. Please try again.")
+      logDebug("Accept order failed", { orderId, err })
     } finally {
       setAcceptingOrderId(null)
     }

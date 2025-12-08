@@ -63,52 +63,66 @@ router.get("/orders", verifyAdminToken, async (req, res) => {
   }
 })
 
-// Get yesterday's summary
+// Get summary (yesterday's or custom date range)
 router.get("/yesterday-summary", verifyAdminToken, async (req, res) => {
   try {
-    // Get yesterday's date range (start and end of yesterday)
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    yesterday.setHours(0, 0, 0, 0)
+    const { startDate, endDate } = req.query
 
-    const yesterdayEnd = new Date(yesterday)
-    yesterdayEnd.setHours(23, 59, 59, 999)
+    let dateStart, dateEnd, dateLabel
 
-    // Orders received yesterday (created yesterday)
+    if (startDate && endDate) {
+      // Custom date range
+      dateStart = new Date(startDate)
+      dateStart.setHours(0, 0, 0, 0)
+      dateEnd = new Date(endDate)
+      dateEnd.setHours(23, 59, 59, 999)
+      dateLabel = `${startDate} to ${endDate}`
+    } else {
+      // Default: yesterday's date range
+      const yesterday = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      yesterday.setHours(0, 0, 0, 0)
+      dateStart = yesterday
+      dateEnd = new Date(yesterday)
+      dateEnd.setHours(23, 59, 59, 999)
+      dateLabel = yesterday.toISOString().split("T")[0]
+    }
+
+    // Orders received in date range (created in range)
     const ordersReceived = await Order.countDocuments({
       createdAt: {
-        $gte: yesterday,
-        $lte: yesterdayEnd,
+        $gte: dateStart,
+        $lte: dateEnd,
       },
     })
 
-    // Orders dispatched yesterday (status changed to shipped yesterday)
-    // Note: We'll check orders that were shipped yesterday based on updatedAt
+    // Orders dispatched in date range (status changed to shipped in range)
+    // Note: We'll check orders that were shipped in range based on updatedAt
     // This is an approximation - ideally you'd track status change timestamps
     const ordersDispatched = await Order.countDocuments({
       status: "shipped",
       updatedAt: {
-        $gte: yesterday,
-        $lte: yesterdayEnd,
+        $gte: dateStart,
+        $lte: dateEnd,
       },
     })
 
-    // Orders pending (status is pending)
+    // Orders pending (status is pending) - always current, not date filtered
     const ordersPending = await Order.countDocuments({
       status: "pending",
     })
 
-    // Orders delivered (status is delivered)
+    // Orders delivered (status is delivered) - always current, not date filtered
     const ordersDelivered = await Order.countDocuments({
       status: "delivered",
     })
 
-    // Additional: Orders that were delivered yesterday
+    // Additional: Orders that were delivered in date range
     const ordersDeliveredYesterday = await Order.countDocuments({
       status: "delivered",
       updatedAt: {
-        $gte: yesterday,
-        $lte: yesterdayEnd,
+        $gte: dateStart,
+        $lte: dateEnd,
       },
     })
 
@@ -120,14 +134,17 @@ router.get("/yesterday-summary", verifyAdminToken, async (req, res) => {
         ordersPending,
         ordersDelivered,
         ordersDeliveredYesterday,
-        date: yesterday.toISOString().split("T")[0],
+        date: dateLabel,
+        isDateRange: !!(startDate && endDate),
+        startDate: startDate || null,
+        endDate: endDate || null,
       },
     })
   } catch (error) {
-    console.error("Get yesterday summary error:", error)
+    console.error("Get summary error:", error)
     res.status(500).json({
       success: false,
-      message: "Error fetching yesterday summary",
+      message: "Error fetching summary",
       error: error.message,
     })
   }

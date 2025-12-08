@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Save, Package, User, CreditCard, Truck, Loader2, AlertCircle, RefreshCw, MapPin, Download } from "lucide-react"
+import { ArrowLeft, Save, Package, User, CreditCard, Truck, Loader2, AlertCircle, MapPin, Download, ExternalLink } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface OrderItem {
   name: string
@@ -83,8 +83,6 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const [selectedVendor, setSelectedVendor] = useState("")
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [awbNumber, setAwbNumber] = useState("")
-  const [trackingData, setTrackingData] = useState<any>(null)
-  const [trackingLoading, setTrackingLoading] = useState(false)
   const [awbSaving, setAwbSaving] = useState(false)
 
   useEffect(() => {
@@ -137,7 +135,6 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
       setOrder(data.data)
       setSelectedStatus(data.data.status)
       setAwbNumber(data.data.awbNumber || "")
-      setTrackingData(data.data.dtdcTrackingData || null)
       if (data.data.vendorId && typeof data.data.vendorId === "object") {
         setSelectedVendor(data.data.vendorId._id)
       }
@@ -266,40 +263,9 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
     }
   }
 
-  const handleFetchTracking = async () => {
-    if (!order || !order.awbNumber) {
-      alert("Please add an AWB number first")
-      return
-    }
-
-    try {
-      setTrackingLoading(true)
-      const token = localStorage.getItem("adminToken")
-      if (!token) return
-
-      const response = await fetch(`${API_URL}/api/dtdc/order/${orderId}/track`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || "Failed to fetch tracking data")
-      }
-
-      const data = await response.json()
-      setTrackingData(data.data.tracking)
-      await fetchOrder()
-      alert("Tracking data updated successfully!")
-    } catch (err) {
-      console.error("Error fetching tracking:", err)
-      alert(err instanceof Error ? err.message : "Failed to fetch tracking data")
-    } finally {
-      setTrackingLoading(false)
-    }
+  const getDTDCTrackingUrl = (awb: string) => {
+    // DTDC tracking URL format
+    return `https://www.dtdc.com/in/tracking/?awb=${encodeURIComponent(awb)}`
   }
 
   // Helper functions to get data
@@ -616,122 +582,31 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                 </Button>
               </div>
               {order.awbNumber && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Current: {order.awbNumber}
-                </p>
-              )}
-              {order.awbNumber && (
-                <Button
-                  onClick={handleFetchTracking}
-                  disabled={trackingLoading}
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 w-full"
-                >
-                  {trackingLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Fetching...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Fetch Tracking Data
-                    </>
-                  )}
-                </Button>
+                <div className="mt-2 space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Current: {order.awbNumber}
+                  </p>
+                  <a
+                    href={getDTDCTrackingUrl(order.awbNumber)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full"
+                  >
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                    >
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Track on DTDC Website
+                    </Button>
+                  </a>
+                </div>
               )}
             </div>
           </CardContent>
         </Card>
 
-        {/* DTDC Tracking Information */}
-        {trackingData && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                DTDC Tracking Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {trackingData.success !== false ? (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-xs text-muted-foreground">AWB Number</Label>
-                      <p className="text-sm font-medium">{trackingData.awbNumber || order.awbNumber}</p>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Status</Label>
-                      <p className="text-sm font-medium capitalize">{trackingData.status || "N/A"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Origin</Label>
-                      <p className="text-sm">{trackingData.origin || "N/A"}</p>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Destination</Label>
-                      <p className="text-sm">{trackingData.destination || "N/A"}</p>
-                    </div>
-                    {trackingData.statusDate && (
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Status Date</Label>
-                        <p className="text-sm">
-                          {trackingData.statusDate} {trackingData.statusTime ? `at ${trackingData.statusTime}` : ""}
-                        </p>
-                      </div>
-                    )}
-                    {trackingData.weight && (
-                      <div>
-                        <Label className="text-xs text-muted-foreground">Weight</Label>
-                        <p className="text-sm">{trackingData.weight} {trackingData.weightUnit || "kg"}</p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {trackingData.remarks && (
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Remarks</Label>
-                      <p className="text-sm">{trackingData.remarks}</p>
-                    </div>
-                  )}
-
-                  {trackingData.trackingDetails && trackingData.trackingDetails.length > 0 && (
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-2 block">Tracking History</Label>
-                      <div className="space-y-2 max-h-60 overflow-y-auto">
-                        {trackingData.trackingDetails.map((detail: any, idx: number) => (
-                          <div key={idx} className="border-l-2 border-primary pl-3 py-2">
-                            <p className="text-sm font-medium">{detail.action}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {detail.actionDate} {detail.actionTime ? `at ${detail.actionTime}` : ""}
-                            </p>
-                            {detail.origin && detail.destination && (
-                              <p className="text-xs text-muted-foreground">
-                                {detail.origin} → {detail.destination}
-                              </p>
-                            )}
-                            {detail.remarks && (
-                              <p className="text-xs text-muted-foreground mt-1">{detail.remarks}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    {trackingData.error || "Failed to retrieve tracking information"}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       {/* Order Timeline */}

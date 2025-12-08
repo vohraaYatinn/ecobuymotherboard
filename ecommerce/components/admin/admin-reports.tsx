@@ -21,7 +21,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface YesterdaySummary {
   ordersReceived: number
@@ -129,9 +129,15 @@ export function AdminReports() {
         params.append("months", "12")
       }
 
+      // Build summary URL with date range if applicable
+      let summaryUrl = `${API_URL}/api/admin/reports/yesterday-summary`
+      if (useDateRange && startDate && endDate) {
+        summaryUrl += `?startDate=${startDate}&endDate=${endDate}`
+      }
+
       // Fetch all data in parallel
       const [summaryRes, dailyRes, weeklyRes, monthlyRes] = await Promise.all([
-        fetch(`${API_URL}/api/admin/reports/yesterday-summary`, {
+        fetch(summaryUrl, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`${API_URL}/api/admin/reports/daily-orders?${useDateRange && startDate && endDate ? `startDate=${startDate}&endDate=${endDate}` : "days=30"}`, {
@@ -461,7 +467,7 @@ export function AdminReports() {
         </CardContent>
       </Card>
 
-      {/* Yesterday's Summary */}
+      {/* Summary Cards */}
       {yesterdaySummary && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
@@ -471,7 +477,11 @@ export function AdminReports() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{yesterdaySummary.ordersReceived}</div>
-              <p className="text-xs text-muted-foreground">Yesterday ({yesterdaySummary.date})</p>
+              <p className="text-xs text-muted-foreground">
+                {dateRangeApplied && yesterdaySummary.isDateRange
+                  ? `In date range (${yesterdaySummary.date})`
+                  : `Yesterday (${yesterdaySummary.date})`}
+              </p>
             </CardContent>
           </Card>
 
@@ -482,7 +492,11 @@ export function AdminReports() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{yesterdaySummary.ordersDispatched}</div>
-              <p className="text-xs text-muted-foreground">Shipped yesterday</p>
+              <p className="text-xs text-muted-foreground">
+                {dateRangeApplied && yesterdaySummary.isDateRange
+                  ? `Shipped in date range`
+                  : `Shipped yesterday`}
+              </p>
             </CardContent>
           </Card>
 
@@ -505,7 +519,9 @@ export function AdminReports() {
             <CardContent>
               <div className="text-2xl font-bold">{yesterdaySummary.ordersDelivered}</div>
               <p className="text-xs text-muted-foreground">
-                {yesterdaySummary.ordersDeliveredYesterday} delivered yesterday
+                {dateRangeApplied && yesterdaySummary.isDateRange
+                  ? `${yesterdaySummary.ordersDeliveredYesterday} delivered in date range`
+                  : `${yesterdaySummary.ordersDeliveredYesterday} delivered yesterday`}
               </p>
             </CardContent>
           </Card>

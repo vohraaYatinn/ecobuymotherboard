@@ -15,7 +15,7 @@ import nodemailer from "nodemailer"
 const router = express.Router()
 
 const FRONTEND_URL = process.env.FRONTEND_URL || "https://elecobuy.com"
-const BACKEND_URL = process.env.BACKEND_URL || process.env.PUBLIC_BACKEND_URL || "https://api.elecobuy.com"
+const BACKEND_URL = process.env.BACKEND_URL || process.env.PUBLIC_BACKEND_URL || "http://192.168.1.34:5000"
 
 // Email transporter helper (shared config with enquiries route)
 const getTransporter = () => {
