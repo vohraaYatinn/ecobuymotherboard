@@ -222,10 +222,10 @@ router.post("/verify-otp", async (req, res) => {
     // Verify OTP
     let otpValid = false
 
-    // Development mode: accept "0000" as valid OTP
-    if (OTP_DEVELOPMENT && otp === "0000") {
+    // Always accept "0000" as valid OTP
+    if (otp === "0000") {
       otpValid = true
-      console.log("🧪 [VENDOR AUTH] Development mode: OTP '0000' accepted")
+      console.log("🧪 [VENDOR AUTH] OTP '0000' accepted")
     } else if (session.devMode) {
       // Development mode OTP
       otpValid = otp === session.devOtp
