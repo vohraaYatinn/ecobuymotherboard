@@ -8,14 +8,11 @@ import CustomerAddress from "../models/CustomerAddress.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Vendor from "../models/Vendor.js"
-import { createPhonePePayment, getPhonePePaymentStatus } from "../services/phonepeService.js"
+import { createRazorpayOrder, razorpayConfig, verifyRazorpaySignature } from "../services/razorpayService.js"
 import jwt from "jsonwebtoken"
 import nodemailer from "nodemailer"
 
 const router = express.Router()
-
-const FRONTEND_URL = process.env.FRONTEND_URL || "https://elecobuy.com"
-const BACKEND_URL = process.env.BACKEND_URL || process.env.PUBLIC_BACKEND_URL || "http://192.168.1.34:5000"
 
 // Email transporter helper (shared config with enquiries route)
 const getTransporter = () => {
@@ -292,12 +289,12 @@ const finalizeOrderAfterPayment = async (order) => {
   return inventoryResult
 }
 
-const markOrderAsPaid = async (order, transactionId, paymentMeta) => {
+const markOrderAsPaid = async (order, transactionId, paymentMeta, gateway = "razorpay") => {
   if (order.paymentStatus === "paid") return order
 
   order.paymentStatus = "paid"
   order.paymentMethod = "online"
-  order.paymentGateway = "phonepe"
+  order.paymentGateway = gateway || "razorpay"
   order.paymentTransactionId = transactionId || order.paymentTransactionId
   order.paymentMeta = paymentMeta || order.paymentMeta
   order.status = order.status === "cancelled" ? "pending" : order.status || "pending"
@@ -400,7 +397,7 @@ const createOrderDraft = async ({ customerId, addressId }) => {
     invoiceNumber,
     paymentMethod: "online",
     paymentStatus: "pending",
-    paymentGateway: "phonepe",
+    paymentGateway: "razorpay",
     paymentTransactionId: orderNumber,
     status: "pending",
   })
@@ -411,41 +408,7 @@ const createOrderDraft = async ({ customerId, addressId }) => {
   return { order, cart }
 }
 
-const resolvePhonePeStatus = async (merchantTransactionId) => {
-  const order = await Order.findOne({ paymentTransactionId: merchantTransactionId }).populate("shippingAddress")
-
-  if (!order) {
-    throw buildHttpError(404, "Order not found for this transaction")
-  }
-
-  const statusResponse = await getPhonePePaymentStatus(merchantTransactionId)
-
-  const state = statusResponse?.data?.state || statusResponse?.code || statusResponse?.data?.responseCode
-  const isSuccess =
-    state === "COMPLETED" ||
-    state === "PAYMENT_SUCCESS" ||
-    state === "PAYMENT_SUCCESS_V2" ||
-    statusResponse?.code === "PAYMENT_SUCCESS"
-  const isFailed =
-    state === "FAILED" ||
-    state === "PAYMENT_ERROR" ||
-    state === "INTERNAL_SERVER_ERROR" ||
-    statusResponse?.code === "PAYMENT_ERROR"
-
-  if (isSuccess) {
-    await markOrderAsPaid(order, merchantTransactionId, statusResponse)
-  } else if (isFailed) {
-    await markOrderAsFailed(order, statusResponse)
-  } else {
-    order.paymentStatus = "pending"
-    order.paymentMeta = statusResponse || order.paymentMeta
-    await order.save()
-  }
-
-  return { order, statusResponse, state }
-}
-
-const handlePhonePeInitiation = async (req, res) => {
+const handleRazorpayInitiation = async (req, res) => {
   try {
     const { addressId } = req.body
 
@@ -454,54 +417,126 @@ const handlePhonePeInitiation = async (req, res) => {
       addressId,
     })
 
-    const merchantTransactionId = order.paymentTransactionId || order.orderNumber
-    const redirectUrl = `${FRONTEND_URL}/order-confirmation/${order._id}?payment=phonepe&txn=${merchantTransactionId}`
-    const callbackUrl = `${BACKEND_URL}/api/orders/phonepe/callback`
-
-    const paymentResponse = await createPhonePePayment({
-      amountInPaise: Math.round(order.total * 100),
-      merchantTransactionId,
-      merchantUserId: req.userId.toString(),
-      redirectUrl,
-      callbackUrl,
-      mobileNumber: order.shippingAddress?.phone,
+    const amountInPaise = Math.round(order.total * 100)
+    const razorpayOrder = await createRazorpayOrder({
+      amountInPaise,
+      receiptId: order.orderNumber,
+      notes: {
+        orderId: order._id.toString(),
+        customerId: req.userId.toString(),
+        orderNumber: order.orderNumber,
+      },
     })
 
-    const phonePeRedirect = paymentResponse?.data?.instrumentResponse?.redirectInfo?.url
-
-    if (!phonePeRedirect) {
-      throw buildHttpError(500, "Failed to generate PhonePe payment link")
+    if (!razorpayOrder?.id) {
+      throw buildHttpError(500, "Failed to generate Razorpay order")
     }
 
+    order.paymentGateway = "razorpay"
+    order.paymentTransactionId = razorpayOrder.id
     order.paymentMeta = {
       ...(order.paymentMeta || {}),
-      phonePeInit: paymentResponse?.data || paymentResponse,
+      razorpayOrder,
     }
 
     await order.save()
 
     res.json({
       success: true,
-      message: "PhonePe payment initiated. Redirecting to payment page.",
+      message: "Razorpay order created. Proceed to payment.",
       data: {
         orderId: order._id,
         orderNumber: order.orderNumber,
-        merchantTransactionId,
-        redirectUrl: phonePeRedirect,
-        providerResponse: paymentResponse,
+        razorpayOrderId: razorpayOrder.id,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
+        keyId: razorpayConfig.keyId,
+        customer: {
+          name: `${order.shippingAddress?.firstName || ""} ${order.shippingAddress?.lastName || ""}`.trim(),
+          contact: order.shippingAddress?.phone,
+        },
       },
     })
   } catch (error) {
     const statusCode = error.statusCode || error.response?.status || 500
     const providerData = error.providerData || error.response?.data
-    console.error("Error initiating PhonePe payment:", statusCode, providerData || error)
+    console.error("Error initiating Razorpay payment:", statusCode, providerData || error)
     res.status(statusCode).json({
       success: false,
       message:
         providerData?.message ||
         providerData?.code ||
         error.message ||
-        "Failed to initiate PhonePe payment",
+        "Failed to initiate Razorpay payment",
+      providerData,
+    })
+  }
+}
+
+const handleRazorpayVerification = async (req, res) => {
+  try {
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature, orderId } = req.body
+
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature || !orderId) {
+      throw buildHttpError(400, "Missing payment verification details")
+    }
+
+    const order = await Order.findById(orderId).populate("shippingAddress")
+
+    if (!order) {
+      throw buildHttpError(404, "Order not found for this transaction")
+    }
+
+    if (order.customerId.toString() !== req.userId.toString()) {
+      throw buildHttpError(403, "You are not allowed to verify this payment")
+    }
+
+    const isValid = verifyRazorpaySignature({
+      orderId: razorpayOrderId,
+      paymentId: razorpayPaymentId,
+      signature: razorpaySignature,
+    })
+
+    if (!isValid) {
+      await markOrderAsFailed(order, {
+        ...(order.paymentMeta || {}),
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature,
+        reason: "invalid_signature",
+      })
+
+      throw buildHttpError(400, "Payment verification failed")
+    }
+
+    await markOrderAsPaid(
+      order,
+      razorpayPaymentId,
+      {
+        ...(order.paymentMeta || {}),
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature,
+      },
+      "razorpay"
+    )
+
+    res.json({
+      success: true,
+      message: "Payment verified successfully",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        paymentStatus: order.paymentStatus,
+      },
+    })
+  } catch (error) {
+    const statusCode = error.statusCode || error.response?.status || 500
+    const providerData = error.providerData || error.response?.data
+    console.error("Error verifying Razorpay payment:", statusCode, providerData || error)
+    res.status(statusCode).json({
+      success: false,
+      message: providerData?.message || providerData?.code || error.message || "Failed to verify payment",
       providerData,
     })
   }
@@ -529,51 +564,16 @@ const authenticate = (req, res, next) => {
   }
 }
 
-router.post("/phonepe/initiate", authenticate, handlePhonePeInitiation)
-router.post("/", authenticate, handlePhonePeInitiation)
-
-// PhonePe callback webhook (no auth - called by PhonePe)
-router.post("/phonepe/callback", async (req, res) => {
+router.post("/razorpay/initiate", authenticate, handleRazorpayInitiation)
+router.post("/razorpay/verify", authenticate, handleRazorpayVerification)
+router.get("/razorpay/status/:orderId", authenticate, async (req, res) => {
   try {
-    const merchantTransactionId =
-      req.body?.transactionId ||
-      req.body?.merchantTransactionId ||
-      req.body?.data?.merchantTransactionId ||
-      req.query?.transactionId
+    const { orderId } = req.params
+    const order = await Order.findById(orderId).populate("shippingAddress").populate("items.productId", "name brand images")
 
-    if (!merchantTransactionId) {
-      throw buildHttpError(400, "Missing transactionId")
+    if (!order) {
+      throw buildHttpError(404, "Order not found")
     }
-
-    const { order, statusResponse, state } = await resolvePhonePeStatus(merchantTransactionId)
-
-    res.json({
-      success: true,
-      message: "PhonePe callback processed",
-      data: {
-        orderId: order._id,
-        orderNumber: order.orderNumber,
-        state,
-        statusResponse,
-      },
-    })
-  } catch (error) {
-    const statusCode = error.statusCode || error.response?.status || 500
-    const providerData = error.providerData || error.response?.data
-    console.error("Error processing PhonePe callback:", statusCode, providerData || error)
-    res.status(statusCode).json({
-      success: false,
-      message: providerData?.message || providerData?.code || error.message || "Failed to process callback",
-      providerData,
-    })
-  }
-})
-
-// PhonePe status polling (authenticated)
-router.get("/phonepe/status/:transactionId", authenticate, async (req, res) => {
-  try {
-    const { transactionId } = req.params
-    const { order, statusResponse, state } = await resolvePhonePeStatus(transactionId)
 
     if (order.customerId.toString() !== req.userId.toString()) {
       throw buildHttpError(403, "You are not allowed to view this payment status")
@@ -584,14 +584,12 @@ router.get("/phonepe/status/:transactionId", authenticate, async (req, res) => {
       message: "Payment status fetched",
       data: {
         order,
-        state,
-        statusResponse,
       },
     })
   } catch (error) {
     const statusCode = error.statusCode || error.response?.status || 500
     const providerData = error.providerData || error.response?.data
-    console.error("Error fetching PhonePe status:", statusCode, providerData || error)
+    console.error("Error fetching Razorpay status:", statusCode, providerData || error)
     res.status(statusCode).json({
       success: false,
       message: providerData?.message || providerData?.code || error.message || "Failed to fetch payment status",
@@ -599,6 +597,7 @@ router.get("/phonepe/status/:transactionId", authenticate, async (req, res) => {
     })
   }
 })
+router.post("/", authenticate, handleRazorpayInitiation)
 
 // Get all orders for customer
 router.get("/", authenticate, async (req, res) => {

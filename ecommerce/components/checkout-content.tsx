@@ -76,6 +76,33 @@ interface Address {
   isDefault: boolean
 }
 
+declare global {
+  interface Window {
+    Razorpay?: any
+  }
+}
+
+const loadRazorpayScript = () =>
+  new Promise<boolean>((resolve, reject) => {
+    if (typeof window === "undefined") {
+      reject(new Error("Window is not available"))
+      return
+    }
+
+    const existingScript = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')
+    if (existingScript) {
+      resolve(true)
+      return
+    }
+
+    const script = document.createElement("script")
+    script.src = "https://checkout.razorpay.com/v1/checkout.js"
+    script.async = true
+    script.onload = () => resolve(true)
+    script.onerror = () => reject(new Error("Failed to load Razorpay SDK"))
+    document.body.appendChild(script)
+  })
+
 export function CheckoutContent() {
   const router = useRouter()
   const { cartItems, loading: cartLoading } = useCart()
@@ -184,6 +211,44 @@ export function CheckoutContent() {
     }
   }
 
+  const verifyPaymentOnBackend = async (payload: {
+    orderId: string
+    razorpayOrderId: string
+    razorpayPaymentId: string
+    razorpaySignature: string
+  }) => {
+    try {
+      const token = localStorage.getItem("customerToken")
+      if (!token) {
+        setError("Please log in again to verify your payment.")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/orders/razorpay/verify`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setShowSuccessAnimation(true)
+        setTimeout(() => {
+          router.push(`/order-confirmation/${payload.orderId}?payment=razorpay&txn=${payload.razorpayPaymentId}`)
+        }, 800)
+      } else {
+        setError(data.message || "Unable to confirm payment. Please contact support.")
+      }
+    } catch (err) {
+      console.error("Error verifying payment:", err)
+      setError("Payment verification failed. Please contact support with your payment ID.")
+    }
+  }
+
   const handlePlaceOrder = async () => {
     if (!selectedAddressId) {
       setError("Please select or add a delivery address")
@@ -195,7 +260,7 @@ export function CheckoutContent() {
 
     try {
       const token = localStorage.getItem("customerToken")
-      const response = await fetch(`${API_URL}/api/orders/phonepe/initiate`, {
+      const response = await fetch(`${API_URL}/api/orders/razorpay/initiate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -207,19 +272,62 @@ export function CheckoutContent() {
       })
 
       const data = await response.json()
-      if (data.success && data.data?.redirectUrl) {
-        // Redirect to PhonePe payment page
-        window.location.href = data.data.redirectUrl
+
+      if (data.success && data.data?.razorpayOrderId) {
+        const selectedAddress = addresses.find((addr) => addr._id === selectedAddressId)
+
+        await loadRazorpayScript()
+
+        if (!window.Razorpay) {
+          throw new Error("Razorpay SDK not available")
+        }
+
+        const razorpay = new window.Razorpay({
+          key: data.data.keyId,
+          amount: data.data.amount,
+          currency: data.data.currency || "INR",
+          name: "Elecobuy",
+          description: `Order ${data.data.orderNumber}`,
+          order_id: data.data.razorpayOrderId,
+          prefill: {
+            name: selectedAddress
+              ? `${selectedAddress.firstName} ${selectedAddress.lastName}`.trim()
+              : data.data.customer?.name,
+            contact: selectedAddress?.phone || data.data.customer?.contact,
+          },
+          notes: {
+            orderId: data.data.orderId,
+            orderNumber: data.data.orderNumber,
+          },
+          handler: async (response: {
+            razorpay_payment_id: string
+            razorpay_order_id: string
+            razorpay_signature: string
+          }) => {
+            await verifyPaymentOnBackend({
+              orderId: data.data.orderId,
+              razorpayOrderId: response.razorpay_order_id,
+              razorpayPaymentId: response.razorpay_payment_id,
+              razorpaySignature: response.razorpay_signature,
+            })
+          },
+        })
+
+        razorpay.on("payment.failed", (response: any) => {
+          setError(response?.error?.description || "Payment failed. Please try again.")
+        })
+
+        razorpay.open()
+        setLoading(false)
         return
-      } else {
-        setError(data.message || "Failed to initiate payment")
       }
+
+      setError(data.message || "Failed to initiate payment")
     } catch (err) {
       console.error("Error placing order:", err)
       setError("Network error. Please try again.")
-    } finally {
-      setLoading(false)
     }
+    setLoading(false)
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)

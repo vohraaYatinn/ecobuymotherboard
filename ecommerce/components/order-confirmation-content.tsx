@@ -116,7 +116,7 @@ export function OrderConfirmationContent({ orderId }: { orderId: string }) {
     fetchOrder()
   }, [orderId, router])
 
-  const verifyPaymentStatus = async (transactionId: string) => {
+  const verifyPaymentStatus = async () => {
     try {
       setCheckingPayment(true)
       const token = localStorage.getItem("customerToken")
@@ -125,7 +125,7 @@ export function OrderConfirmationContent({ orderId }: { orderId: string }) {
         return
       }
 
-      const response = await fetch(`${API_URL}/api/orders/phonepe/status/${transactionId}`, {
+      const response = await fetch(`${API_URL}/api/orders/razorpay/status/${orderId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -149,13 +149,11 @@ export function OrderConfirmationContent({ orderId }: { orderId: string }) {
     }
   }
 
-  const transactionId = searchParams.get("txn") || order?.paymentTransactionId
-
   useEffect(() => {
-    if (!transactionId || !order) return
+    if (!order) return
     if (order.paymentStatus === "paid" || checkingPayment) return
-    verifyPaymentStatus(transactionId)
-  }, [transactionId, order?.paymentStatus, checkingPayment])
+    verifyPaymentStatus()
+  }, [order?.paymentStatus, checkingPayment])
 
   if (loading) {
     return (
@@ -202,8 +200,8 @@ export function OrderConfirmationContent({ orderId }: { orderId: string }) {
             {order.paymentStatus === "failed"
               ? "Your payment could not be confirmed. If amount is debited, please contact support with the transaction ID below."
               : checkingPayment
-                ? "Verifying payment with PhonePe. This may take a few seconds..."
-                : "Payment is pending. If you completed payment, please wait while we confirm with PhonePe."}
+                ? "Verifying payment with Razorpay. This may take a few seconds..."
+                : "Payment is pending. If you completed payment, please wait while we confirm with Razorpay."}
           </div>
         )}
 
