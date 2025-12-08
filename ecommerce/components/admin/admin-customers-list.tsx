@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Search, Eye, Download, Filter, Loader2, AlertCircle, ChevronLeft, ChevronRight, FileDown } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface Customer {
   _id: string
