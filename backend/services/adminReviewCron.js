@@ -32,8 +32,8 @@ const getTransporter = () => {
  * Changes status to "Admin Review Required" and notifies admin
  */
 export function startAdminReviewCron() {
-  // Run every minute
-  cron.schedule("* * * * *", async () => {
+  // Run every 30 minutes
+  cron.schedule("*/30 * * * *", async () => {
     try {
       const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000) // 30 minutes ago
 
@@ -57,6 +57,14 @@ export function startAdminReviewCron() {
       )
 
       for (const order of unacceptedOrders) {
+        // Skip orders already escalated to admin review, in case of overlap
+        if (order.status === "admin_review_required") {
+          console.log(
+            `ℹ️ [AdminReviewCron] Skipping order ${order.orderNumber} already marked for admin review`
+          )
+          continue
+        }
+
         try {
           // Change status to "Admin Review Required"
           order.status = "admin_review_required"
@@ -259,6 +267,6 @@ export function startAdminReviewCron() {
     }
   })
 
-  console.log("✅ [AdminReviewCron] Cron job started - checking every minute for unaccepted orders (30 min threshold)")
+  console.log("✅ [AdminReviewCron] Cron job started - checking every 30 minutes for unaccepted orders (30 min threshold)")
 }
 

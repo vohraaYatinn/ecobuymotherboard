@@ -27,6 +27,52 @@ const vendorSchema = new mongoose.Schema(
       required: [true, "Phone number is required"],
       trim: true,
     },
+    gstNumber: {
+      type: String,
+      trim: true,
+    },
+    bankAccountNumber: {
+      type: String,
+      trim: true,
+    },
+    ifscCode: {
+      type: String,
+      trim: true,
+    },
+    pan: {
+      type: String,
+      trim: true,
+    },
+    tan: {
+      type: String,
+      trim: true,
+    },
+    referralCode: {
+      type: String,
+      trim: true,
+    },
+    documents: [
+      {
+        url: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        originalName: {
+          type: String,
+          trim: true,
+        },
+        mimetype: {
+          type: String,
+          trim: true,
+        },
+        size: Number,
+        uploadedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     status: {
       type: String,
       enum: ["pending", "approved", "rejected", "suspended"],

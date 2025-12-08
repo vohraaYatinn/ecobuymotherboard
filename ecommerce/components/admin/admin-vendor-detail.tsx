@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Save, Store, MapPin, Package, CheckCircle, Loader2, Smartphone } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface AdminVendorDetailProps {
   vendorId: string
@@ -24,6 +24,13 @@ interface Vendor {
   email: string
   phone: string
   status: string
+  gstNumber?: string
+  bankAccountNumber?: string
+  ifscCode?: string
+  pan?: string
+  tan?: string
+  referralCode?: string
+  documents?: VendorDocument[]
   address: {
     firstName: string
     lastName: string
@@ -47,6 +54,14 @@ interface Vendor {
   }>
 }
 
+interface VendorDocument {
+  url: string
+  originalName?: string
+  mimetype?: string
+  size?: number
+  uploadedAt?: string
+}
+
 export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -68,6 +83,12 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
     state: "",
     postcode: "",
     country: "india",
+    gstNumber: "",
+    bankAccountNumber: "",
+    ifscCode: "",
+    pan: "",
+    tan: "",
+    referralCode: "",
   })
 
   useEffect(() => {
@@ -93,6 +114,12 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
             state: vendorData.address?.state || "",
             postcode: vendorData.address?.postcode || "",
             country: vendorData.address?.country || "india",
+            gstNumber: vendorData.gstNumber || "",
+            bankAccountNumber: vendorData.bankAccountNumber || "",
+            ifscCode: vendorData.ifscCode || "",
+            pan: vendorData.pan || "",
+            tan: vendorData.tan || "",
+            referralCode: vendorData.referralCode || "",
           })
         } else {
           setError(data.message || "Vendor not found")
@@ -135,6 +162,12 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
         email: formData.email,
         phone: formData.phone,
         status: formData.status,
+      gstNumber: formData.gstNumber,
+      bankAccountNumber: formData.bankAccountNumber,
+      ifscCode: formData.ifscCode,
+      pan: formData.pan,
+      tan: formData.tan,
+      referralCode: formData.referralCode,
         address: {
           firstName: formData.firstName,
           lastName: formData.lastName,
@@ -183,6 +216,12 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
           state: refreshData.data.address?.state || "",
           postcode: refreshData.data.address?.postcode || "",
           country: refreshData.data.address?.country || "india",
+          gstNumber: refreshData.data.gstNumber || "",
+          bankAccountNumber: refreshData.data.bankAccountNumber || "",
+          ifscCode: refreshData.data.ifscCode || "",
+          pan: refreshData.data.pan || "",
+          tan: refreshData.data.tan || "",
+          referralCode: refreshData.data.referralCode || "",
         })
       }
 
@@ -212,6 +251,11 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
       suspended: "Suspended",
     }
     return statusMap[status] || status
+  }
+
+  const getDocumentUrl = (doc: VendorDocument) => {
+    if (!doc.url) return "#"
+    return doc.url.startsWith("http") ? doc.url : `${API_URL}${doc.url}`
   }
 
   const formatDate = (dateString: string) => {
@@ -351,6 +395,86 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
             </CardContent>
           </Card>
 
+          {/* Compliance & Banking */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Store className="h-5 w-5" />
+                Compliance & Banking
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="gstNumber">GST No *</Label>
+                  <Input
+                    id="gstNumber"
+                    name="gstNumber"
+                    value={formData.gstNumber}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pan">PAN *</Label>
+                  <Input
+                    id="pan"
+                    name="pan"
+                    value={formData.pan}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="bankAccountNumber">Bank Account Number *</Label>
+                  <Input
+                    id="bankAccountNumber"
+                    name="bankAccountNumber"
+                    value={formData.bankAccountNumber}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="ifscCode">IFSC Code *</Label>
+                  <Input
+                    id="ifscCode"
+                    name="ifscCode"
+                    value={formData.ifscCode}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="tan">TAN</Label>
+                  <Input
+                    id="tan"
+                    name="tan"
+                    value={formData.tan}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    placeholder="Optional"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="referralCode">Referral Code</Label>
+                  <Input
+                    id="referralCode"
+                    name="referralCode"
+                    value={formData.referralCode}
+                    onChange={handleChange}
+                    className="mt-1.5"
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Address Information */}
           <Card>
             <CardHeader>
@@ -454,6 +578,45 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Documents */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Store className="h-5 w-5" />
+                Documents
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {vendor?.documents && vendor.documents.length > 0 ? (
+                vendor.documents.map((doc, idx) => (
+                  <div key={`${doc.url}-${idx}`} className="flex items-center justify-between rounded border p-3 text-sm">
+                    <div className="flex flex-col">
+                      <span className="font-medium">{doc.originalName || "Document"}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {doc.mimetype} · {doc.size ? `${(doc.size / 1024 / 1024).toFixed(1)} MB` : "Size unknown"}
+                      </span>
+                      {doc.uploadedAt && (
+                        <span className="text-muted-foreground text-xs">
+                          Uploaded: {new Date(doc.uploadedAt).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    <Link href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" size="sm">
+                        View
+                      </Button>
+                    </Link>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No documents uploaded</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Documents are captured during vendor onboarding. Upload support from admin can be added later if needed.
+              </p>
             </CardContent>
           </Card>
         </div>

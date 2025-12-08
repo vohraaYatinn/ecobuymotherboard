@@ -31,6 +31,12 @@ export function AdminAddVendor() {
     state: "",
     postcode: "",
     country: "india",
+    gstNumber: "",
+    bankAccountNumber: "",
+    ifscCode: "",
+    pan: "",
+    tan: "",
+    referralCode: "",
   })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -70,6 +76,12 @@ export function AdminAddVendor() {
           postcode: formData.postcode,
           country: formData.country,
         },
+      gstNumber: formData.gstNumber,
+      bankAccountNumber: formData.bankAccountNumber,
+      ifscCode: formData.ifscCode,
+      pan: formData.pan,
+      tan: formData.tan,
+      referralCode: formData.referralCode,
       }
 
       const response = await fetch(`${API_URL}/api/vendors`, {
@@ -179,6 +191,76 @@ export function AdminAddVendor() {
                   placeholder="+91 XXXXX XXXXX"
                   className="mt-1.5"
                   required
+                />
+              </div>
+              <div>
+                <Label htmlFor="gstNumber">GST No *</Label>
+                <Input
+                  id="gstNumber"
+                  name="gstNumber"
+                  value={formData.gstNumber}
+                  onChange={handleChange}
+                  placeholder="GSTIN"
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="pan">PAN *</Label>
+                <Input
+                  id="pan"
+                  name="pan"
+                  value={formData.pan}
+                  onChange={handleChange}
+                  placeholder="PAN"
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="bankAccountNumber">Bank Account Number *</Label>
+                <Input
+                  id="bankAccountNumber"
+                  name="bankAccountNumber"
+                  value={formData.bankAccountNumber}
+                  onChange={handleChange}
+                  placeholder="Bank account number"
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="ifscCode">IFSC Code *</Label>
+                <Input
+                  id="ifscCode"
+                  name="ifscCode"
+                  value={formData.ifscCode}
+                  onChange={handleChange}
+                  placeholder="IFSC"
+                  className="mt-1.5"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="tan">TAN</Label>
+                <Input
+                  id="tan"
+                  name="tan"
+                  value={formData.tan}
+                  onChange={handleChange}
+                  placeholder="TAN (optional)"
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <Label htmlFor="referralCode">Referral Code</Label>
+                <Input
+                  id="referralCode"
+                  name="referralCode"
+                  value={formData.referralCode}
+                  onChange={handleChange}
+                  placeholder="Referral (optional)"
+                  className="mt-1.5"
                 />
               </div>
               <div>

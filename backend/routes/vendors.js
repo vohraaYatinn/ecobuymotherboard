@@ -2,8 +2,74 @@ import express from "express"
 import Vendor from "../models/Vendor.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 import nodemailer from "nodemailer"
+import multer from "multer"
+import path from "path"
+import fs from "fs"
+import { fileURLToPath } from "url"
 
 const router = express.Router()
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const vendorDocsDir = path.join(__dirname, "../uploads/vendor-documents")
+
+if (!fs.existsSync(vendorDocsDir)) {
+  fs.mkdirSync(vendorDocsDir, { recursive: true })
+}
+
+const vendorDocStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, vendorDocsDir)
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9)
+    const ext = path.extname(file.originalname)
+    cb(null, `vendor-${uniqueSuffix}${ext}`)
+  },
+})
+
+const vendorDocFileFilter = (req, file, cb) => {
+  if (file.mimetype.startsWith("image/") || file.mimetype === "application/pdf") {
+    cb(null, true)
+  } else {
+    cb(new Error("Only PDF and image files are allowed for vendor documents"), false)
+  }
+}
+
+const uploadVendorDocs = multer({
+  storage: vendorDocStorage,
+  fileFilter: vendorDocFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB per file
+  },
+})
+
+const mapUploadedDocuments = (files = []) =>
+  files.map((file) => ({
+    url: `/uploads/vendor-documents/${file.filename}`,
+    originalName: file.originalname,
+    mimetype: file.mimetype,
+    size: file.size,
+    uploadedAt: new Date(),
+  }))
+
+const handleVendorDocsUpload = (req, res, next) => {
+  const contentType = req.headers["content-type"] || ""
+
+  if (contentType.includes("multipart/form-data")) {
+    return uploadVendorDocs.array("documents", 5)(req, res, (err) => {
+      if (err) {
+        return res.status(400).json({
+          success: false,
+          message: err.message || "Invalid document upload",
+        })
+      }
+      return next()
+    })
+  }
+
+  return next()
+}
 
 // Configure nodemailer transporter
 const getTransporter = () => {
@@ -127,7 +193,7 @@ router.get("/:id", async (req, res) => {
 })
 
 // Create new vendor (Admin only)
-router.post("/", verifyAdminToken, async (req, res) => {
+router.post("/", verifyAdminToken, handleVendorDocsUpload, async (req, res) => {
   try {
     const {
       name,
@@ -136,6 +202,12 @@ router.post("/", verifyAdminToken, async (req, res) => {
       phone,
       status,
       address,
+      gstNumber,
+      bankAccountNumber,
+      ifscCode,
+      pan,
+      tan,
+      referralCode,
     } = req.body
 
     // Validate required fields
@@ -143,6 +215,13 @@ router.post("/", verifyAdminToken, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Missing required fields",
+      })
+    }
+
+    if (!gstNumber || !bankAccountNumber || !ifscCode || !pan) {
+      return res.status(400).json({
+        success: false,
+        message: "GST, bank account, IFSC, and PAN are required",
       })
     }
 
@@ -175,6 +254,13 @@ router.post("/", verifyAdminToken, async (req, res) => {
         postcode: address.postcode,
         country: address.country || "india",
       },
+      gstNumber,
+      bankAccountNumber,
+      ifscCode,
+      pan,
+      tan: tan || "",
+      referralCode,
+      documents: mapUploadedDocuments(req.files || []),
     })
 
     await vendor.save()
@@ -206,7 +292,7 @@ router.post("/", verifyAdminToken, async (req, res) => {
 })
 
 // Update vendor (Admin only)
-router.put("/:id", verifyAdminToken, async (req, res) => {
+router.put("/:id", verifyAdminToken, handleVendorDocsUpload, async (req, res) => {
   try {
     const {
       name,
@@ -215,6 +301,12 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
       phone,
       status,
       address,
+      gstNumber,
+      bankAccountNumber,
+      ifscCode,
+      pan,
+      tan,
+      referralCode,
     } = req.body
 
     const vendor = await Vendor.findById(req.params.id)
@@ -268,6 +360,17 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
         postcode: address.postcode || vendor.address.postcode,
         country: address.country || vendor.address.country,
       }
+    }
+    if (gstNumber) vendor.gstNumber = gstNumber
+    if (bankAccountNumber) vendor.bankAccountNumber = bankAccountNumber
+    if (ifscCode) vendor.ifscCode = ifscCode
+    if (pan) vendor.pan = pan
+    if (tan !== undefined) vendor.tan = tan
+    if (referralCode !== undefined) vendor.referralCode = referralCode
+
+    const newDocuments = mapUploadedDocuments(req.files || [])
+    if (newDocuments.length) {
+      vendor.documents = [...(vendor.documents || []), ...newDocuments]
     }
 
     await vendor.save()
@@ -429,7 +532,7 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Public vendor registration (no auth required)
-router.post("/register", async (req, res) => {
+router.post("/register", handleVendorDocsUpload, async (req, res) => {
   try {
     const {
       username,
@@ -443,10 +546,30 @@ router.post("/register", async (req, res) => {
       state,
       postcode,
       storePhone,
+      gstNumber,
+      bankAccountNumber,
+      ifscCode,
+      pan,
+      tan,
+      referralCode,
     } = req.body
 
     // Validate required fields
-    if (!username || !email || !firstName || !lastName || !address1 || !city || !state || !postcode || !storePhone) {
+    if (
+      !username ||
+      !email ||
+      !firstName ||
+      !lastName ||
+      !address1 ||
+      !city ||
+      !state ||
+      !postcode ||
+      !storePhone ||
+      !gstNumber ||
+      !bankAccountNumber ||
+      !ifscCode ||
+      !pan
+    ) {
       return res.status(400).json({
         success: false,
         message: "All required fields must be filled",
@@ -482,6 +605,13 @@ router.post("/register", async (req, res) => {
         postcode: postcode,
         country: country || "india",
       },
+      gstNumber,
+      bankAccountNumber,
+      ifscCode,
+      pan,
+      tan: tan || "",
+      referralCode,
+      documents: mapUploadedDocuments(req.files || []),
     })
 
     await vendor.save()

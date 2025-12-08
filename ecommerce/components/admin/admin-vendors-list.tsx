@@ -20,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { Search, Eye, Plus, Store, MapPin, Loader2, Smartphone, Download, Percent } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface PushToken {
   token: string
@@ -39,6 +39,13 @@ interface Vendor {
   username: string
   status: string
   commission?: number
+  gstNumber?: string
+  pan?: string
+  bankAccountNumber?: string
+  ifscCode?: string
+  tan?: string
+  referralCode?: string
+  documents?: VendorDocument[]
   address: {
     city: string
     state: string
@@ -47,6 +54,11 @@ interface Vendor {
   totalProducts: number
   createdAt: string
   pushTokens?: PushToken[]
+}
+
+interface VendorDocument {
+  url: string
+  originalName?: string
 }
 
 const getStatusColor = (status: string) => {
@@ -424,14 +436,18 @@ export function AdminVendorsList() {
                       </div>
 
                       {/* Details */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Vendor ID</p>
                           <p className="font-medium text-xs">{vendor._id.slice(-8)}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">Total Products</p>
-                          <p className="font-medium">{vendor.totalProducts}</p>
+                          <p className="text-muted-foreground">GST</p>
+                          <p className="font-medium break-all">{vendor.gstNumber || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground">PAN</p>
+                          <p className="font-medium break-all">{vendor.pan || "—"}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground flex items-center gap-1">
@@ -446,6 +462,18 @@ export function AdminVendorsList() {
                           <p className="font-medium">
                             {vendor.address.city}, {vendor.address.state}
                           </p>
+                        </div>
+                        <div className="sm:col-span-5 flex flex-wrap gap-4 pt-2 border-t border-border">
+                          <span className="text-muted-foreground text-xs">
+                            Docs: {vendor.documents?.length ? vendor.documents.length : 0}
+                          </span>
+                          <span className="text-muted-foreground text-xs">
+                            Bank: {vendor.bankAccountNumber ? `••••${vendor.bankAccountNumber.slice(-4)}` : "—"} /{" "}
+                            {vendor.ifscCode || "IFSC N/A"}
+                          </span>
+                          {vendor.referralCode && (
+                            <span className="text-muted-foreground text-xs">Referral: {vendor.referralCode}</span>
+                          )}
                         </div>
                       </div>
 

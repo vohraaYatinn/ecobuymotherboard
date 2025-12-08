@@ -20,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, CheckCircle } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export function VendorRegistrationForm() {
   const { toast } = useToast()
@@ -40,7 +40,14 @@ export function VendorRegistrationForm() {
     state: "",
     postcode: "",
     storePhone: "",
+    gstNumber: "",
+    bankAccountNumber: "",
+    ifscCode: "",
+    pan: "",
+    tan: "",
+    referralCode: "",
   })
+  const [documents, setDocuments] = useState<File[]>([])
 
   // Validate form fields
   const validateForm = () => {
@@ -80,6 +87,26 @@ export function VendorRegistrationForm() {
     } else if (!/^\d{10}$/.test(formData.storePhone.replace(/\D/g, ""))) {
       newErrors.storePhone = "Phone number must be exactly 10 digits"
     }
+    if (!formData.gstNumber.trim()) {
+      newErrors.gstNumber = "GST number is required"
+    } else if (!/^[0-9A-Z]{15}$/.test(formData.gstNumber.trim().toUpperCase())) {
+      newErrors.gstNumber = "GST should be 15 characters (alphanumeric, uppercase)"
+    }
+    if (!formData.bankAccountNumber.trim()) {
+      newErrors.bankAccountNumber = "Bank account number is required"
+    } else if (formData.bankAccountNumber.trim().length < 8) {
+      newErrors.bankAccountNumber = "Enter a valid bank account number"
+    }
+    if (!formData.ifscCode.trim()) {
+      newErrors.ifscCode = "IFSC code is required"
+    } else if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(formData.ifscCode.trim().toUpperCase())) {
+      newErrors.ifscCode = "Enter a valid IFSC (e.g. HDFC0001234)"
+    }
+    if (!formData.pan.trim()) {
+      newErrors.pan = "PAN is required"
+    } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.pan.trim().toUpperCase())) {
+      newErrors.pan = "Enter a valid PAN (10 characters)"
+    }
     
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -110,12 +137,15 @@ export function VendorRegistrationForm() {
     setIsLoading(true)
 
     try {
+      const payload = new FormData()
+      Object.entries(formData).forEach(([key, value]) => {
+        payload.append(key, value)
+      })
+      documents.forEach((file) => payload.append("documents", file))
+
       const response = await fetch(`${API_URL}/api/vendors/register`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
+        body: payload,
       })
 
       const data = await response.json()
@@ -139,7 +169,14 @@ export function VendorRegistrationForm() {
           state: "",
           postcode: "",
           storePhone: "",
+          gstNumber: "",
+          bankAccountNumber: "",
+          ifscCode: "",
+          pan: "",
+          tan: "",
+          referralCode: "",
         })
+        setDocuments([])
       } else {
         toast({
           title: "Registration Failed",
@@ -342,6 +379,126 @@ export function VendorRegistrationForm() {
               </p>
             )}
           </div>
+
+          <div>
+            <Label htmlFor="gstNumber">GST No *</Label>
+            <Input
+              id="gstNumber"
+              value={formData.gstNumber}
+              onChange={(e) => {
+                const value = e.target.value.toUpperCase()
+                setFormData({ ...formData, gstNumber: value })
+                if (errors.gstNumber) setErrors({ ...errors, gstNumber: "" })
+              }}
+              className={`mt-2 ${errors.gstNumber ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+              placeholder="15-character GSTIN"
+              maxLength={15}
+            />
+            {errors.gstNumber && <p className="text-sm text-red-500 mt-1">{errors.gstNumber}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="bankAccountNumber">Bank Account Number *</Label>
+            <Input
+              id="bankAccountNumber"
+              value={formData.bankAccountNumber}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\s/g, "")
+                setFormData({ ...formData, bankAccountNumber: value })
+                if (errors.bankAccountNumber) setErrors({ ...errors, bankAccountNumber: "" })
+              }}
+              className={`mt-2 ${errors.bankAccountNumber ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+              placeholder="Enter bank account number"
+            />
+            {errors.bankAccountNumber && <p className="text-sm text-red-500 mt-1">{errors.bankAccountNumber}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="ifscCode">IFSC Code *</Label>
+            <Input
+              id="ifscCode"
+              value={formData.ifscCode}
+              onChange={(e) => {
+                const value = e.target.value.toUpperCase()
+                setFormData({ ...formData, ifscCode: value })
+                if (errors.ifscCode) setErrors({ ...errors, ifscCode: "" })
+              }}
+              className={`mt-2 ${errors.ifscCode ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+              placeholder="e.g. HDFC0001234"
+              maxLength={11}
+            />
+            {errors.ifscCode && <p className="text-sm text-red-500 mt-1">{errors.ifscCode}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="pan">PAN *</Label>
+            <Input
+              id="pan"
+              value={formData.pan}
+              onChange={(e) => {
+                const value = e.target.value.toUpperCase()
+                setFormData({ ...formData, pan: value })
+                if (errors.pan) setErrors({ ...errors, pan: "" })
+              }}
+              className={`mt-2 ${errors.pan ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+              placeholder="ABCDE1234F"
+              maxLength={10}
+            />
+            {errors.pan && <p className="text-sm text-red-500 mt-1">{errors.pan}</p>}
+          </div>
+
+          <div>
+            <Label htmlFor="tan">TAN</Label>
+            <Input
+              id="tan"
+              value={formData.tan}
+              onChange={(e) => setFormData({ ...formData, tan: e.target.value.toUpperCase() })}
+              className="mt-2"
+              placeholder="Optional TAN"
+              maxLength={10}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="referralCode">Referral Code</Label>
+            <Input
+              id="referralCode"
+              value={formData.referralCode}
+              onChange={(e) => setFormData({ ...formData, referralCode: e.target.value })}
+              className="mt-2"
+              placeholder="Who referred you? (optional)"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <Label htmlFor="documents">Upload Documents</Label>
+            <Input
+              id="documents"
+              type="file"
+              accept=".pdf,image/*"
+              multiple
+              className="mt-2"
+              onChange={(e) => {
+                const files = Array.from(e.target.files || [])
+                setDocuments(files)
+              }}
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              Upload GST/PAN/bank proof (PDF or image, up to 10MB each).
+            </p>
+            {documents.length > 0 && (
+              <ul className="mt-2 text-sm text-foreground space-y-1">
+                {documents.map((file) => (
+                  <li key={file.name} className="flex items-center justify-between">
+                    <span className="truncate">{file.name}</span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {(file.size / 1024 / 1024).toFixed(1)} MB
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
 
         <div className="pt-6">
@@ -398,6 +555,20 @@ export function VendorRegistrationForm() {
               <strong>Email:</strong> {formData.email}
               <br />
               <strong>Store Phone:</strong> {formData.storePhone}
+              <br />
+              <strong>GST:</strong> {formData.gstNumber}
+              <br />
+              <strong>PAN:</strong> {formData.pan}
+              <br />
+              <strong>Bank A/C:</strong> {formData.bankAccountNumber}
+              <br />
+              <strong>IFSC:</strong> {formData.ifscCode}
+              {documents.length > 0 && (
+                <>
+                  <br />
+                  <strong>Documents attached:</strong> {documents.length}
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -6,20 +6,20 @@ import Notification from "../models/Notification.js"
 import { sendPushNotificationToAllVendors } from "../routes/pushNotifications.js"
 
 /**
- * Cron job to reset orders that have been in "processing" status for 2+ minutes
+ * Cron job to reset orders that have been in "processing" status for 24+ hours
  * This treats them as fresh orders and sends notifications to vendors again
  */
 export function startOrderResetCron() {
   // Run every 24 hours at midnight (00:00)
   cron.schedule("0 0 * * *", async () => {
     try {
-      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000) // 2 minutes ago
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000) // 24 hours ago
 
-      // Find orders with status "processing" that were updated 2+ minutes ago
+      // Find orders with status "processing" that were updated 24+ hours ago
       // Reset orders that were accepted by vendors (or have no assignmentMode set, for backward compatibility)
       const stuckOrders = await Order.find({
         status: "processing",
-        updatedAt: { $lte: twoMinutesAgo },
+        updatedAt: { $lte: twentyFourHoursAgo },
         vendorId: { $ne: null }, // Only orders that have been assigned to a vendor
         $or: [
           { assignmentMode: "accepted-by-vendor" }, // Orders accepted by vendors
