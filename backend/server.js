@@ -29,6 +29,7 @@ import contactRoutes from "./routes/contact.js"
 import categoryRoutes from "./routes/categories.js"
 import dtdcRoutes from "./routes/dtdc.js"
 import invoiceRoutes from "./routes/invoices.js"
+import supportRoutes from "./routes/support.js"
 import { startOrderResetCron } from "./services/orderResetCron.js"
 import { startAdminReviewCron } from "./services/adminReviewCron.js"
 
@@ -142,6 +143,7 @@ app.use("/api/contact", contactRoutes)
 app.use("/api/categories", categoryRoutes)
 app.use("/api/dtdc", dtdcRoutes)
 app.use("/api/invoices", invoiceRoutes)
+app.use("/api/support", supportRoutes)
 
 // Health check
 app.get("/api/health", (req, res) => {

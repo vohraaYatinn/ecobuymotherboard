@@ -191,10 +191,10 @@ export function Header() {
               </a>
               <span className="hidden text-muted-foreground md:inline">|</span>
               <a
-                href="mailto:info@elecobuy.com"
+                href="mailto:mahender@ekranfix.com"
                 className="hidden text-muted-foreground hover:text-foreground md:inline"
               >
-                info@elecobuy.com
+                mahender@ekranfix.com
               </a>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
@@ -477,12 +477,12 @@ export function Header() {
                       <span>1800 123 9336</span>
                     </a>
                     <a
-                      href="mailto:info@elecobuy.com"
+                      href="mailto:mahender@ekranfix.com"
                       className="flex items-center gap-2 hover:text-foreground transition-colors"
                       onClick={() => setIsOpen(false)}
                     >
                       <span>✉️</span>
-                      <span>info@elecobuy.com</span>
+                      <span>mahender@ekranfix.com</span>
                     </a>
                   </div>
                 </div>

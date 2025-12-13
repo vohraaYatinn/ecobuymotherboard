@@ -2,8 +2,13 @@ import axios from "axios"
 import crypto from "crypto"
 
 // Hardcoded Razorpay credentials as requested
-const RAZORPAY_KEY_ID = "rzp_test_Rp4vS6I7nGmWno"
-const RAZORPAY_KEY_SECRET = "nl93rF11jwRW3n3MBxChzxVw"
+// const RAZORPAY_KEY_ID = "rzp_test_Rp4vS6I7nGmWno"
+// const RAZORPAY_KEY_SECRET = "nl93rF11jwRW3n3MBxChzxVw"
+
+//real
+const RAZORPAY_KEY_ID = "rzp_live_RpobWbF6yCjn7p"
+const RAZORPAY_KEY_SECRET = "Znm1sg4IUjB5UwsChm931veJ"
+
 const RAZORPAY_MERCHANT_ID = "RCIOtoLufeT9e8"
 
 const RAZORPAY_BASE_URL = process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com/v1"
@@ -63,9 +68,55 @@ export const verifyRazorpaySignature = ({ orderId, paymentId, signature }) => {
   return digest === signature
 }
 
+export async function createRazorpayRefund({ paymentId, amountInPaise, notes = {} }) {
+  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+    throw new Error("Razorpay credentials are missing")
+  }
+
+  if (!paymentId) {
+    throw new Error("Payment ID is required for refund")
+  }
+
+  try {
+    const refundData = {
+      amount: amountInPaise ? Math.round(amountInPaise) : undefined, // If not provided, full refund
+      notes,
+    }
+
+    const { data } = await axios.post(
+      `${RAZORPAY_BASE_URL}/payments/${paymentId}/refund`,
+      refundData,
+      {
+        headers: {
+          Authorization: buildAuthHeader(),
+          "Content-Type": "application/json",
+        },
+      }
+    )
+
+    return data
+  } catch (error) {
+    const providerData = error?.response?.data
+    const status = error?.response?.status
+    console.error("❌ Razorpay refund error:", status, providerData || error?.message)
+    const err = new Error(
+      providerData?.error?.description ||
+        providerData?.error?.code ||
+        providerData?.message ||
+        error?.message ||
+        "Razorpay refund failed"
+    )
+    err.statusCode = status || 500
+    err.providerData = providerData
+    throw err
+  }
+}
+
 export const razorpayConfig = {
   keyId: RAZORPAY_KEY_ID,
   merchantId: RAZORPAY_MERCHANT_ID,
   baseUrl: RAZORPAY_BASE_URL,
 }
+
+
 

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, Package, CheckCircle2, MapPin, Phone, Mail, ArrowLeft, Download, Truck, AlertCircle, ExternalLink } from "lucide-react"
+import { Loader2, Package, CheckCircle2, MapPin, Phone, Mail, ArrowLeft, Download, Truck, AlertCircle, ExternalLink, XCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 
@@ -74,6 +74,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -113,7 +114,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
   const getDTDCTrackingUrl = (awb: string) => {
     // DTDC tracking URL format
-    return `https://www.dtdc.com/in/tracking/?awb=${encodeURIComponent(awb)}`
+    return `https://www.dtdc.com/track-your-shipment/?awb=${encodeURIComponent(awb)}`
   }
 
   const getStatusColor = (status: string) => {
@@ -217,6 +218,72 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
   const trackingSteps = generateTrackingSteps(order)
   const orderDate = new Date(order.createdAt)
+
+  // Check if order can be cancelled
+  const canCancel = ["pending", "confirmed", "processing"].includes(order.status.toLowerCase())
+  const isShipped = order.status.toLowerCase() === "shipped" || order.status.toLowerCase() === "delivered"
+
+  const handleCancelOrder = async () => {
+    if (!canCancel || isShipped) {
+      return
+    }
+
+    if (!confirm("Are you sure you want to cancel this order? This action cannot be undone.")) {
+      return
+    }
+
+    setCancelling(true)
+    try {
+      const token = localStorage.getItem("customerToken")
+      if (!token) {
+        alert("Please login to cancel order")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/orders/${orderId}/cancel`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to cancel order")
+      }
+
+      if (data.success) {
+        // Refresh order data
+        const orderResponse = await fetch(`${API_URL}/api/orders/${orderId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (orderResponse.ok) {
+          const orderData = await orderResponse.json()
+          if (orderData.success) {
+            setOrder(orderData.data)
+          }
+        }
+
+        alert(
+          data.data.refund
+            ? "Order cancelled successfully. Refund has been initiated and will be processed shortly."
+            : data.data.refundError
+              ? "Order cancelled. However, refund failed. Please contact support."
+              : "Order cancelled successfully."
+        )
+      }
+    } catch (err: any) {
+      console.error("Error cancelling order:", err)
+      alert(err.message || "Failed to cancel order. Please try again.")
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -519,6 +586,34 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
           {/* Actions */}
           <Card>
             <CardContent className="p-4 space-y-2">
+              {canCancel && !isShipped && (
+                <Button
+                  variant="destructive"
+                  className="w-full text-sm"
+                  onClick={handleCancelOrder}
+                  disabled={cancelling}
+                >
+                  {cancelling ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Cancelling...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="mr-2 h-4 w-4" />
+                      Cancel Order
+                    </>
+                  )}
+                </Button>
+              )}
+              {isShipped && (
+                <Alert className="mb-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    This order cannot be cancelled as it has been shipped.
+                  </AlertDescription>
+                </Alert>
+              )}
               <Link href="/dashboard/support">
                 <Button variant="outline" className="w-full text-sm bg-transparent">
                   Contact Support

@@ -8,7 +8,7 @@ import CustomerAddress from "../models/CustomerAddress.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Vendor from "../models/Vendor.js"
-import { createRazorpayOrder, razorpayConfig, verifyRazorpaySignature } from "../services/razorpayService.js"
+import { createRazorpayOrder, razorpayConfig, verifyRazorpaySignature, createRazorpayRefund } from "../services/razorpayService.js"
 import jwt from "jsonwebtoken"
 import nodemailer from "nodemailer"
 
@@ -27,7 +27,7 @@ const getTransporter = () => {
     port: parseInt(process.env.SMTP_PORT || "587"),
     secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
     auth: {
-      user: process.env.SMTP_USER || process.env.ADMIN_EMAIL || "info@elecobuy.com",
+      user: process.env.SMTP_USER || process.env.ADMIN_EMAIL || "mahender@ekranfix.com",
       pass: process.env.SMTP_PASS || process.env.ADMIN_EMAIL_PASSWORD,
     },
   })
@@ -134,7 +134,7 @@ const sendOrderConfirmationEmail = async (order) => {
 
     const customerName = customer.name || `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`
     const customerEmail = customer.email
-    const adminEmail = process.env.ADMIN_EMAIL || "info@elecobuy.com"
+    const adminEmail = process.env.ADMIN_EMAIL || "mahender@ekranfix.com"
 
     const orderItemsHtml = order.items
       .map(
@@ -690,6 +690,194 @@ router.get("/:id", authenticate, async (req, res) => {
         message: "Invalid order ID",
       })
     }
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    })
+  }
+})
+
+// Cancel order endpoint
+router.post("/:id/cancel", authenticate, async (req, res) => {
+  try {
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID format",
+      })
+    }
+
+    const order = await Order.findOne({
+      _id: req.params.id,
+      customerId: req.userId,
+    })
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      })
+    }
+
+    // Check if order can be cancelled
+    if (order.status === "cancelled") {
+      return res.status(400).json({
+        success: false,
+        message: "Order is already cancelled",
+      })
+    }
+
+    if (order.status === "shipped" || order.status === "delivered") {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot cancel order that has been shipped or delivered",
+      })
+    }
+
+    // Only allow cancellation during processing, pending, or confirmed stages
+    const cancellableStatuses = ["pending", "confirmed", "processing"]
+    if (!cancellableStatuses.includes(order.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot cancel order with status: ${order.status}`,
+      })
+    }
+
+    let refundResult = null
+    let refundError = null
+
+    // Process refund if payment was made online and is paid
+    if (order.paymentMethod === "online" && order.paymentStatus === "paid" && order.paymentTransactionId) {
+      try {
+        // Get the payment ID from paymentMeta or paymentTransactionId
+        const paymentId = order.paymentMeta?.razorpayPaymentId || order.paymentTransactionId
+        
+        // If paymentTransactionId is a Razorpay order ID, we need to fetch the payment first
+        // For now, assume paymentTransactionId is the payment ID
+        const amountInPaise = Math.round(order.total * 100)
+        
+        console.log(`🔄 [ORDER CANCEL] Initiating refund for order ${order.orderNumber}`, {
+          paymentId,
+          amount: order.total,
+          amountInPaise,
+        })
+
+        refundResult = await createRazorpayRefund({
+          paymentId,
+          amountInPaise,
+          notes: {
+            orderId: order._id.toString(),
+            orderNumber: order.orderNumber,
+            reason: "order_cancelled_by_customer",
+            cancelledAt: new Date().toISOString(),
+          },
+        })
+
+        console.log(`✅ [ORDER CANCEL] Refund successful for order ${order.orderNumber}`, {
+          refundId: refundResult.id,
+          amount: refundResult.amount,
+        })
+
+        // Update payment status to refunded
+        order.paymentStatus = "refunded"
+        order.paymentMeta = {
+          ...(order.paymentMeta || {}),
+          refund: refundResult,
+          refundedAt: new Date().toISOString(),
+        }
+      } catch (refundErr) {
+        refundError = refundErr
+        console.error(`❌ [ORDER CANCEL] Refund failed for order ${order.orderNumber}:`, refundErr)
+        // Continue with cancellation even if refund fails - admin can handle manually
+        // But we should still mark the order as cancelled
+      }
+    }
+
+    // Restore inventory
+    if (order.inventoryAdjusted) {
+      for (const item of order.items) {
+        await Product.findByIdAndUpdate(item.productId, {
+          $inc: { stock: item.quantity },
+        })
+      }
+      order.inventoryAdjusted = false
+    }
+
+    // Update order status to cancelled
+    order.status = "cancelled"
+
+    // Store cancellation metadata
+    order.paymentMeta = {
+      ...(order.paymentMeta || {}),
+      cancelledAt: new Date().toISOString(),
+      cancelledBy: "customer",
+      cancellationReason: "customer_request",
+      refundError: refundError ? refundError.message : null,
+    }
+
+    await order.save()
+
+    // Create notification for customer
+    try {
+      await Notification.create({
+        userId: order.customerId,
+        userType: "customer",
+        type: "order_cancelled",
+        title: "Order Cancelled",
+        message: `Your order ${order.orderNumber} has been cancelled${refundResult ? ". Refund will be processed shortly." : order.paymentMethod === "cod" ? "." : ". Please contact support for refund."}`,
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId,
+      })
+    } catch (notifError) {
+      console.error("Error creating cancellation notification:", notifError)
+    }
+
+    // Notify admin about cancellation
+    try {
+      const admin = await Admin.findOne({ isActive: true })
+      if (admin) {
+        await Notification.create({
+          userId: admin._id,
+          userType: "admin",
+          type: "order_cancelled",
+          title: "Order Cancelled by Customer",
+          message: `Order ${order.orderNumber} has been cancelled by customer.${refundError ? " Refund failed - manual intervention required." : ""}`,
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          customerId: order.customerId,
+        })
+      }
+    } catch (notifError) {
+      console.error("Error creating admin notification:", notifError)
+    }
+
+    res.json({
+      success: true,
+      message: refundError
+        ? "Order cancelled. Refund failed - please contact support."
+        : refundResult
+          ? "Order cancelled and refund initiated successfully"
+          : "Order cancelled successfully",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        refund: refundResult
+          ? {
+              id: refundResult.id,
+              amount: refundResult.amount / 100,
+              status: refundResult.status,
+            }
+          : null,
+        refundError: refundError ? refundError.message : null,
+      },
+    })
+  } catch (error) {
+    console.error("Error cancelling order:", error)
     res.status(500).json({
       success: false,
       message: "Internal server error",

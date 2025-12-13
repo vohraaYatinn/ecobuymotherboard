@@ -9,8 +9,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Mail, Phone, MessageCircle, Clock } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Mail, Phone, MessageCircle, Loader2, CheckCircle } from "lucide-react"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export function SupportContent() {
   const [formData, setFormData] = useState({
@@ -21,27 +29,61 @@ export function SupportContent() {
     category: "",
     message: "",
   })
+  const [submitting, setSubmitting] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState("")
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("[v0] Support request:", formData)
-    alert("Support request submitted successfully!")
-  }
+    setError("")
 
-  const previousTickets = [
-    {
-      id: "TKT-001",
-      subject: "Product damaged during delivery",
-      status: "Resolved",
-      date: "Jan 15, 2024",
-    },
-    {
-      id: "TKT-002",
-      subject: "Wrong item received",
-      status: "In Progress",
-      date: "Jan 20, 2024",
-    },
-  ]
+    // Validation
+    if (!formData.name.trim() || !formData.email.trim() || !formData.phone.trim() || !formData.category || !formData.message.trim()) {
+      setError("Please fill in all required fields")
+      return
+    }
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(formData.email)) {
+      setError("Please enter a valid email address")
+      return
+    }
+
+    try {
+      setSubmitting(true)
+
+      const response = await fetch(`${API_URL}/api/support/submit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setSuccess(true)
+        // Reset form
+        setFormData({
+          name: "",
+          email: "",
+          phone: "",
+          orderID: "",
+          category: "",
+          message: "",
+        })
+      } else {
+        setError(data.message || "Failed to submit support request. Please try again.")
+      }
+    } catch (err) {
+      console.error("Error submitting support request:", err)
+      setError("Network error. Please try again.")
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -125,11 +167,12 @@ export function SupportContent() {
 
                 <div>
                   <Label htmlFor="category" className="text-sm">
-                    Issue Category
+                    Issue Category <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     value={formData.category}
                     onValueChange={(value) => setFormData({ ...formData, category: value })}
+                    required
                   >
                     <SelectTrigger className="mt-1.5">
                       <SelectValue placeholder="Select a category" />
@@ -159,49 +202,28 @@ export function SupportContent() {
                   />
                 </div>
 
-                <Button type="submit" size="lg" className="w-full sm:w-auto">
-                  Submit Request
+                {error && (
+                  <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <Button 
+                  type="submit" 
+                  size="lg" 
+                  className="w-full sm:w-auto"
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Request"
+                  )}
                 </Button>
               </form>
-            </CardContent>
-          </Card>
-
-          {/* Previous Tickets */}
-          <Card className="mt-4 sm:mt-6">
-            <CardHeader>
-              <CardTitle className="text-lg sm:text-xl">Your Support Tickets</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {previousTickets.length > 0 ? (
-                <div className="space-y-3">
-                  {previousTickets.map((ticket) => (
-                    <div
-                      key={ticket.id}
-                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 sm:p-4 rounded-lg border border-border"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold text-sm sm:text-base">{ticket.id}</p>
-                          <Badge className={`text-xs ${ticket.status === "Resolved" ? "bg-green-500" : "bg-blue-500"}`}>
-                            {ticket.status}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{ticket.subject}</p>
-                        <p className="text-xs text-muted-foreground">{ticket.date}</p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-xs sm:text-sm w-full sm:w-auto bg-transparent"
-                      >
-                        View Details
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-6">No support tickets yet</p>
-              )}
             </CardContent>
           </Card>
         </div>
@@ -219,8 +241,7 @@ export function SupportContent() {
                 </div>
                 <div>
                   <p className="font-semibold text-sm sm:text-base">Phone Support</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">+91 7396 777 800</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Mon-Sat, 9 AM - 6 PM</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">1800 123 9336</p>
                 </div>
               </div>
 
@@ -230,7 +251,7 @@ export function SupportContent() {
                 </div>
                 <div>
                   <p className="font-semibold text-sm sm:text-base">Email Support</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-all">customercare@ecobuy.com</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-all">mahender@ekranfix.com</p>
                   <p className="text-xs sm:text-sm text-muted-foreground">Response within 24 hours</p>
                 </div>
               </div>
@@ -246,50 +267,30 @@ export function SupportContent() {
               </div>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg sm:text-xl">Business Hours</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <div className="text-sm">
-                  <p className="font-medium">Monday - Saturday</p>
-                  <p className="text-muted-foreground">9:00 AM - 6:00 PM</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <div className="text-sm">
-                  <p className="font-medium">Sunday</p>
-                  <p className="text-muted-foreground">Closed</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg sm:text-xl">Quick Help</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start text-xs sm:text-sm bg-transparent">
-                Track My Order
-              </Button>
-              <Button variant="outline" className="w-full justify-start text-xs sm:text-sm bg-transparent">
-                Return Policy
-              </Button>
-              <Button variant="outline" className="w-full justify-start text-xs sm:text-sm bg-transparent">
-                Shipping Information
-              </Button>
-              <Button variant="outline" className="w-full justify-start text-xs sm:text-sm bg-transparent">
-                FAQs
-              </Button>
-            </CardContent>
-          </Card>
         </div>
       </div>
+
+      {/* Success Modal */}
+      <Dialog open={success} onOpenChange={setSuccess}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center justify-center mb-4">
+              <div className="rounded-full bg-green-100 p-3">
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              </div>
+            </div>
+            <DialogTitle className="text-center">Request Submitted Successfully!</DialogTitle>
+            <DialogDescription className="text-center pt-2">
+              Your support request has been submitted. We will get back to you within 24 hours.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center mt-4">
+            <Button onClick={() => setSuccess(false)} className="w-full sm:w-auto">
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

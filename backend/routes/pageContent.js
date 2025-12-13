@@ -42,7 +42,7 @@ const defaultPageContent = {
       },
       {
         heading: "7. Contact Information",
-        content: "For questions about these terms and conditions, please contact us at customercare@ecobuy.com or call +91 7396 777 800.",
+        content: "For questions about these terms and conditions, please contact us at mahender@ekranfix.com or call 1800 123 9336.",
         order: 7,
       },
     ],
@@ -393,6 +393,8 @@ router.post("/:slug/reset", verifyAdminToken, async (req, res) => {
 })
 
 export default router
+
+
 
 
 

@@ -67,7 +67,7 @@ export default function StoreLocationPage() {
                     <div>
                       <h3 className="font-semibold mb-1">Phone</h3>
                       <p className="text-muted-foreground">
-                        +91 7396 777 800
+                        1800 123 9336
                         <br />
                         +91 7396 777 600
                         <br />
@@ -82,7 +82,7 @@ export default function StoreLocationPage() {
                     </div>
                     <div>
                       <h3 className="font-semibold mb-1">Email</h3>
-                      <p className="text-muted-foreground">customercare@ecobuy.com</p>
+                      <p className="text-muted-foreground">mahender@ekranfix.com</p>
                     </div>
                   </div>
                 </div>

@@ -19,7 +19,7 @@ const getTransporter = () => {
     port: parseInt(process.env.SMTP_PORT || "587"),
     secure: process.env.SMTP_SECURE === "true",
     auth: {
-      user: process.env.SMTP_USER || process.env.ADMIN_EMAIL || "info@elecobuy.com",
+      user: process.env.SMTP_USER || process.env.ADMIN_EMAIL || "mahender@ekranfix.com",
       pass: process.env.SMTP_PASS || process.env.ADMIN_EMAIL_PASSWORD,
     },
   })
@@ -98,11 +98,11 @@ export function startAdminReviewCron() {
             )
           }
 
-          // Send email to info@elecobuy.com
+          // Send email to mahender@ekranfix.com
           try {
             const transporter = getTransporter()
             if (transporter) {
-              const adminEmail = process.env.ADMIN_EMAIL || "info@elecobuy.com"
+              const adminEmail = process.env.ADMIN_EMAIL || "mahender@ekranfix.com"
               
               const mailOptions = {
                 from: process.env.SMTP_USER || adminEmail,

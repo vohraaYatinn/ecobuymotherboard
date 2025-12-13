@@ -265,7 +265,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
 
   const getDTDCTrackingUrl = (awb: string) => {
     // DTDC tracking URL format
-    return `https://www.dtdc.com/in/tracking/?awb=${encodeURIComponent(awb)}`
+    return `https://www.dtdc.com/track-your-shipment/?awb=${encodeURIComponent(awb)}`
   }
 
   // Helper functions to get data

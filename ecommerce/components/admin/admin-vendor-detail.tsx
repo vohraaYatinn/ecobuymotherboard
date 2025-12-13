@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Save, Store, MapPin, Package, CheckCircle, Loader2, Smartphone } from "lucide-react"
+import { ArrowLeft, Save, Store, MapPin, Package, CheckCircle, Loader2, Smartphone, Download } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
@@ -255,7 +255,13 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
 
   const getDocumentUrl = (doc: VendorDocument) => {
     if (!doc.url) return "#"
-    return doc.url.startsWith("http") ? doc.url : `${API_URL}${doc.url}`
+    // If URL already starts with http/https, use it as-is
+    if (doc.url.startsWith("http://") || doc.url.startsWith("https://")) {
+      return doc.url
+    }
+    // Ensure URL starts with / before prepending API_URL
+    const urlPath = doc.url.startsWith("/") ? doc.url : `/${doc.url}`
+    return `${API_URL}${urlPath}`
   }
 
   const formatDate = (dateString: string) => {
@@ -604,11 +610,28 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
                         </span>
                       )}
                     </div>
-                    <Link href={getDocumentUrl(doc)} target="_blank" rel="noopener noreferrer">
-                      <Button variant="outline" size="sm">
-                        View
-                      </Button>
-                    </Link>
+                    <div className="flex gap-2">
+                      <a 
+                        href={getDocumentUrl(doc)} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-block"
+                      >
+                        <Button variant="outline" size="sm">
+                          View
+                        </Button>
+                      </a>
+                      <a 
+                        href={getDocumentUrl(doc)} 
+                        download={doc.originalName || "document"}
+                        className="inline-block"
+                      >
+                        <Button variant="outline" size="sm">
+                          <Download className="h-4 w-4 mr-1" />
+                          Download
+                        </Button>
+                      </a>
+                    </div>
                   </div>
                 ))
               ) : (

@@ -398,8 +398,8 @@ Complete shadcn/ui component library with 57+ components:
 ## Contact Information
 
 **EcoBuy**
-- Phone: +91 7396 777 800 / 600 / 300
-- Email: customercare@ecobuy.com
+- Phone: 1800 123 9336 / 600 / 300
+- Email: mahender@ekranfix.com
 - Address: 123 Electronics Plaza, Tech District, Mumbai 400001, Maharashtra, India
 - Business Hours: Monday - Saturday: 9:00 AM - 6:00 PM
 

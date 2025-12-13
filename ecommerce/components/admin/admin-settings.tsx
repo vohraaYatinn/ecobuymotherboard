@@ -56,7 +56,7 @@ export function AdminSettings() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="phone1">Primary Phone</Label>
-                <Input id="phone1" defaultValue="+91 7396 777 800" className="mt-1.5" />
+                <Input id="phone1" defaultValue="1800 123 9336" className="mt-1.5" />
               </div>
               <div>
                 <Label htmlFor="phone2">Secondary Phone</Label>
@@ -68,7 +68,7 @@ export function AdminSettings() {
               </div>
               <div>
                 <Label htmlFor="supportEmail">Support Email</Label>
-                <Input id="supportEmail" defaultValue="customercare@ecobuy.com" className="mt-1.5" />
+                <Input id="supportEmail" defaultValue="mahender@ekranfix.com" className="mt-1.5" />
               </div>
             </div>
           </CardContent>
