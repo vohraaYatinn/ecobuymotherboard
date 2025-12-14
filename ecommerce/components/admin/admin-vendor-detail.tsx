@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft, Save, Store, MapPin, Package, CheckCircle, Loader2, Smartphone, Download } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
 
@@ -64,6 +65,7 @@ interface VendorDocument {
 
 export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
   const router = useRouter()
+  const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
@@ -253,15 +255,82 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
     return statusMap[status] || status
   }
 
-  const getDocumentUrl = (doc: VendorDocument) => {
-    if (!doc.url) return "#"
-    // If URL already starts with http/https, use it as-is
-    if (doc.url.startsWith("http://") || doc.url.startsWith("https://")) {
-      return doc.url
+  const handleViewDocument = async (docIndex: number) => {
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in again.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendors/${vendorId}/documents/${docIndex}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch document")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      window.open(url, "_blank")
+      // Clean up the URL after a delay
+      setTimeout(() => window.URL.revokeObjectURL(url), 100)
+    } catch (err) {
+      console.error("Error viewing document:", err)
+      toast({
+        title: "Error",
+        description: "Failed to view document. Please try again.",
+        variant: "destructive",
+      })
     }
-    // Ensure URL starts with / before prepending API_URL
-    const urlPath = doc.url.startsWith("/") ? doc.url : `/${doc.url}`
-    return `${API_URL}${urlPath}`
+  }
+
+  const handleDownloadDocument = async (docIndex: number, originalName?: string) => {
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in again.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendors/${vendorId}/documents/${docIndex}?download=true`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to download document")
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = originalName || "document"
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (err) {
+      console.error("Error downloading document:", err)
+      toast({
+        title: "Error",
+        description: "Failed to download document. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   const formatDate = (dateString: string) => {
@@ -611,26 +680,21 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
                       )}
                     </div>
                     <div className="flex gap-2">
-                      <a 
-                        href={getDocumentUrl(doc)} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="inline-block"
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleViewDocument(idx)}
                       >
-                        <Button variant="outline" size="sm">
-                          View
-                        </Button>
-                      </a>
-                      <a 
-                        href={getDocumentUrl(doc)} 
-                        download={doc.originalName || "document"}
-                        className="inline-block"
+                        View
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleDownloadDocument(idx, doc.originalName)}
                       >
-                        <Button variant="outline" size="sm">
-                          <Download className="h-4 w-4 mr-1" />
-                          Download
-                        </Button>
-                      </a>
+                        <Download className="h-4 w-4 mr-1" />
+                        Download
+                      </Button>
                     </div>
                   </div>
                 ))

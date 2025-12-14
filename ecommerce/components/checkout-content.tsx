@@ -331,7 +331,7 @@ export function CheckoutContent() {
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const shipping = 150 // Fixed shipping charges
+  const shipping = 0 // Fixed shipping charges
   
   // Calculate GST preview based on selected address
   const selectedAddress = addresses.find((addr) => addr._id === selectedAddressId)
@@ -683,7 +683,7 @@ export function CheckoutContent() {
                     Placing Order...
                   </>
                 ) : (
-                  "Pay with PhonePe"
+                  "Pay with Razorpay"
                 )}
               </Button>
               <p className="text-xs text-muted-foreground text-center">

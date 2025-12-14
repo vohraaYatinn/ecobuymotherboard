@@ -814,6 +814,101 @@ router.get("/export/csv", verifyAdminToken, async (req, res) => {
   }
 })
 
+// Serve vendor document (Admin only)
+router.get("/:vendorId/documents/:documentIndex", verifyAdminToken, async (req, res) => {
+  try {
+    const { vendorId, documentIndex } = req.params
+    const index = parseInt(documentIndex)
+
+    if (isNaN(index) || index < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid document index",
+      })
+    }
+
+    const vendor = await Vendor.findById(vendorId)
+
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found",
+      })
+    }
+
+    if (!vendor.documents || !Array.isArray(vendor.documents) || index >= vendor.documents.length) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found",
+      })
+    }
+
+    const document = vendor.documents[index]
+    
+    // Extract filename from URL (e.g., /uploads/vendor-documents/vendor-123456.pdf)
+    let filePath
+    if (document.url.startsWith("/uploads/")) {
+      filePath = path.join(__dirname, "..", document.url)
+    } else if (document.url.startsWith("uploads/")) {
+      filePath = path.join(__dirname, "..", document.url)
+    } else {
+      // If it's a full URL, try to extract the path
+      const urlPath = document.url.replace(/^https?:\/\/[^\/]+/, "")
+      filePath = path.join(__dirname, "..", urlPath.startsWith("/") ? urlPath : `/${urlPath}`)
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: "Document file not found on server",
+      })
+    }
+
+    // Determine content type
+    const contentType = document.mimetype || "application/octet-stream"
+    
+    // Check if this is a download request
+    const isDownload = req.query.download === "true"
+    
+    // Set response headers
+    const filename = document.originalName || path.basename(filePath)
+    res.setHeader("Content-Type", contentType)
+    res.setHeader(
+      "Content-Disposition", 
+      isDownload ? `attachment; filename="${filename}"` : `inline; filename="${filename}"`
+    )
+    
+    // Stream the file
+    const fileStream = fs.createReadStream(filePath)
+    fileStream.pipe(res)
+    
+    fileStream.on("error", (error) => {
+      console.error("Error streaming document:", error)
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: "Error reading document file",
+        })
+      }
+    })
+  } catch (error) {
+    console.error("Serve vendor document error:", error)
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid vendor ID",
+      })
+    }
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: "Error serving document",
+      })
+    }
+  }
+})
+
 export default router
 
 

@@ -30,7 +30,7 @@ export function CartContent() {
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const shipping = 150 // Fixed shipping charges
+  const shipping = 0 // Fixed shipping charges
   const total = subtotal + shipping
 
   const handleCheckout = () => {
