@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Save, Package, User, CreditCard, Truck, Loader2, AlertCircle, MapPin, Download, ExternalLink } from "lucide-react"
+import { ArrowLeft, Save, Package, User, CreditCard, Truck, Loader2, AlertCircle, MapPin, Download, ExternalLink, RotateCcw, CheckCircle, XCircle } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Textarea } from "@/components/ui/textarea"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
 
 interface OrderItem {
   name: string
@@ -56,6 +57,17 @@ interface Vendor {
   }
 }
 
+interface ReturnRequest {
+  type: "pending" | "accepted" | "denied" | "completed" | null
+  reason?: string
+  requestedAt?: string
+  reviewedAt?: string
+  reviewedBy?: string | { _id: string; name: string; email: string }
+  adminNotes?: string
+  refundStatus?: "pending" | "processing" | "completed" | "failed" | null
+  refundTransactionId?: string
+}
+
 interface Order {
   _id: string
   orderNumber: string
@@ -70,6 +82,7 @@ interface Order {
   paymentMethod: string
   paymentStatus: string
   awbNumber?: string
+  returnRequest?: ReturnRequest
   createdAt: string
   updatedAt: string
 }
@@ -84,6 +97,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [awbNumber, setAwbNumber] = useState("")
   const [awbSaving, setAwbSaving] = useState(false)
+  const [returnActionLoading, setReturnActionLoading] = useState(false)
+  const [returnAdminNotes, setReturnAdminNotes] = useState("")
 
   useEffect(() => {
     fetchOrder()
@@ -328,8 +343,97 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
         return "bg-green-100 text-green-800"
       case "cancelled":
         return "bg-red-100 text-red-800"
+      case "return_requested":
+        return "bg-orange-100 text-orange-800"
+      case "return_accepted":
+        return "bg-green-100 text-green-800"
+      case "return_rejected":
+        return "bg-red-100 text-red-800"
       default:
         return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  const handleAcceptReturn = async () => {
+    if (!order) return
+
+    setReturnActionLoading(true)
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login again")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/orders/${orderId}/return/accept`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          adminNotes: returnAdminNotes.trim() || undefined,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setReturnAdminNotes("")
+        await fetchOrder()
+        alert("Return request accepted successfully")
+      } else {
+        alert(data.message || "Failed to accept return request")
+      }
+    } catch (error) {
+      console.error("Error accepting return request:", error)
+      alert("Network error. Please try again.")
+    } finally {
+      setReturnActionLoading(false)
+    }
+  }
+
+  const handleDenyReturn = async () => {
+    if (!order) return
+
+    if (!returnAdminNotes.trim()) {
+      alert("Please provide a reason for denying the return request")
+      return
+    }
+
+    setReturnActionLoading(true)
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login again")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/orders/${orderId}/return/deny`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          adminNotes: returnAdminNotes.trim(),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setReturnAdminNotes("")
+        await fetchOrder()
+        alert("Return request denied successfully")
+      } else {
+        alert(data.message || "Failed to deny return request")
+      }
+    } catch (error) {
+      console.error("Error denying return request:", error)
+      alert("Network error. Please try again.")
+    } finally {
+      setReturnActionLoading(false)
     }
   }
 
@@ -368,8 +472,131 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const shippingAddress = getShippingAddress()
   const vendor = getVendorInfo()
 
+  const isReturnRequested = order.status === "return_requested" && order.returnRequest && order.returnRequest.type === "pending"
+
   return (
     <div className="space-y-6">
+      {/* Return Request Alert - Show at top if return is requested */}
+      {isReturnRequested && (
+        <Alert className="border-orange-500 bg-orange-50">
+          <RotateCcw className="h-5 w-5 text-orange-600" />
+          <AlertDescription>
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold text-lg mb-2">Return Requested</h3>
+                <div className="bg-white p-4 rounded-lg border border-orange-200">
+                  <Label className="text-sm font-medium text-muted-foreground">Customer Reason:</Label>
+                  <p className="mt-1 text-sm">{order.returnRequest.reason}</p>
+                  {order.returnRequest.requestedAt && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Requested on: {new Date(order.returnRequest.requestedAt).toLocaleString("en-IN")}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="returnAdminNotes" className="text-sm font-medium">
+                  Admin Notes {order.returnRequest.type === "pending" && "(Required for rejection)"}
+                </Label>
+                <Textarea
+                  id="returnAdminNotes"
+                  placeholder="Add notes about your decision..."
+                  value={returnAdminNotes}
+                  onChange={(e) => setReturnAdminNotes(e.target.value)}
+                  rows={3}
+                  className="mt-2"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <Button
+                  onClick={handleAcceptReturn}
+                  disabled={returnActionLoading}
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                >
+                  {returnActionLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Approve Return
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={handleDenyReturn}
+                  disabled={returnActionLoading}
+                  variant="destructive"
+                  className="flex-1"
+                >
+                  {returnActionLoading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Reject Return
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Return Status Alert - Show if return was already processed */}
+      {order.returnRequest && order.returnRequest.type && order.returnRequest.type !== "pending" && (
+        <Alert
+          className={
+            order.returnRequest.type === "accepted"
+              ? "border-green-500 bg-green-50"
+              : "border-red-500 bg-red-50"
+          }
+        >
+          <AlertCircle className="h-5 w-5" />
+          <AlertDescription>
+            <div>
+              <h3 className="font-semibold mb-2">
+                Return {order.returnRequest.type === "accepted" ? "Accepted" : "Rejected"}
+              </h3>
+              {order.returnRequest.reason && (
+                <div className="mb-2">
+                  <span className="font-medium text-sm">Customer Reason:</span>
+                  <p className="text-sm mt-1">{order.returnRequest.reason}</p>
+                </div>
+              )}
+              {order.returnRequest.adminNotes && (
+                <div className="mb-2">
+                  <span className="font-medium text-sm">Admin Notes:</span>
+                  <p className="text-sm mt-1">{order.returnRequest.adminNotes}</p>
+                </div>
+              )}
+              {order.returnRequest.reviewedAt && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Reviewed on: {new Date(order.returnRequest.reviewedAt).toLocaleString("en-IN")}
+                </p>
+              )}
+              {order.returnRequest.type === "accepted" && order.returnRequest.refundStatus && (
+                <div className="mt-2">
+                  <span className="font-medium text-sm">Refund Status:</span>
+                  <Badge
+                    variant={order.returnRequest.refundStatus === "completed" ? "default" : "secondary"}
+                    className="ml-2"
+                  >
+                    {order.returnRequest.refundStatus}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -385,7 +612,9 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
             </p>
           </div>
         </div>
-        <Badge className={`${getStatusColor(order.status)} w-fit capitalize`}>{order.status}</Badge>
+        <Badge className={`${getStatusColor(order.status)} w-fit capitalize`}>
+          {order.status.replace(/_/g, " ")}
+        </Badge>
       </div>
 
       {/* Order Information */}
@@ -555,6 +784,9 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   <SelectItem value="shipped">Shipped</SelectItem>
                   <SelectItem value="delivered">Delivered</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="return_requested">Return Requested</SelectItem>
+                  <SelectItem value="return_accepted">Return Accepted</SelectItem>
+                  <SelectItem value="return_rejected">Return Rejected</SelectItem>
                 </SelectContent>
               </Select>
             </div>

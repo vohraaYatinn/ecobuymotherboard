@@ -2,7 +2,10 @@ import express from "express"
 import mongoose from "mongoose"
 import Order from "../models/Order.js"
 import Customer from "../models/Customer.js"
+import Notification from "../models/Notification.js"
+import Admin from "../models/Admin.js"
 import { verifyAdminToken } from "../middleware/auth.js"
+import { createRazorpayRefund } from "../services/razorpayService.js"
 
 const router = express.Router()
 
@@ -533,6 +536,300 @@ router.get("/stats/overview", verifyAdminToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Internal server error",
+      error: error.message,
+    })
+  }
+})
+
+// Get all return requests (Admin only)
+router.get("/returns", verifyAdminToken, async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      status = "pending", // pending, accepted, denied
+    } = req.query
+
+    // Build filter for return requests
+    const filter = {
+      "returnRequest.type": status === "all" ? { $ne: null } : status,
+    }
+
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit)
+
+    // Get orders with return requests
+    const orders = await Order.find(filter)
+      .populate("customerId", "name mobile email")
+      .populate("shippingAddress", "firstName lastName phone address1 city state postcode")
+      .populate("returnRequest.reviewedBy", "name email")
+      .populate("items.productId", "name brand sku images")
+      .sort({ "returnRequest.requestedAt": -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean()
+
+    // Get total count
+    const total = await Order.countDocuments(filter)
+
+    res.status(200).json({
+      success: true,
+      data: orders,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit)),
+      },
+    })
+  } catch (error) {
+    console.error("Get return requests error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error fetching return requests",
+      error: error.message,
+    })
+  }
+})
+
+// Accept return request (Admin only)
+router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID format",
+      })
+    }
+
+    const { adminNotes } = req.body
+
+    const order = await Order.findById(req.params.id).populate("customerId", "name mobile email")
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      })
+    }
+
+    if (!order.returnRequest || order.returnRequest.type !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "No pending return request found for this order",
+      })
+    }
+
+    // Get admin info
+    const admin = await Admin.findById(req.admin.id)
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        message: "Admin not found",
+      })
+    }
+
+    // Update return request status and order status
+    order.returnRequest.type = "accepted"
+    order.returnRequest.reviewedAt = new Date()
+    order.returnRequest.reviewedBy = req.admin.id
+    if (adminNotes) {
+      order.returnRequest.adminNotes = adminNotes.trim()
+    }
+    order.returnRequest.refundStatus = "pending"
+    order.status = "return_accepted"
+
+    // Process refund if payment was made online
+    let refundResult = null
+    let refundError = null
+
+    if (order.paymentMethod === "online" && order.paymentStatus === "paid" && order.paymentTransactionId) {
+      try {
+        const paymentId = order.paymentMeta?.razorpayPaymentId || order.paymentTransactionId
+        const amountInPaise = Math.round(order.total * 100)
+
+        console.log(`🔄 [RETURN ACCEPT] Initiating refund for order ${order.orderNumber}`, {
+          paymentId,
+          amount: order.total,
+          amountInPaise,
+        })
+
+        refundResult = await createRazorpayRefund({
+          paymentId,
+          amountInPaise,
+          notes: {
+            orderId: order._id.toString(),
+            orderNumber: order.orderNumber,
+            reason: "return_accepted_by_admin",
+            acceptedAt: new Date().toISOString(),
+          },
+        })
+
+        console.log(`✅ [RETURN ACCEPT] Refund successful for order ${order.orderNumber}`, {
+          refundId: refundResult.id,
+          amount: refundResult.amount,
+        })
+
+        order.returnRequest.refundStatus = "completed"
+        order.returnRequest.refundTransactionId = refundResult.id
+        order.paymentStatus = "refunded"
+        order.paymentMeta = {
+          ...(order.paymentMeta || {}),
+          returnRefund: refundResult,
+          refundedAt: new Date().toISOString(),
+        }
+      } catch (refundErr) {
+        refundError = refundErr
+        console.error(`❌ [RETURN ACCEPT] Refund failed for order ${order.orderNumber}:`, refundErr)
+        order.returnRequest.refundStatus = "failed"
+      }
+    } else if (order.paymentMethod === "cod") {
+      // For COD, refund is not applicable but we mark it as completed
+      order.returnRequest.refundStatus = "completed"
+    }
+
+    await order.save()
+
+    // Create notification for customer
+    try {
+      await Notification.create({
+        userId: order.customerId._id,
+        userType: "customer",
+        type: "return_accepted",
+        title: "Return Request Accepted",
+        message: `Your return request for order ${order.orderNumber} has been accepted.${refundResult ? " Refund will be processed shortly." : order.paymentMethod === "cod" ? "" : refundError ? " Please contact support for refund." : ""}`,
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId._id,
+      })
+    } catch (notifError) {
+      console.error("Error creating return accepted notification:", notifError)
+    }
+
+    res.status(200).json({
+      success: true,
+      message: refundError
+        ? "Return request accepted. Refund failed - please process manually."
+        : "Return request accepted successfully",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        returnRequest: order.returnRequest,
+        refund: refundResult
+          ? {
+              id: refundResult.id,
+              amount: refundResult.amount / 100,
+              status: refundResult.status,
+            }
+          : null,
+        refundError: refundError ? refundError.message : null,
+      },
+    })
+  } catch (error) {
+    console.error("Error accepting return request:", error)
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
+    res.status(500).json({
+      success: false,
+      message: "Error accepting return request",
+      error: error.message,
+    })
+  }
+})
+
+// Deny return request (Admin only)
+router.post("/:id/return/deny", verifyAdminToken, async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID format",
+      })
+    }
+
+    const { adminNotes } = req.body
+
+    if (!adminNotes || adminNotes.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Admin notes are required when denying a return request",
+      })
+    }
+
+    const order = await Order.findById(req.params.id).populate("customerId", "name mobile email")
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      })
+    }
+
+    if (!order.returnRequest || order.returnRequest.type !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "No pending return request found for this order",
+      })
+    }
+
+    // Get admin info
+    const admin = await Admin.findById(req.admin.id)
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        message: "Admin not found",
+      })
+    }
+
+    // Update return request status and order status
+    order.returnRequest.type = "denied"
+    order.returnRequest.reviewedAt = new Date()
+    order.returnRequest.reviewedBy = req.admin.id
+    order.returnRequest.adminNotes = adminNotes.trim()
+    order.status = "return_rejected"
+
+    await order.save()
+
+    // Create notification for customer
+    try {
+      await Notification.create({
+        userId: order.customerId._id,
+        userType: "customer",
+        type: "return_denied",
+        title: "Return Request Denied",
+        message: `Your return request for order ${order.orderNumber} has been denied. Reason: ${adminNotes.substring(0, 100)}${adminNotes.length > 100 ? "..." : ""}`,
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId._id,
+      })
+    } catch (notifError) {
+      console.error("Error creating return denied notification:", notifError)
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Return request denied successfully",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        returnRequest: order.returnRequest,
+      },
+    })
+  } catch (error) {
+    console.error("Error denying return request:", error)
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
+    res.status(500).json({
+      success: false,
+      message: "Error denying return request",
       error: error.message,
     })
   }

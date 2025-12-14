@@ -1,7 +1,7 @@
 import express from "express"
 import nodemailer from "nodemailer"
 import SupportRequest from "../models/SupportRequest.js"
-import { authenticateToken } from "../middleware/auth.js"
+import { verifyAdminToken } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -168,7 +168,7 @@ router.post("/submit", async (req, res) => {
 })
 
 // Get all support requests (admin only)
-router.get("/admin/all", authenticateToken, async (req, res) => {
+router.get("/admin/all", verifyAdminToken, async (req, res) => {
   try {
     const { status, category, page = 1, limit = 50, search } = req.query
 
@@ -217,7 +217,7 @@ router.get("/admin/all", authenticateToken, async (req, res) => {
 })
 
 // Get single support request (admin only)
-router.get("/admin/:id", authenticateToken, async (req, res) => {
+router.get("/admin/:id", verifyAdminToken, async (req, res) => {
   try {
     const supportRequest = await SupportRequest.findById(req.params.id)
       .populate("customerId", "name email mobile")
@@ -244,7 +244,7 @@ router.get("/admin/:id", authenticateToken, async (req, res) => {
 })
 
 // Update support request status (admin only)
-router.patch("/admin/:id/status", authenticateToken, async (req, res) => {
+router.patch("/admin/:id/status", verifyAdminToken, async (req, res) => {
   try {
     const { status, adminNotes } = req.body
 
@@ -260,7 +260,7 @@ router.patch("/admin/:id/status", authenticateToken, async (req, res) => {
 
     if (status === "resolved" || status === "closed") {
       updateData.resolvedAt = new Date()
-      updateData.resolvedBy = req.user.id
+      updateData.resolvedBy = req.admin.id
     }
 
     const supportRequest = await SupportRequest.findByIdAndUpdate(

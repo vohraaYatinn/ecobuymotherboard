@@ -4,7 +4,7 @@ This guide explains how to configure the backend API URL for Android app develop
 
 ## Backend Server Configuration
 
-The backend server is configured to accept requests from your local network IP address: **https://api.elecobuy.com**
+The backend server is configured to accept requests from your local network IP address: **http://192.168.1.35:5000**
 
 ### CORS Configuration
 
@@ -17,7 +17,7 @@ The backend server (`backend/server.js`) is configured to:
 
 The server will automatically bind to `0.0.0.0:5000`, making it accessible from:
 - Local: `http://localhost:5000`
-- Network: `https://api.elecobuy.com`
+- Network: `http://192.168.1.35:5000`
 
 ```bash
 cd backend
@@ -29,7 +29,7 @@ npm run dev
 You should see:
 ```
 🚀 Server is running on http://0.0.0.0:5000
-🌐 Network access: https://api.elecobuy.com
+🌐 Network access: http://192.168.1.35:5000
 📍 Local access: http://localhost:5000
 ```
 
@@ -37,7 +37,7 @@ You should see:
 
 ### Default API URL
 
-The vendor app is configured to use `https://api.elecobuy.com` as the default API URL. This is set in:
+The vendor app is configured to use `http://192.168.1.35:5000` as the default API URL. This is set in:
 - `vendor/lib/api-config.ts` - Centralized API configuration
 
 ### Environment Variable (Optional)
@@ -45,7 +45,7 @@ The vendor app is configured to use `https://api.elecobuy.com` as the default AP
 You can override the API URL by creating a `.env.local` file in the `vendor/` directory:
 
 ```env
-NEXT_PUBLIC_API_URL=https://api.elecobuy.com
+NEXT_PUBLIC_API_URL=http://192.168.1.35:5000
 ```
 
 **Note:** If your IP address changes, update it in:
@@ -68,7 +68,7 @@ Look for your local network IP (usually starts with 192.168.x.x or 10.x.x.x)
 
 ## Android App Testing
 
-1. **Ensure backend is running** on `https://api.elecobuy.com`
+1. **Ensure backend is running** on `http://192.168.1.35:5000`
 2. **Ensure your Android device/emulator is on the same network**
 3. **Build and run the Android app:**
    ```bash
@@ -79,7 +79,7 @@ Look for your local network IP (usually starts with 192.168.x.x or 10.x.x.x)
    ```
 
 4. **Test API connectivity:**
-   - The app should automatically connect to `https://api.elecobuy.com`
+   - The app should automatically connect to `http://192.168.1.35:5000`
    - Check console logs for any connection errors
    - Verify API calls work in the app
 
@@ -90,7 +90,7 @@ Look for your local network IP (usually starts with 192.168.x.x or 10.x.x.x)
 1. **Check firewall:** Ensure your firewall allows connections on port 5000
 2. **Check network:** Ensure Android device is on the same WiFi network
 3. **Check IP address:** Verify your machine's IP hasn't changed
-4. **Test from browser:** Try accessing `https://api.elecobuy.com/api/health` from your Android device's browser
+4. **Test from browser:** Try accessing `http://192.168.1.35:5000/api/health` from your Android device's browser
 
 ### CORS errors
 
@@ -103,7 +103,7 @@ The backend is configured to allow all local network IPs. If you still see CORS 
 
 1. **Check backend logs** for incoming requests
 2. **Verify API URL** in `vendor/lib/api-config.ts`
-3. **Test API endpoint** directly: `https://api.elecobuy.com/api/health`
+3. **Test API endpoint** directly: `http://192.168.1.35:5000/api/health`
 4. **Check network security config** in Android (already configured to allow HTTP)
 
 ## Production Deployment

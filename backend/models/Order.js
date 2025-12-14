@@ -60,7 +60,7 @@ const orderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "admin_review_required"],
+      enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "admin_review_required", "return_requested", "return_accepted", "return_rejected"],
       default: "pending",
     },
     paymentMethod: {
@@ -141,6 +141,44 @@ const orderSchema = new mongoose.Schema(
       default: null,
       unique: true,
       sparse: true,
+    },
+    // Return request fields
+    returnRequest: {
+      type: {
+        type: String,
+        enum: ["pending", "accepted", "denied", "completed", null],
+        default: null,
+      },
+      reason: {
+        type: String,
+        default: null,
+      },
+      requestedAt: {
+        type: Date,
+        default: null,
+      },
+      reviewedAt: {
+        type: Date,
+        default: null,
+      },
+      reviewedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Admin",
+        default: null,
+      },
+      adminNotes: {
+        type: String,
+        default: null,
+      },
+      refundStatus: {
+        type: String,
+        enum: ["pending", "processing", "completed", "failed", null],
+        default: null,
+      },
+      refundTransactionId: {
+        type: String,
+        default: null,
+      },
     },
   },
   {

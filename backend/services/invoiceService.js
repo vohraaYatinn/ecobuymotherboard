@@ -22,7 +22,7 @@ const COMPANY_INFO = {
 export async function generateInvoicePDF(order) {
   return new Promise((resolve, reject) => {
     try {
-      const doc = new PDFDocument({ margin: 50, size: "A4" })
+      const doc = new PDFDocument({ margin: 60, size: "A4" })
       const buffers = []
 
       doc.on("data", buffers.push.bind(buffers))
@@ -34,20 +34,21 @@ export async function generateInvoicePDF(order) {
 
       // Header
       doc.fontSize(20).font("Helvetica-Bold").text("INVOICE", { align: "center" })
-      doc.moveDown(0.5)
+      doc.moveDown(0.8)
 
       // Company Name
       doc.fontSize(16).font("Helvetica-Bold").text(COMPANY_INFO.name.toUpperCase(), { align: "center" })
-      doc.moveDown(0.3)
+      doc.moveDown(1)
 
-      // Bill To Section
+      // Calculate positions with proper spacing
       const billToY = doc.y
-      doc.fontSize(10).font("Helvetica-Bold").text("Bill to", 50, billToY)
-      doc.font("Helvetica")
-      
       const customerName = order.customerId?.name || "Customer"
       const customerEmail = order.customerId?.email || ""
       const customerPhone = order.customerId?.mobile || ""
+      
+      // Bill To Section
+      doc.fontSize(10).font("Helvetica-Bold").text("Bill to", 60, billToY)
+      doc.font("Helvetica")
       
       let billToText = customerName
       if (order.shippingAddress && typeof order.shippingAddress === "object") {
@@ -55,16 +56,16 @@ export async function generateInvoicePDF(order) {
         billToText += `\n${addr.address1}`
         if (addr.address2) billToText += `, ${addr.address2}`
         billToText += `\n${addr.city}, ${addr.state} - ${addr.postcode}`
-        billToText += `\n${addr.state}`
         if (customerEmail) billToText += `\n${customerEmail}`
         if (customerPhone) billToText += `\n${customerPhone}`
       }
       
-      doc.fontSize(9).text(billToText, 50, billToY + 15)
+      doc.fontSize(9).text(billToText, 60, billToY + 15)
+      const billToHeight = (billToText.split('\n').length * 12) + 15
 
-      // Ship To Section
-      const shipToY = doc.y
-      doc.fontSize(10).font("Helvetica-Bold").text("Ship to", 50, shipToY + 20)
+      // Ship To Section - Position after Bill To with proper spacing
+      const shipToY = billToY + billToHeight + 25
+      doc.fontSize(10).font("Helvetica-Bold").text("Ship to", 60, shipToY)
       doc.font("Helvetica")
       
       let shipToText = customerName
@@ -73,25 +74,22 @@ export async function generateInvoicePDF(order) {
         shipToText += `\n${addr.address1}`
         if (addr.address2) shipToText += `, ${addr.address2}`
         shipToText += `\n${addr.city}, ${addr.state} - ${addr.postcode}`
-        shipToText += `\n${addr.state}`
       }
       
-      doc.fontSize(9).text(shipToText, 50, shipToY + 35)
+      doc.fontSize(9).text(shipToText, 60, shipToY + 15)
+      const shipToHeight = (shipToText.split('\n').length * 12) + 15
 
       // From Section (Company Address) - Position at top right, aligned with Bill To
       const fromY = billToY
-      doc.fontSize(10).font("Helvetica-Bold").text("From", 300, fromY)
+      doc.fontSize(10).font("Helvetica-Bold").text("From", 350, fromY)
       doc.font("Helvetica")
       const fromText = `${COMPANY_INFO.name}\n${COMPANY_INFO.address}\n${COMPANY_INFO.city} ${COMPANY_INFO.pincode}\n${COMPANY_INFO.state}\n${COMPANY_INFO.phone}\n${COMPANY_INFO.gstin}`
-      doc.fontSize(9).text(fromText, 300, fromY + 15)
+      doc.fontSize(9).text(fromText, 350, fromY + 15)
+      const fromHeight = (fromText.split('\n').length * 12) + 15
 
-      // Invoice Details - Position after the address sections
-      const maxAddressHeight = Math.max(
-        (billToText.split('\n').length * 12) + 15,
-        (shipToText.split('\n').length * 12) + 35,
-        (fromText.split('\n').length * 12) + 15
-      )
-      const invoiceY = billToY + maxAddressHeight + 20
+      // Invoice Details - Position after the address sections with proper spacing
+      const maxAddressHeight = Math.max(billToHeight + 25 + shipToHeight, fromHeight)
+      const invoiceY = billToY + maxAddressHeight + 30
       doc.fontSize(10).font("Helvetica-Bold")
       
       const invoiceDate = new Date(order.createdAt).toLocaleDateString("en-IN", {
@@ -107,10 +105,10 @@ export async function generateInvoicePDF(order) {
         ? String(order.invoiceNumber).padStart(10, "0")
         : order.orderNumber
       
-      doc.text(`Invoice no: ${invoiceNo}`, 50, invoiceY)
-      doc.text(`Invoice date: ${invoiceDate}`, 50, invoiceY + 12)
-      doc.text(`Order no: ${order.orderNumber}`, 50, invoiceY + 24)
-      doc.text(`Order date: ${orderDate}`, 50, invoiceY + 36)
+      doc.text(`Invoice no: ${invoiceNo}`, 60, invoiceY)
+      doc.text(`Invoice date: ${invoiceDate}`, 60, invoiceY + 15)
+      doc.text(`Order no: ${order.orderNumber}`, 60, invoiceY + 30)
+      doc.text(`Order date: ${orderDate}`, 60, invoiceY + 45)
       // Format payment method properly
       let paymentMethodText = "Cash on delivery"
       if (order.paymentMethod) {
@@ -123,28 +121,28 @@ export async function generateInvoicePDF(order) {
           paymentMethodText = order.paymentMethod.toUpperCase()
         }
       }
-      doc.text(`Payment method: ${paymentMethodText}`, 50, invoiceY + 48)
+      doc.text(`Payment method: ${paymentMethodText}`, 60, invoiceY + 60)
 
-      // Table Header
-      const tableY = invoiceY + 70
+      // Table Header - Add spacing after invoice details
+      const tableY = invoiceY + 80
       doc.fontSize(9).font("Helvetica-Bold")
-      doc.text("S.No", 50, tableY)
-      doc.text("Product", 100, tableY)
-      doc.text("Quantity", 350, tableY)
-      doc.text("Unit price", 400, tableY)
-      doc.text("Total price", 480, tableY)
+      doc.text("S.No", 60, tableY)
+      doc.text("Product", 110, tableY)
+      doc.text("Quantity", 360, tableY)
+      doc.text("Unit price", 410, tableY)
+      doc.text("Total price", 490, tableY)
 
-      // Draw line under header (A4 width: 595.28, margin: 50 each side, so max width: 495.28)
-      doc.moveTo(50, tableY + 15).lineTo(545, tableY + 15).stroke()
+      // Draw line under header (A4 width: 595.28, margin: 60 each side, so max width: 475.28)
+      doc.moveTo(60, tableY + 15).lineTo(535, tableY + 15).stroke()
 
       // Table Rows
-      let currentY = tableY + 25
+      let currentY = tableY + 30
       order.items.forEach((item, index) => {
         doc.font("Helvetica").fontSize(9)
         const rowStartY = currentY
         
         // S.No
-        doc.text(String(index + 1), 50, currentY)
+        doc.text(String(index + 1), 60, currentY)
         
         // Product name - allow wrapping to prevent truncation
         const productName = item.name || "Product"
@@ -152,26 +150,27 @@ export async function generateInvoicePDF(order) {
         doc.y = currentY
         const beforeY = doc.y
         // Draw product name with wrapping (this will update doc.y)
-        doc.text(productName, 100, currentY, { width: 240, ellipsis: false, lineGap: 1 })
+        doc.text(productName, 110, currentY, { width: 240, ellipsis: false, lineGap: 2 })
         const afterY = doc.y
-        const nameHeight = Math.max(15, afterY - beforeY)
+        const nameHeight = Math.max(18, afterY - beforeY)
         
         // Position quantity and prices at the start of the row (top-aligned)
         doc.y = rowStartY
-        doc.text(String(item.quantity), 350, rowStartY)
-        doc.text(`₹${item.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 400, rowStartY)
-        doc.text(`₹${(item.price * item.quantity).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 480, rowStartY)
+        doc.text(String(item.quantity), 360, rowStartY)
+        doc.text(`₹${item.price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 410, rowStartY)
+        doc.text(`₹${(item.price * item.quantity).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, 490, rowStartY)
         
-        // Move to next row, accounting for wrapped product name
-        currentY = rowStartY + nameHeight
+        // Move to next row, accounting for wrapped product name with extra spacing
+        currentY = rowStartY + nameHeight + 5
         doc.y = currentY
       })
 
-      // Summary Section - Match invoice format exactly
-      const summaryY = currentY + 20
-      const labelX = 400
-      const amountX = 480
+      // Summary Section - Match invoice format exactly with proper spacing
+      const summaryY = currentY + 30
+      const labelX = 410
+      const amountX = 490
       const amountWidth = 65 // Width for amount column
+      const rightMargin = 535 // Right margin position
       doc.fontSize(9)
       
       // Subtotal
@@ -179,25 +178,28 @@ export async function generateInvoicePDF(order) {
       const subtotalText = `₹${order.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
       doc.text(subtotalText, amountX, summaryY, { align: "right", width: amountWidth })
       
-      // Shipping - Put amount and description together, aligned right
-      doc.text("Shipping", labelX, summaryY + 12)
+      // Shipping - Calculate proper position to align with other amounts
+      const shippingY = summaryY + 18
+      doc.text("Shipping", labelX, shippingY)
       const shippingAmount = `₹${order.shipping.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
-      const shippingText = `${shippingAmount} via Shipping/ Handling`
-      // Increased width to prevent truncation, ensure full text is visible
-      doc.text(shippingText, amountX, summaryY + 12, { align: "right", width: 150 })
+      const shippingText = `${shippingAmount} via Shipping`
+      // Calculate text width and position it to align right with other amounts
+      const shippingTextWidth = doc.widthOfString(shippingText, { fontSize: 9 })
+      const shippingTextX = rightMargin - shippingTextWidth
+      doc.text(shippingText, shippingTextX, shippingY)
       
       // GST - Match invoice format exactly (with proper spacing)
-      let gstY = summaryY + 24
+      let gstY = summaryY + 36
       if (order.cgst > 0 && order.sgst > 0) {
         // Telangana - CGST + SGST
         doc.text("CGST", labelX, gstY)
         const cgstText = `₹${order.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
         doc.text(cgstText, amountX, gstY, { align: "right", width: amountWidth })
         
-        doc.text("SGST", labelX, gstY + 12)
+        doc.text("SGST", labelX, gstY + 18)
         const sgstText = `₹${order.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
-        doc.text(sgstText, amountX, gstY + 12, { align: "right", width: amountWidth })
-        gstY += 12
+        doc.text(sgstText, amountX, gstY + 18, { align: "right", width: amountWidth })
+        gstY += 18
       } else if (order.igst > 0) {
         // Inter-state - IGST
         doc.text("IGST", labelX, gstY)
@@ -207,16 +209,21 @@ export async function generateInvoicePDF(order) {
       
       // Total
       doc.font("Helvetica-Bold").fontSize(10)
-      const totalY = gstY + 12
+      const totalY = gstY + 18
       doc.text("Total", labelX, totalY)
       const totalText = `₹${order.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
       doc.text(totalText, amountX, totalY, { align: "right", width: amountWidth })
 
       // Footer - Position dynamically based on content, ensure it's on the page
-      const footerY = Math.max(totalY + 30, 750)
-      // Ensure footer doesn't go beyond page (A4 height: 841.89, margin: 50, so max Y: 791.89)
-      const safeFooterY = Math.min(footerY, 791)
-      doc.font("Helvetica").fontSize(8).text("Thank you for your business!", { align: "center", y: safeFooterY })
+      const footerY = Math.max(totalY + 40, 750)
+      // Ensure footer doesn't go beyond page (A4 height: 841.89, margin: 60, so max Y: 781.89)
+      const safeFooterY = Math.min(footerY, 781)
+      // Ensure footer text stays on single line with wide width to prevent wrapping
+      doc.font("Helvetica").fontSize(8).text("Thank you for your business!", 60, safeFooterY, { 
+        align: "center", 
+        width: 475,
+        lineGap: 0
+      })
 
       doc.end()
     } catch (error) {

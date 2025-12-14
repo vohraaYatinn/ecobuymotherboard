@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, Search, Eye, Filter, Download, ChevronLeft, ChevronRight, UserPlus, Store, FileDown, Trash2 } from "lucide-react"
+import { Loader2, Search, Eye, Filter, Download, ChevronLeft, ChevronRight, UserPlus, Store, FileDown, Trash2, RotateCcw, CheckCircle, XCircle } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -19,8 +19,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
 
 interface OrderItem {
   productId?: {
@@ -63,6 +65,17 @@ interface Vendor {
   }
 }
 
+interface ReturnRequest {
+  type: "pending" | "accepted" | "denied" | "completed" | null
+  reason?: string
+  requestedAt?: string
+  reviewedAt?: string
+  reviewedBy?: string | { _id: string; name: string; email: string }
+  adminNotes?: string
+  refundStatus?: "pending" | "processing" | "completed" | "failed" | null
+  refundTransactionId?: string
+}
+
 interface Order {
   _id: string
   orderNumber: string
@@ -77,6 +90,7 @@ interface Order {
   total: number
   subtotal: number
   shipping: number
+  returnRequest?: ReturnRequest
   createdAt: string
 }
 
@@ -138,6 +152,10 @@ export function AdminOrdersList() {
   const [selectedOrders, setSelectedOrders] = useState<string[]>([])
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
+  const [returnRequestDialogOpen, setReturnRequestDialogOpen] = useState(false)
+  const [returnRequestOrder, setReturnRequestOrder] = useState<Order | null>(null)
+  const [returnActionLoading, setReturnActionLoading] = useState(false)
+  const [returnAdminNotes, setReturnAdminNotes] = useState("")
 
   useEffect(() => {
     fetchOrders()
@@ -377,6 +395,99 @@ export function AdminOrdersList() {
       alert("Network error. Please try again.")
     } finally {
       setBulkDeleting(false)
+    }
+  }
+
+  const openReturnRequestDialog = (order: Order) => {
+    setReturnRequestOrder(order)
+    setReturnAdminNotes("")
+    setReturnRequestDialogOpen(true)
+  }
+
+  const handleAcceptReturn = async () => {
+    if (!returnRequestOrder) return
+
+    setReturnActionLoading(true)
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login again")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/orders/${returnRequestOrder._id}/return/accept`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          adminNotes: returnAdminNotes.trim() || undefined,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setReturnRequestDialogOpen(false)
+        setReturnRequestOrder(null)
+        setReturnAdminNotes("")
+        fetchOrders()
+        alert("Return request accepted successfully")
+      } else {
+        alert(data.message || "Failed to accept return request")
+      }
+    } catch (error) {
+      console.error("Error accepting return request:", error)
+      alert("Network error. Please try again.")
+    } finally {
+      setReturnActionLoading(false)
+    }
+  }
+
+  const handleDenyReturn = async () => {
+    if (!returnRequestOrder) return
+
+    if (!returnAdminNotes.trim()) {
+      alert("Please provide a reason for denying the return request")
+      return
+    }
+
+    setReturnActionLoading(true)
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login again")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/orders/${returnRequestOrder._id}/return/deny`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          adminNotes: returnAdminNotes.trim(),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setReturnRequestDialogOpen(false)
+        setReturnRequestOrder(null)
+        setReturnAdminNotes("")
+        fetchOrders()
+        alert("Return request denied successfully")
+      } else {
+        alert(data.message || "Failed to deny return request")
+      }
+    } catch (error) {
+      console.error("Error denying return request:", error)
+      alert("Network error. Please try again.")
+    } finally {
+      setReturnActionLoading(false)
     }
   }
 
@@ -833,7 +944,24 @@ export function AdminOrdersList() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge className={getStatusColor(order.status)}>{formatStatus(order.status)}</Badge>
+                            <div className="space-y-1">
+                              <Badge className={getStatusColor(order.status)}>{formatStatus(order.status)}</Badge>
+                              {order.returnRequest && order.returnRequest.type && (
+                                <Badge
+                                  variant={
+                                    order.returnRequest.type === "pending"
+                                      ? "secondary"
+                                      : order.returnRequest.type === "accepted"
+                                      ? "default"
+                                      : "destructive"
+                                  }
+                                  className="text-xs ml-1"
+                                >
+                                  <RotateCcw className="h-3 w-3 mr-1 inline" />
+                                  Return {order.returnRequest.type}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="font-semibold">₹{order.total.toLocaleString()}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">
@@ -870,6 +998,18 @@ export function AdminOrdersList() {
                                 <Filter className="h-4 w-4" />
                                 Edit
                               </Button>
+                              {order.returnRequest && order.returnRequest.type === "pending" && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="gap-2 text-orange-600 hover:text-orange-700"
+                                  onClick={() => openReturnRequestDialog(order)}
+                                  title="Review Return Request"
+                                >
+                                  <RotateCcw className="h-4 w-4" />
+                                  Return
+                                </Button>
+                              )}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -956,6 +1096,27 @@ export function AdminOrdersList() {
                             <span className="text-muted-foreground">Total:</span>
                             <p className="font-semibold text-green-600">₹{order.total.toLocaleString()}</p>
                           </div>
+                          <div>
+                            <span className="text-muted-foreground">Status:</span>
+                            <div className="mt-1 space-y-1">
+                              <Badge className={getStatusColor(order.status)}>{formatStatus(order.status)}</Badge>
+                              {order.returnRequest && order.returnRequest.type && (
+                                <Badge
+                                  variant={
+                                    order.returnRequest.type === "pending"
+                                      ? "secondary"
+                                      : order.returnRequest.type === "accepted"
+                                      ? "default"
+                                      : "destructive"
+                                  }
+                                  className="text-xs ml-1"
+                                >
+                                  <RotateCcw className="h-3 w-3 mr-1 inline" />
+                                  Return {order.returnRequest.type}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         <div className="flex justify-end gap-2 pt-2 border-t">
                           <Link href={`/admin/orders/${order._id}`}>
@@ -982,6 +1143,17 @@ export function AdminOrdersList() {
                             <Filter className="h-4 w-4" />
                             Edit
                           </Button>
+                          {order.returnRequest && order.returnRequest.type === "pending" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-2 bg-transparent text-orange-600 hover:text-orange-700"
+                              onClick={() => openReturnRequestDialog(order)}
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                              Return
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1217,6 +1389,150 @@ export function AdminOrdersList() {
               Cancel
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Return Request Dialog */}
+      <Dialog open={returnRequestDialogOpen} onOpenChange={setReturnRequestDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5" />
+              Review Return Request
+            </DialogTitle>
+            <DialogDescription>
+              Review and accept or deny the return request for this order
+            </DialogDescription>
+          </DialogHeader>
+          {returnRequestOrder && returnRequestOrder.returnRequest && (
+            <div className="space-y-4">
+              <div>
+                <Label>Order Number</Label>
+                <p className="font-semibold">{returnRequestOrder.orderNumber}</p>
+              </div>
+              
+              <div>
+                <Label>Customer Return Reason</Label>
+                <Alert className="mt-2">
+                  <AlertDescription>{returnRequestOrder.returnRequest.reason}</AlertDescription>
+                </Alert>
+              </div>
+
+              {returnRequestOrder.returnRequest.requestedAt && (
+                <div>
+                  <Label>Requested At</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(returnRequestOrder.returnRequest.requestedAt).toLocaleString("en-IN")}
+                  </p>
+                </div>
+              )}
+
+              <div>
+                <Label htmlFor="adminNotes">Admin Notes {returnRequestOrder.returnRequest.type === "pending" && "(Required for denial)"}</Label>
+                <Textarea
+                  id="adminNotes"
+                  placeholder="Add notes about your decision (required if denying)..."
+                  value={returnAdminNotes}
+                  onChange={(e) => setReturnAdminNotes(e.target.value)}
+                  rows={4}
+                  className="mt-2"
+                />
+              </div>
+
+              {returnRequestOrder.returnRequest.type === "pending" && (
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button
+                    onClick={handleAcceptReturn}
+                    disabled={returnActionLoading}
+                    className="flex-1 bg-green-600 hover:bg-green-700"
+                  >
+                    {returnActionLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Accept Return
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleDenyReturn}
+                    disabled={returnActionLoading}
+                    variant="destructive"
+                    className="flex-1"
+                  >
+                    {returnActionLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Deny Return
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setReturnRequestDialogOpen(false)
+                      setReturnRequestOrder(null)
+                      setReturnAdminNotes("")
+                    }}
+                    disabled={returnActionLoading}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+
+              {returnRequestOrder.returnRequest.type !== "pending" && (
+                <div className="pt-4 border-t">
+                  <Alert
+                    variant={returnRequestOrder.returnRequest.type === "accepted" ? "default" : "destructive"}
+                  >
+                    <AlertDescription>
+                      <div className="font-semibold mb-1">
+                        Status: {returnRequestOrder.returnRequest.type === "accepted" ? "Accepted" : "Denied"}
+                      </div>
+                      {returnRequestOrder.returnRequest.adminNotes && (
+                        <div className="mt-1">
+                          <span className="font-medium">Admin Notes:</span> {returnRequestOrder.returnRequest.adminNotes}
+                        </div>
+                      )}
+                      {returnRequestOrder.returnRequest.reviewedAt && (
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          Reviewed: {new Date(returnRequestOrder.returnRequest.reviewedAt).toLocaleString("en-IN")}
+                        </div>
+                      )}
+                      {returnRequestOrder.returnRequest.type === "accepted" &&
+                        returnRequestOrder.returnRequest.refundStatus && (
+                          <div className="mt-1">
+                            <span className="font-medium">Refund Status:</span>{" "}
+                            {returnRequestOrder.returnRequest.refundStatus}
+                          </div>
+                        )}
+                    </AlertDescription>
+                  </Alert>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setReturnRequestDialogOpen(false)
+                      setReturnRequestOrder(null)
+                      setReturnAdminNotes("")
+                    }}
+                    className="mt-4 w-full"
+                  >
+                    Close
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

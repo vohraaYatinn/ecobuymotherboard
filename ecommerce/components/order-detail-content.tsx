@@ -8,11 +8,20 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, Package, CheckCircle2, MapPin, Phone, Mail, ArrowLeft, Download, Truck, AlertCircle, ExternalLink, XCircle } from "lucide-react"
+import { Loader2, Package, CheckCircle2, MapPin, Phone, Mail, ArrowLeft, Download, Truck, AlertCircle, ExternalLink, XCircle, RotateCcw } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
 
 interface OrderItem {
   productId: {
@@ -40,6 +49,17 @@ interface ShippingAddress {
   country: string
 }
 
+interface ReturnRequest {
+  type: "pending" | "accepted" | "denied" | "completed" | null
+  reason?: string
+  requestedAt?: string
+  reviewedAt?: string
+  reviewedBy?: string
+  adminNotes?: string
+  refundStatus?: "pending" | "processing" | "completed" | "failed" | null
+  refundTransactionId?: string
+}
+
 interface Order {
   _id: string
   orderNumber: string
@@ -59,6 +79,7 @@ interface Order {
   sgst?: number
   igst?: number
   shippingState?: string
+  returnRequest?: ReturnRequest
   createdAt: string
   updatedAt: string
 }
@@ -75,6 +96,9 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [cancelling, setCancelling] = useState(false)
+  const [returnDialogOpen, setReturnDialogOpen] = useState(false)
+  const [returnReason, setReturnReason] = useState("")
+  const [submittingReturn, setSubmittingReturn] = useState(false)
 
   useEffect(() => {
     const fetchOrder = async () => {
@@ -284,6 +308,66 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       setCancelling(false)
     }
   }
+
+  const handleReturnRequest = async () => {
+    if (!returnReason.trim()) {
+      alert("Please provide a reason for return")
+      return
+    }
+
+    setSubmittingReturn(true)
+    try {
+      const token = localStorage.getItem("customerToken")
+      if (!token) {
+        alert("Please login to request return")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/orders/${orderId}/return`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason: returnReason.trim() }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to submit return request")
+      }
+
+      if (data.success) {
+        // Refresh order data
+        const orderResponse = await fetch(`${API_URL}/api/orders/${orderId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+
+        if (orderResponse.ok) {
+          const orderData = await orderResponse.json()
+          if (orderData.success) {
+            setOrder(orderData.data)
+          }
+        }
+
+        setReturnDialogOpen(false)
+        setReturnReason("")
+        alert("Return request submitted successfully. Our team will review it shortly.")
+      }
+    } catch (err: any) {
+      console.error("Error submitting return request:", err)
+      alert(err.message || "Failed to submit return request. Please try again.")
+    } finally {
+      setSubmittingReturn(false)
+    }
+  }
+
+  const isDelivered = order?.status.toLowerCase() === "delivered"
+  const hasReturnRequest = order?.returnRequest && order.returnRequest.type
+  const returnStatus = order?.returnRequest?.type
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -619,13 +703,97 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
                   Contact Support
                 </Button>
               </Link>
-              <Button
-                variant="outline"
-                className="w-full text-sm bg-transparent"
-                disabled={order.status.toLowerCase() !== "delivered"}
-              >
-                Return Order
-              </Button>
+              
+              {/* Return Request Section */}
+              {isDelivered && (
+                <>
+                  {!hasReturnRequest ? (
+                    <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full text-sm bg-transparent"
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                          Request Return
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Request Return</DialogTitle>
+                          <DialogDescription>
+                            Please provide a reason for returning this order. Our team will review your request.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div>
+                            <Label htmlFor="returnReason">Return Reason *</Label>
+                            <Textarea
+                              id="returnReason"
+                              placeholder="Please explain why you want to return this order..."
+                              value={returnReason}
+                              onChange={(e) => setReturnReason(e.target.value)}
+                              rows={5}
+                              className="mt-2"
+                            />
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setReturnDialogOpen(false)
+                                setReturnReason("")
+                              }}
+                              disabled={submittingReturn}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={handleReturnRequest}
+                              disabled={submittingReturn || !returnReason.trim()}
+                            >
+                              {submittingReturn ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Submitting...
+                                </>
+                              ) : (
+                                "Submit Request"
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  ) : (
+                    <div className="space-y-2">
+                      <Alert className={returnStatus === "accepted" ? "border-green-500" : returnStatus === "denied" ? "border-red-500" : "border-yellow-500"}>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription className="text-xs">
+                          <div className="font-semibold mb-1">
+                            Return Request: {returnStatus === "pending" ? "Under Review" : returnStatus === "accepted" ? "Accepted" : "Denied"}
+                          </div>
+                          {order.returnRequest?.reason && (
+                            <div className="mb-1">
+                              <span className="font-medium">Your reason:</span> {order.returnRequest.reason}
+                            </div>
+                          )}
+                          {order.returnRequest?.adminNotes && (
+                            <div className="mt-1">
+                              <span className="font-medium">Admin response:</span> {order.returnRequest.adminNotes}
+                            </div>
+                          )}
+                          {returnStatus === "accepted" && order.returnRequest?.refundStatus === "completed" && (
+                            <div className="mt-1 text-green-600">
+                              Refund has been processed.
+                            </div>
+                          )}
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

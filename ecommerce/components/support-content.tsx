@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Mail, Phone, MessageCircle, Loader2, CheckCircle } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
 
 export function SupportContent() {
   const [formData, setFormData] = useState({
@@ -252,7 +252,6 @@ export function SupportContent() {
                 <div>
                   <p className="font-semibold text-sm sm:text-base">Email Support</p>
                   <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-all">mahender@ekranfix.com</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Response within 24 hours</p>
                 </div>
               </div>
 

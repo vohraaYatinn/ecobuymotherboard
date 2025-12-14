@@ -886,4 +886,116 @@ router.post("/:id/cancel", authenticate, async (req, res) => {
   }
 })
 
+// Request return for delivered order
+router.post("/:id/return", authenticate, async (req, res) => {
+  try {
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID format",
+      })
+    }
+
+    const { reason } = req.body
+
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Return reason is required",
+      })
+    }
+
+    const order = await Order.findOne({
+      _id: req.params.id,
+      customerId: req.userId,
+    })
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      })
+    }
+
+    // Check if order is delivered
+    if (order.status !== "delivered") {
+      return res.status(400).json({
+        success: false,
+        message: "Return can only be requested for delivered orders",
+      })
+    }
+
+    // Check if return request already exists
+    if (order.returnRequest && order.returnRequest.type) {
+      return res.status(400).json({
+        success: false,
+        message: `Return request already ${order.returnRequest.type}`,
+      })
+    }
+
+    // Create return request and update order status
+    order.returnRequest = {
+      type: "pending",
+      reason: reason.trim(),
+      requestedAt: new Date(),
+    }
+    order.status = "return_requested"
+
+    await order.save()
+
+    // Create notification for customer
+    try {
+      await Notification.create({
+        userId: order.customerId,
+        userType: "customer",
+        type: "return_requested",
+        title: "Return Request Submitted",
+        message: `Your return request for order ${order.orderNumber} has been submitted and is under review.`,
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        customerId: order.customerId,
+      })
+    } catch (notifError) {
+      console.error("Error creating return request notification:", notifError)
+    }
+
+    // Notify admin about return request
+    try {
+      const admin = await Admin.findOne({ isActive: true })
+      if (admin) {
+        await Notification.create({
+          userId: admin._id,
+          userType: "admin",
+          type: "return_requested",
+          title: "New Return Request",
+          message: `Customer has requested return for order ${order.orderNumber}. Reason: ${reason.substring(0, 50)}${reason.length > 50 ? "..." : ""}`,
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          customerId: order.customerId,
+        })
+      }
+    } catch (notifError) {
+      console.error("Error creating admin notification:", notifError)
+    }
+
+    res.json({
+      success: true,
+      message: "Return request submitted successfully",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        returnRequest: order.returnRequest,
+      },
+    })
+  } catch (error) {
+    console.error("Error creating return request:", error)
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    })
+  }
+})
+
 export default router
