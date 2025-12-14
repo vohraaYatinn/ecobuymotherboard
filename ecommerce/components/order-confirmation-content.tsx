@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { CheckCircle, Package, MapPin, Loader2, Sparkles } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface OrderItem {
   productId: string

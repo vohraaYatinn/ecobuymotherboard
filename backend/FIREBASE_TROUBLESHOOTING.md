@@ -76,7 +76,7 @@ FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYour\nPrivate\nKey\nHere\n---
 Use the test endpoint (requires admin authentication):
 ```bash
 curl -H "Authorization: Bearer YOUR_ADMIN_TOKEN" \
-  http://192.168.1.35:5000/api/push-notifications/test
+  https://api.elecobuy.com/api/push-notifications/test
 ```
 
 This will show:

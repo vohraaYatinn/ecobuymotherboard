@@ -20,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { Search, Eye, Plus, Store, MapPin, Loader2, Smartphone, Download, Percent } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface PushToken {
   token: string
