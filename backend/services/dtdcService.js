@@ -177,6 +177,36 @@ export function clearAuthCache() {
   authTokenCache.expiresAt = null
 }
 
+// Try to pull AWB number from multiple possible DTDC fields/levels
+function resolveAwbFromConsignment(consignment) {
+  if (!consignment || typeof consignment !== "object") return null
+
+  const directCandidates = [
+    consignment.reference_number,
+    consignment.awbno,
+    consignment.awb_no,
+    consignment.waybill_no,
+  ]
+    .filter((v) => v !== undefined && v !== null)
+    .map((v) => (typeof v === "string" ? v.trim() : v))
+    .find(Boolean)
+
+  if (directCandidates) return directCandidates
+
+  if (Array.isArray(consignment.piece_details)) {
+    const pieceAwb = consignment.piece_details
+      .map((p) => {
+        if (!p) return null
+        const candidate = p.reference_number || p.awbno || p.awb_no || p.waybill_no
+        return typeof candidate === "string" ? candidate.trim() : candidate
+      })
+      .find(Boolean)
+    if (pieceAwb) return pieceAwb
+  }
+
+  return null
+}
+
 // Auto-sync shipment creation for DTDC Order Upload API (B2C / Express)
 export async function createShipmentForOrder(order) {
   console.log(`🔵 [DTDC-DEBUG] ========================================`)
@@ -292,7 +322,7 @@ export async function createShipmentForOrder(order) {
     if (data.status === "OK" && Array.isArray(data.data) && data.data.length > 0) {
       const consignment = data.data[0]
       if (consignment.success === true) {
-        awbNumber = consignment.reference_number || null
+        awbNumber = resolveAwbFromConsignment(consignment)
         console.log(`✅ [DTDC-DEBUG] ✅ DTDC shipment created successfully!`)
         console.log(`✅ [DTDC-DEBUG] AWB Number: ${awbNumber}`)
       } else {
@@ -306,6 +336,7 @@ export async function createShipmentForOrder(order) {
 
     if (!awbNumber) {
       console.error(`❌ [DTDC-DEBUG] No AWB number found in response`)
+      console.error(`❌ [DTDC-DEBUG] Full consignment for debugging:`, JSON.stringify((data.data && data.data[0]) || data, null, 2))
       throw new Error("DTDC shipment created but AWB number not found in response")
     }
 
