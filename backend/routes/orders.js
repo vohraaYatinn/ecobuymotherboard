@@ -356,7 +356,7 @@ const createOrderDraft = async ({ customerId, addressId }) => {
     })
   }
 
-  const shipping = 1 // Fixed shipping charges as per requirements
+  const shipping = 150 // Fixed shipping charges as per requirements
 
   const shippingState = address.state?.trim().toUpperCase() || ""
   const isTelangana = shippingState === "TELANGANA" || shippingState === "TS"

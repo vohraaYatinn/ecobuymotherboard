@@ -207,6 +207,17 @@ function resolveAwbFromConsignment(consignment) {
   return null
 }
 
+// Remove non-ASCII chars and collapse whitespace; ensure fallback if empty
+function sanitizeAscii(value, fallback = "") {
+  const cleaned = String(value || "")
+    .replace(/[^\x00-\x7F]/g, " ") // remove non-ASCII
+    .replace(/\s+/g, " ")
+    .trim()
+
+  const finalVal = cleaned || fallback
+  return finalVal.slice(0, 120) // keep within a reasonable length
+}
+
 // Auto-sync shipment creation for DTDC Order Upload API (B2C / Express)
 export async function createShipmentForOrder(order) {
   console.log(`🔵 [DTDC-DEBUG] ========================================`)
@@ -227,9 +238,21 @@ export async function createShipmentForOrder(order) {
     const shippingAddress = order.shippingAddress
     const customer = order.customerId || {}
 
+    // Sanitize address lines to avoid DTDC non-ASCII validation errors
+    const destAddr1 = sanitizeAscii(
+      shippingAddress.address1,
+      sanitizeAscii(`${shippingAddress.city || ""} ${shippingAddress.state || ""}`.trim(), "Address")
+    )
+    const destAddr2 = sanitizeAscii(shippingAddress.address2 || "")
+
+    const originAddr1 = sanitizeAscii("H N O 3-122/6, Chengicherla Road")
+    const originAddr2 = sanitizeAscii(
+      "Besides Growel Feed Supplements and Mineral Mixtures, Boudha Nagar"
+    )
+
     console.log(`🔵 [DTDC-DEBUG] Shipping Address:`, {
       name: `${shippingAddress.firstName || ""} ${shippingAddress.lastName || ""}`.trim(),
-      address1: shippingAddress.address1,
+      address1: destAddr1,
       city: shippingAddress.city,
       state: shippingAddress.state,
       pincode: shippingAddress.postcode,
@@ -266,8 +289,8 @@ export async function createShipmentForOrder(order) {
             name: "ELECOBUY",
             phone: "8639979558",
             alternate_phone: "",
-            address_line_1: "H N O 3-122/6, Chengicherla Road",
-            address_line_2: "Besides Growel Feed Supplements and Mineral Mixtures, Boudha Nagar",
+            address_line_1: originAddr1,
+            address_line_2: originAddr2,
             pincode: "500098",
             city: "Hyderabad",
             state: "Telangana",
@@ -276,8 +299,8 @@ export async function createShipmentForOrder(order) {
             name: `${shippingAddress.firstName || ""} ${shippingAddress.lastName || ""}`.trim(),
             phone: shippingAddress.phone || "",
             alternate_phone: "",
-            address_line_1: shippingAddress.address1 || "",
-            address_line_2: shippingAddress.address2 || "",
+            address_line_1: destAddr1,
+            address_line_2: destAddr2,
             pincode: shippingAddress.postcode || "",
             city: shippingAddress.city || "",
             state: shippingAddress.state || "",
@@ -329,6 +352,7 @@ export async function createShipmentForOrder(order) {
         console.error(`❌ [DTDC-DEBUG] DTDC returned success=false`)
         console.error(`❌ [DTDC-DEBUG] Error message:`, consignment.message)
         console.error(`❌ [DTDC-DEBUG] Error reason:`, consignment.reason)
+        throw new Error(`DTDC order upload failed: ${consignment.message || consignment.reason || "Unknown error"}`)
       }
     } else {
       console.error(`❌ [DTDC-DEBUG] Unexpected response format`)
