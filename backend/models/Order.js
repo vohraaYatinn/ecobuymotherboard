@@ -179,6 +179,23 @@ const orderSchema = new mongoose.Schema(
         type: String,
         default: null,
       },
+      attachments: {
+        type: [
+          {
+            url: { type: String },
+            originalName: { type: String },
+            mimeType: { type: String },
+            size: { type: Number },
+            uploadedAt: { type: Date, default: Date.now },
+          },
+        ],
+        default: [],
+      },
+    },
+    deliveredAt: {
+      type: Date,
+      default: null,
+      index: true,
     },
   },
   {

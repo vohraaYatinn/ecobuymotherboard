@@ -1,19 +1,46 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Trash2, Plus, Minus, ShoppingBag, Loader2 } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 export function CartContent() {
   const router = useRouter()
   const { cartItems, loading, updateQuantity, removeFromCart } = useCart()
+  const [shippingCharges, setShippingCharges] = useState<number>(150)
+  const [fetchingShippingCharges, setFetchingShippingCharges] = useState(true)
+
+  useEffect(() => {
+    fetchShippingCharges()
+  }, [])
+
+  const fetchShippingCharges = async () => {
+    try {
+      setFetchingShippingCharges(true)
+      const response = await fetch(`${API_URL}/api/settings/shipping-charges`)
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch shipping charges")
+      }
+
+      const data = await response.json()
+      if (data.success && data.data) {
+        setShippingCharges(data.data.shippingCharges || 150)
+      }
+    } catch (error) {
+      console.error("Error fetching shipping charges:", error)
+      // Keep default value of 150 if fetch fails
+      setShippingCharges(150)
+    } finally {
+      setFetchingShippingCharges(false)
+    }
+  }
 
   const handleQuantityChange = async (productId: string, change: number) => {
     const item = cartItems.find((item) => item.product._id === productId)
@@ -30,7 +57,7 @@ export function CartContent() {
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const shipping = 150 // Fixed shipping charges
+  const shipping = shippingCharges // Shipping charges fetched from backend
   const total = subtotal + shipping
 
   const handleCheckout = () => {
@@ -164,13 +191,6 @@ export function CartContent() {
             <Button className="w-full mb-3 sm:mb-4 h-11 sm:h-12 text-sm sm:text-base touch-manipulation" size="lg" onClick={handleCheckout} disabled={loading}>
               Proceed to Checkout
             </Button>
-
-            <div className="space-y-2.5 sm:space-y-3">
-              <Input placeholder="Enter coupon code" className="h-10 sm:h-11 text-sm" />
-              <Button variant="outline" className="w-full bg-transparent h-10 sm:h-11 text-sm sm:text-base touch-manipulation">
-                Apply Coupon
-              </Button>
-            </div>
 
             <div className="mt-4 sm:mt-6 text-xs text-muted-foreground">
               <p className="mb-2">We accept:</p>

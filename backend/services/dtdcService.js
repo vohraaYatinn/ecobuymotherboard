@@ -64,31 +64,69 @@ export async function trackConsignment(awbNumber, includeAdditionalDetails = tru
   }
 
   const cleanAWB = awbNumber.trim().toUpperCase()
-  if (!/^[A-Z]\d{8}$/.test(cleanAWB)) {
-    throw new Error("Invalid AWB number format. Expected: 1 alphabet + 8 digits, e.g. V01197967")
+  // DTDC sometimes returns numeric-leading or longer AWBs (e.g., 7X109986044). Allow 9–12 alphanumeric.
+  if (!/^[A-Z0-9]{9,12}$/.test(cleanAWB)) {
+    throw new Error(
+      "Invalid AWB number format. Expected 9-12 alphanumeric characters (e.g., V01197967 or 7X109986044)"
+    )
   }
 
-  const token = await getAuthToken()
+  const baseUrlOverride = process.env.DTDC_TRACK_URL
   const baseUrl =
-    DTDC_CONFIG.environment === "staging" ? DTDC_CONFIG.staging.track : DTDC_CONFIG.production.track
+    baseUrlOverride ||
+    (DTDC_CONFIG.environment === "staging" ? DTDC_CONFIG.staging.track : DTDC_CONFIG.production.track)
 
-  const response = await axios.get(baseUrl, {
-    params: {
+  try {
+    // Attempt 1: Basic auth (many production setups expect this)
+    const [username, password] = DTDC_CONFIG.trackingCredentials.split(":")
+    const params = {
       strcnno: cleanAWB,
       TrkType: "cnno",
       addtnIDtl: includeAdditionalDetails ? "Y" : "N",
-      apikev: token,
-    },
-    timeout: 15000,
-    headers: { Accept: "application/json" },
-  })
+    }
 
-  if (response.status !== 200) {
-    throw new Error(`DTDC tracking failed with status ${response.status}`)
+    const basicResp = await axios.get(baseUrl, {
+      params,
+      timeout: 15000,
+      headers: { Accept: "application/json" },
+      auth: { username, password },
+    })
+
+    if (basicResp.status === 200) {
+      return transformTrackingData(basicResp.data)
+    }
+
+    // If basic auth didn't return 200, fall through to token flow
+  } catch (err) {
+    // Attempt 2: token-based tracking (apikev)
+    try {
+      const token = await getAuthToken()
+      const params = {
+        strcnno: cleanAWB,
+        TrkType: "cnno",
+        addtnIDtl: includeAdditionalDetails ? "Y" : "N",
+        apikev: token,
+      }
+
+      const tokenResp = await axios.get(baseUrl, {
+        params,
+        timeout: 15000,
+        headers: { Accept: "application/json" },
+      })
+
+      if (tokenResp.status !== 200) {
+        throw new Error(`DTDC tracking (token flow) failed with status ${tokenResp.status}`)
+      }
+
+      return transformTrackingData(tokenResp.data)
+    } catch (tokenErr) {
+      const tStatus = tokenErr?.response?.status
+      const tData = tokenErr?.response?.data
+      const tDetail = tStatus ? `status ${tStatus}` : tokenErr.message
+      const tBody = tData ? ` | body: ${JSON.stringify(tData).slice(0, 500)}` : ""
+      throw new Error(`DTDC tracking request failed (token flow) (${tDetail})${tBody}`)
+    }
   }
-
-  const raw = response.data
-  return transformTrackingData(raw)
 }
 
 export function transformTrackingData(rawData) {
@@ -219,7 +257,7 @@ function sanitizeAscii(value, fallback = "") {
 }
 
 // Auto-sync shipment creation for DTDC Order Upload API (B2C / Express)
-export async function createShipmentForOrder(order) {
+export async function createShipmentForOrder(order, options = {}) {
   console.log(`🔵 [DTDC-DEBUG] ========================================`)
   console.log(`🔵 [DTDC-DEBUG] createShipmentForOrder called`)
   console.log(`🔵 [DTDC-DEBUG] Order Number: ${order?.orderNumber || "N/A"}`)
@@ -238,17 +276,47 @@ export async function createShipmentForOrder(order) {
     const shippingAddress = order.shippingAddress
     const customer = order.customerId || {}
 
+    // Normalize origin/destination (supports forward and reverse legs)
+    const originInput = options.origin || {
+      name: "ELECOBUY",
+      phone: "8639979558",
+      address1: "H N O 3-122/6, Chengicherla Road",
+      address2: "Besides Growel Feed Supplements and Mineral Mixtures, Boudha Nagar",
+      pincode: "500098",
+      city: "Hyderabad",
+      state: "Telangana",
+    }
+
+    const destinationInput =
+      options.destination ||
+      (shippingAddress
+        ? {
+            name: `${shippingAddress.firstName || ""} ${shippingAddress.lastName || ""}`.trim(),
+            phone: shippingAddress.phone || "",
+            address1: shippingAddress.address1,
+            address2: shippingAddress.address2 || "",
+            pincode: shippingAddress.postcode || "",
+            city: shippingAddress.city || "",
+            state: shippingAddress.state || "",
+          }
+        : null)
+
+    if (!destinationInput) {
+      throw new Error("Destination address is required for DTDC shipment")
+    }
+
     // Sanitize address lines to avoid DTDC non-ASCII validation errors
     const destAddr1 = sanitizeAscii(
-      shippingAddress.address1,
-      sanitizeAscii(`${shippingAddress.city || ""} ${shippingAddress.state || ""}`.trim(), "Address")
+      destinationInput.address1,
+      sanitizeAscii(`${destinationInput.city || ""} ${destinationInput.state || ""}`.trim(), "Address")
     )
-    const destAddr2 = sanitizeAscii(shippingAddress.address2 || "")
+    const destAddr2 = sanitizeAscii(destinationInput.address2 || "")
 
-    const originAddr1 = sanitizeAscii("H N O 3-122/6, Chengicherla Road")
-    const originAddr2 = sanitizeAscii(
-      "Besides Growel Feed Supplements and Mineral Mixtures, Boudha Nagar"
+    const originAddr1 = sanitizeAscii(
+      originInput.address1,
+      sanitizeAscii(`${originInput.city || ""} ${originInput.state || ""}`.trim(), "Address")
     )
+    const originAddr2 = sanitizeAscii(originInput.address2 || "")
 
     console.log(`🔵 [DTDC-DEBUG] Shipping Address:`, {
       name: `${shippingAddress.firstName || ""} ${shippingAddress.lastName || ""}`.trim(),
@@ -269,8 +337,8 @@ export async function createShipmentForOrder(order) {
       ? order.items.reduce((sum, item) => sum + (item.quantity || 0), 0)
       : 1
 
-    // Build payload according to DTDC Order Upload API spec
-    const payload = {
+    const referenceBase = options.referenceNumber || order.orderNumber
+    const buildPayload = (referenceNumber) => ({
       consignments: [
         {
           customer_code: process.env.DTDC_CUSTOMER_CODE || "", // You may need to set this
@@ -286,26 +354,26 @@ export async function createShipmentForOrder(order) {
           declared_value: String(order.total || 0),
           num_pieces: String(totalPieces || 1),
           origin_details: {
-            name: "ELECOBUY",
-            phone: "8639979558",
+            name: sanitizeAscii(originInput.name || "Origin"),
+            phone: originInput.phone || "",
             alternate_phone: "",
             address_line_1: originAddr1,
             address_line_2: originAddr2,
-            pincode: "500098",
-            city: "Hyderabad",
-            state: "Telangana",
+            pincode: sanitizeAscii(originInput.pincode || "", ""),
+            city: sanitizeAscii(originInput.city || "", ""),
+            state: sanitizeAscii(originInput.state || "", ""),
           },
           destination_details: {
-            name: `${shippingAddress.firstName || ""} ${shippingAddress.lastName || ""}`.trim(),
-            phone: shippingAddress.phone || "",
+            name: sanitizeAscii(destinationInput.name || "Destination"),
+            phone: destinationInput.phone || "",
             alternate_phone: "",
             address_line_1: destAddr1,
             address_line_2: destAddr2,
-            pincode: shippingAddress.postcode || "",
-            city: shippingAddress.city || "",
-            state: shippingAddress.state || "",
+            pincode: sanitizeAscii(destinationInput.pincode || "", ""),
+            city: sanitizeAscii(destinationInput.city || "", ""),
+            state: sanitizeAscii(destinationInput.state || "", ""),
           },
-          customer_reference_number: order.orderNumber,
+          customer_reference_number: referenceNumber,
           cod_collection_mode: order.paymentMethod === "cod" ? "CASH" : "",
           cod_amount: order.paymentMethod === "cod" ? String(order.total || 0) : "",
           commodity_id: "99",
@@ -320,56 +388,92 @@ export async function createShipmentForOrder(order) {
           reference_number: "",
         },
       ],
-    }
-
-    console.log(`🔵 [DTDC-DEBUG] Payload prepared:`, JSON.stringify(payload, null, 2))
+    })
 
     const headers = {
       "Content-Type": "application/json",
       "api-key": DTDC_CONFIG.apiKey,
     }
 
-    console.log(`🔵 [DTDC-DEBUG] Making POST request to DTDC...`)
-    const response = await axios.post(url, payload, {
-      headers,
-      timeout: 15000,
-    })
-
-    console.log(`🔵 [DTDC-DEBUG] DTDC Response Status: ${response.status}`)
-    console.log(`🔵 [DTDC-DEBUG] DTDC Response Data:`, JSON.stringify(response.data, null, 2))
-
-    const data = response.data || {}
-
-    // Extract AWB from response (DTDC returns in data array)
+    let attempt = 0
     let awbNumber = null
-    if (data.status === "OK" && Array.isArray(data.data) && data.data.length > 0) {
-      const consignment = data.data[0]
-      if (consignment.success === true) {
-        awbNumber = resolveAwbFromConsignment(consignment)
-        console.log(`✅ [DTDC-DEBUG] ✅ DTDC shipment created successfully!`)
-        console.log(`✅ [DTDC-DEBUG] AWB Number: ${awbNumber}`)
-      } else {
-        console.error(`❌ [DTDC-DEBUG] DTDC returned success=false`)
-        console.error(`❌ [DTDC-DEBUG] Error message:`, consignment.message)
-        console.error(`❌ [DTDC-DEBUG] Error reason:`, consignment.reason)
-        throw new Error(`DTDC order upload failed: ${consignment.message || consignment.reason || "Unknown error"}`)
+    let lastError = null
+    let referenceNumber = referenceBase
+
+    while (attempt < 2 && !awbNumber) {
+      const payload = buildPayload(referenceNumber)
+      const timeoutMs = attempt === 0 ? 15000 : 30000
+      console.log(`🔵 [DTDC-DEBUG] Payload prepared (attempt ${attempt + 1}):`, JSON.stringify(payload, null, 2))
+      console.log(`🔵 [DTDC-DEBUG] Making POST request to DTDC... (reference: ${referenceNumber}, timeout: ${timeoutMs}ms)`)
+
+      let response
+      try {
+        response = await axios.post(url, payload, {
+          headers,
+          timeout: timeoutMs,
+        })
+      } catch (err) {
+        const isTimeout =
+          (err?.code && err.code === "ECONNABORTED") ||
+          (typeof err?.message === "string" && err.message.toLowerCase().includes("timeout"))
+
+        if (isTimeout && attempt === 0) {
+          console.warn(`⚠️ [DTDC-DEBUG] Timeout on attempt ${attempt + 1}. Retrying with longer timeout...`)
+          attempt += 1
+          continue
+        }
+
+        lastError = err
+        break
       }
-    } else {
-      console.error(`❌ [DTDC-DEBUG] Unexpected response format`)
+
+      console.log(`🔵 [DTDC-DEBUG] DTDC Response Status: ${response.status}`)
+      console.log(`🔵 [DTDC-DEBUG] DTDC Response Data:`, JSON.stringify(response.data, null, 2))
+
+      const data = response.data || {}
+
+      if (data.status === "OK" && Array.isArray(data.data) && data.data.length > 0) {
+        const consignment = data.data[0]
+        if (consignment.success === true) {
+          awbNumber = resolveAwbFromConsignment(consignment)
+          console.log(`✅ [DTDC-DEBUG] ✅ DTDC shipment created successfully!`)
+          console.log(`✅ [DTDC-DEBUG] AWB Number: ${awbNumber}`)
+          return {
+            awbNumber,
+            trackingData: data,
+          }
+        }
+
+        const reason = consignment.reason || ""
+        const message = consignment.message || ""
+        console.error(`❌ [DTDC-DEBUG] DTDC returned success=false`)
+        console.error(`❌ [DTDC-DEBUG] Error message:`, message)
+        console.error(`❌ [DTDC-DEBUG] Error reason:`, reason)
+
+        const isDuplicateRef =
+          reason.toUpperCase().includes("CUSTOMER_REFERENCE_NUMBER_ALREADY_EXISTS") ||
+          message.toUpperCase().includes("CUSTOMER REFERENCE NUMBER ALREADY EXISTS")
+
+        if (isDuplicateRef && attempt === 0) {
+          const suffix = `-R${Date.now()}`
+          referenceNumber = `${referenceBase}${suffix}`
+          console.warn(`⚠️ [DTDC-DEBUG] Reference duplicate. Retrying with ${referenceNumber}`)
+          attempt += 1
+          continue
+        }
+
+        lastError = new Error(`DTDC order upload failed: ${message || reason || "Unknown error"}`)
+        break
+      } else {
+        console.error(`❌ [DTDC-DEBUG] Unexpected response format`)
+        lastError = new Error("DTDC order upload failed: Unexpected response format")
+        break
+      }
     }
 
     if (!awbNumber) {
       console.error(`❌ [DTDC-DEBUG] No AWB number found in response`)
-      console.error(`❌ [DTDC-DEBUG] Full consignment for debugging:`, JSON.stringify((data.data && data.data[0]) || data, null, 2))
-      throw new Error("DTDC shipment created but AWB number not found in response")
-    }
-
-    console.log(`✅ [DTDC-DEBUG] Returning success with AWB: ${awbNumber}`)
-    console.log(`🔵 [DTDC-DEBUG] ========================================`)
-
-    return {
-      awbNumber,
-      trackingData: data,
+      throw lastError || new Error("DTDC shipment created but AWB number not found in response")
     }
   } catch (error) {
     console.error(`❌ [DTDC-DEBUG] ========================================`)

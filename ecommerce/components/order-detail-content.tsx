@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, ChangeEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -12,6 +12,7 @@ import { Loader2, Package, CheckCircle2, MapPin, Phone, Mail, ArrowLeft, Downloa
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -21,7 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface OrderItem {
   productId: {
@@ -49,6 +50,13 @@ interface ShippingAddress {
   country: string
 }
 
+interface ReturnAttachment {
+  url: string
+  originalName?: string
+  mimeType?: string
+  size?: number
+}
+
 interface ReturnRequest {
   type: "pending" | "accepted" | "denied" | "completed" | null
   reason?: string
@@ -58,6 +66,7 @@ interface ReturnRequest {
   adminNotes?: string
   refundStatus?: "pending" | "processing" | "completed" | "failed" | null
   refundTransactionId?: string
+  attachments?: ReturnAttachment[]
 }
 
 interface Order {
@@ -98,6 +107,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const [cancelling, setCancelling] = useState(false)
   const [returnDialogOpen, setReturnDialogOpen] = useState(false)
   const [returnReason, setReturnReason] = useState("")
+  const [returnAttachments, setReturnAttachments] = useState<File[]>([])
   const [submittingReturn, setSubmittingReturn] = useState(false)
 
   useEffect(() => {
@@ -163,6 +173,24 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       .split("-")
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ")
+  }
+
+  const handleReturnFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    if (files.length > 5) {
+      alert("You can upload up to 5 files for a return request.")
+      event.target.value = ""
+      return
+    }
+
+    const hasOversize = files.some((file) => file.size > 25 * 1024 * 1024)
+    if (hasOversize) {
+      alert("Each file must be 25MB or smaller.")
+      event.target.value = ""
+      return
+    }
+
+    setReturnAttachments(files)
   }
 
   const generateTrackingSteps = (order: Order): TrackingStep[] => {
@@ -323,13 +351,16 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
         return
       }
 
+      const formData = new FormData()
+      formData.append("reason", returnReason.trim())
+      returnAttachments.forEach((file) => formData.append("attachments", file))
+
       const response = await fetch(`${API_URL}/api/orders/${orderId}/return`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ reason: returnReason.trim() }),
+        body: formData,
       })
 
       const data = await response.json()
@@ -355,6 +386,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
         setReturnDialogOpen(false)
         setReturnReason("")
+        setReturnAttachments([])
         alert("Return request submitted successfully. Our team will review it shortly.")
       }
     } catch (err: any) {
@@ -368,6 +400,22 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const isDelivered = order?.status.toLowerCase() === "delivered"
   const hasReturnRequest = order?.returnRequest && order.returnRequest.type
   const returnStatus = order?.returnRequest?.type
+  const deliveredAt =
+    order?.status.toLowerCase() === "delivered" ? new Date(order.updatedAt) : null
+  const returnDeadline = deliveredAt
+    ? new Date(deliveredAt.getTime() + 3 * 24 * 60 * 60 * 1000)
+    : null
+  const isReturnWindowOpen =
+    isDelivered && returnDeadline ? Date.now() <= returnDeadline.getTime() : false
+  const returnDeadlineText = returnDeadline
+    ? returnDeadline.toLocaleString("en-IN", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : ""
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -708,16 +756,32 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
               {isDelivered && (
                 <>
                   {!hasReturnRequest ? (
-                    <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+                    <Dialog
+                      open={returnDialogOpen}
+                      onOpenChange={(open) => {
+                        setReturnDialogOpen(open)
+                        if (!open) {
+                          setReturnReason("")
+                          setReturnAttachments([])
+                        }
+                      }}
+                    >
                       <DialogTrigger asChild>
                         <Button
                           variant="outline"
                           className="w-full text-sm bg-transparent"
+                          disabled={!isReturnWindowOpen}
+                          title={
+                            isReturnWindowOpen
+                              ? "Request a return"
+                              : "Return window (3 days from delivery) has expired"
+                          }
                         >
                           <RotateCcw className="mr-2 h-4 w-4" />
                           Request Return
                         </Button>
                       </DialogTrigger>
+                      {isReturnWindowOpen && (
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Request Return</DialogTitle>
@@ -737,12 +801,36 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
                               className="mt-2"
                             />
                           </div>
+                          <div>
+                            <Label htmlFor="returnAttachments">Photos / Videos / Documents (optional)</Label>
+                            <Input
+                              id="returnAttachments"
+                              type="file"
+                              multiple
+                              accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                              className="mt-2"
+                              onChange={handleReturnFilesChange}
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              You can add up to 5 files, 25MB each.
+                            </p>
+                            {returnAttachments.length > 0 && (
+                              <ul className="mt-2 text-xs text-muted-foreground space-y-1">
+                                {returnAttachments.map((file) => (
+                                  <li key={`${file.name}-${file.lastModified}`}>
+                                    {file.name} ({(file.size / 1024 / 1024).toFixed(1)} MB)
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="outline"
                               onClick={() => {
                                 setReturnDialogOpen(false)
                                 setReturnReason("")
+                                setReturnAttachments([])
                               }}
                               disabled={submittingReturn}
                             >
@@ -764,6 +852,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
                           </div>
                         </div>
                       </DialogContent>
+                      )}
                     </Dialog>
                   ) : (
                     <div className="space-y-2">
@@ -791,6 +880,15 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
                         </AlertDescription>
                       </Alert>
                     </div>
+                  )}
+                  {!isReturnWindowOpen && !hasReturnRequest && (
+                    <Alert className="border-yellow-500 bg-yellow-50 text-xs">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Return window has expired. Returns are allowed within 3 days of delivery
+                        {returnDeadlineText ? ` (until ${returnDeadlineText})` : ""}.
+                      </AlertDescription>
+                    </Alert>
                   )}
                 </>
               )}

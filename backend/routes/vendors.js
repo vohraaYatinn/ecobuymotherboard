@@ -12,6 +12,7 @@ const router = express.Router()
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const vendorDocsDir = path.join(__dirname, "../uploads/vendor-documents")
+const fsPromises = fs.promises
 
 if (!fs.existsSync(vendorDocsDir)) {
   fs.mkdirSync(vendorDocsDir, { recursive: true })
@@ -52,6 +53,27 @@ const mapUploadedDocuments = (files = []) =>
     size: file.size,
     uploadedAt: new Date(),
   }))
+
+const removeVendorDocuments = async (vendor) => {
+  if (!vendor?.documents || !Array.isArray(vendor.documents) || vendor.documents.length === 0) {
+    return
+  }
+
+  for (const doc of vendor.documents) {
+    if (!doc?.url) continue
+
+    const sanitizedPath = doc.url.replace(/^\/+/, "")
+    const filePath = path.join(__dirname, "..", sanitizedPath)
+
+    try {
+      await fsPromises.unlink(filePath)
+    } catch (err) {
+      if (err.code !== "ENOENT") {
+        console.error(`Error removing vendor document ${filePath}:`, err)
+      }
+    }
+  }
+}
 
 const handleVendorDocsUpload = (req, res, next) => {
   const contentType = req.headers["content-type"] || ""
@@ -508,13 +530,15 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
       })
     }
 
-    // Soft delete
-    vendor.isActive = false
-    await vendor.save()
+    await removeVendorDocuments(vendor)
+    await Vendor.deleteOne({ _id: vendor._id })
 
     res.status(200).json({
       success: true,
       message: "Vendor deleted successfully",
+      data: {
+        deletedId: vendor._id,
+      },
     })
   } catch (error) {
     console.error("Delete vendor error:", error)
@@ -527,6 +551,55 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error deleting vendor",
+    })
+  }
+})
+
+// Bulk delete vendors (Admin only) - Hard delete
+router.post("/bulk-delete", verifyAdminToken, async (req, res) => {
+  try {
+    const { vendorIds } = req.body
+
+    if (!vendorIds || !Array.isArray(vendorIds) || vendorIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor IDs array is required",
+      })
+    }
+
+    const vendors = await Vendor.find({ _id: { $in: vendorIds } })
+
+    if (!vendors || vendors.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No vendors found for the provided IDs",
+      })
+    }
+
+    for (const vendor of vendors) {
+      await removeVendorDocuments(vendor)
+    }
+
+    const deleteResult = await Vendor.deleteMany({ _id: { $in: vendorIds } })
+
+    res.status(200).json({
+      success: true,
+      message: `Deleted ${deleteResult.deletedCount} vendor(s)`,
+      data: {
+        deletedCount: deleteResult.deletedCount,
+      },
+    })
+  } catch (error) {
+    console.error("Bulk delete vendors error:", error)
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid vendor IDs provided",
+      })
+    }
+    res.status(500).json({
+      success: false,
+      message: "Error deleting vendors",
     })
   }
 })

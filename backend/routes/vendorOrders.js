@@ -9,6 +9,10 @@ import { createShipmentForOrder } from "../services/dtdcService.js"
 
 const router = express.Router()
 
+const RETURN_WINDOW_DAYS = 3
+const PLATFORM_COMMISSION_RATE = 0.2 // 20%
+const GATEWAY_RATE = 0.02 // 2% of order total
+
 // Get unassigned orders (orders without a vendor)
 router.get("/unassigned", verifyVendorToken, async (req, res) => {
   try {
@@ -242,12 +246,28 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
     const shippedOrders = await Order.countDocuments({ vendorId, status: "shipped" })
     const deliveredOrders = await Order.countDocuments({ vendorId, status: "delivered" })
 
-    // Calculate revenue from all delivered orders (vendors earn revenue when order is delivered)
-    const revenueResult = await Order.aggregate([
-      { $match: { vendorId, status: "delivered" } },
-      { $group: { _id: null, total: { $sum: "$total" } } },
-    ])
-    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0
+    // Calculate net payout from delivered orders outside return window and without active returns
+    const now = new Date()
+    const returnWindowCutoff = new Date(now.getTime() - RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+
+    const eligibleOrders = await Order.find({
+      vendorId,
+      status: "delivered",
+      updatedAt: { $lte: returnWindowCutoff },
+      $or: [
+        { returnRequest: { $exists: false } },
+        { "returnRequest.type": { $in: [null, "denied"] } },
+      ],
+    }).select("subtotal total status updatedAt returnRequest")
+
+    const totalRevenue = eligibleOrders.reduce((sum, order) => {
+      const subtotal = typeof order.subtotal === "number" ? order.subtotal : order.total || 0
+      const total = order.total || subtotal
+      const commission = subtotal * PLATFORM_COMMISSION_RATE
+      const gatewayFees = total * GATEWAY_RATE
+      const netPayout = subtotal - commission - gatewayFees
+      return sum + Math.max(netPayout, 0)
+    }, 0)
 
     // Calculate average order value
     const avgOrderResult = await Order.aggregate([
@@ -474,7 +494,11 @@ router.put("/:id/status", verifyVendorToken, async (req, res) => {
       })
     }
 
-    // Update status
+    // Update status and set deliveredAt once when delivered
+    if (status === "delivered" && order.status !== "delivered" && !order.deliveredAt) {
+      order.deliveredAt = new Date()
+    }
+
     order.status = status
     await order.save()
 
@@ -486,6 +510,33 @@ router.put("/:id/status", verifyVendorToken, async (req, res) => {
         // Ensure required relations are populated for shipment creation
         await order.populate("shippingAddress")
         await order.populate("customerId", "name email mobile")
+
+        // Fetch vendor address for origin pickup
+        const vendor = await Vendor.findById(vendorId).lean()
+        const vendorAddress = vendor?.address
+        const origin = vendorAddress
+          ? {
+              name: vendor?.name || "Vendor",
+              phone: vendor?.phone || "",
+              address1: vendorAddress.address1,
+              address2: vendorAddress.address2 || "",
+              pincode: vendorAddress.postcode,
+              city: vendorAddress.city,
+              state: vendorAddress.state,
+            }
+          : undefined
+
+        const shippingAddr = order.shippingAddress
+          ? {
+              name: `${order.shippingAddress.firstName || ""} ${order.shippingAddress.lastName || ""}`.trim(),
+              phone: order.shippingAddress.phone || "",
+              address1: order.shippingAddress.address1,
+              address2: order.shippingAddress.address2 || "",
+              pincode: order.shippingAddress.postcode || "",
+              city: order.shippingAddress.city || "",
+              state: order.shippingAddress.state || "",
+            }
+          : undefined
 
         console.log(`🔵 [VENDOR-DEBUG] Order populated. Shipping address:`, {
           name: order.shippingAddress?.firstName + " " + order.shippingAddress?.lastName,
@@ -500,7 +551,11 @@ router.put("/:id/status", verifyVendorToken, async (req, res) => {
         console.log(`🔵 [VENDOR-DEBUG] Order total: ₹${order.total}, Payment method: ${order.paymentMethod}`)
 
         console.log(`🔵 [VENDOR-DEBUG] Calling createShipmentForOrder...`)
-        const shipmentResult = await createShipmentForOrder(order)
+        const shipmentResult = await createShipmentForOrder(order, {
+          origin,
+          destination: shippingAddr,
+          direction: "forward",
+        })
         console.log(`🔵 [VENDOR-DEBUG] createShipmentForOrder returned:`, {
           hasAwbNumber: !!shipmentResult.awbNumber,
           awbNumber: shipmentResult.awbNumber,

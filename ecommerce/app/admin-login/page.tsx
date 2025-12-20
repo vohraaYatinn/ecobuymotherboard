@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Shield, Lock, Mail, ArrowLeft } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 export default function AdminLoginPage() {
   const router = useRouter()

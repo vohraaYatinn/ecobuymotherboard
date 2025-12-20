@@ -1,12 +1,117 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Save, SettingsIcon, Phone, Building } from "lucide-react"
+import { Save, SettingsIcon, Phone, Building, Truck, Loader2 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 export function AdminSettings() {
+  const router = useRouter()
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [shippingCharges, setShippingCharges] = useState<number>(150)
+
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    const token = localStorage.getItem("adminToken")
+    if (!token) {
+      router.push("/admin-login")
+      return
+    }
+    fetchShippingCharges()
+  }
+
+  const fetchShippingCharges = async () => {
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) return
+
+      const response = await fetch(`${API_URL}/api/settings/admin/shipping-charges`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch shipping charges")
+      }
+
+      const data = await response.json()
+      if (data.success && data.data) {
+        setShippingCharges(data.data.value || 150)
+      }
+    } catch (error) {
+      console.error("Error fetching shipping charges:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load shipping charges",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSaveShippingCharges = async () => {
+    try {
+      setSaving(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        router.push("/admin-login")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/settings/admin/shipping-charges`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          shippingCharges: Number(shippingCharges),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Failed to update shipping charges")
+      }
+
+      toast({
+        title: "Success",
+        description: "Shipping charges updated successfully",
+      })
+    } catch (error: any) {
+      console.error("Error updating shipping charges:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update shipping charges",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -16,6 +121,54 @@ export function AdminSettings() {
 
       {/* Settings Sections */}
       <div className="space-y-6">
+        {/* Shipping & Handling Charges */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5" />
+              Shipping & Handling Charges
+            </CardTitle>
+            <CardDescription>Configure shipping and handling charges for customer orders</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="shippingCharges">Shipping/Handling Charges (₹)</Label>
+                <Input
+                  id="shippingCharges"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={shippingCharges}
+                  onChange={(e) => setShippingCharges(Number(e.target.value))}
+                  className="mt-1.5"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  This amount will be charged to customers for shipping and handling
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                onClick={handleSaveShippingCharges}
+                disabled={saving}
+                className="gap-2"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    Save Shipping Charges
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
         {/* Company Information */}
         <Card>
           <CardHeader>

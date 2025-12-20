@@ -249,6 +249,11 @@ export default function ProfilePage() {
       .slice(0, 2)
   }
 
+  const ordersFulfilled = vendor?.ordersFulfilled ?? 0
+  const paidTillDate = (vendor as any)?.paidTillDate ?? 0
+  const formatCurrency = (amount: number) =>
+    `₹${Number(amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
   if (loading) {
     return (
       <div className="h-screen flex flex-col bg-gradient-to-br from-primary/10 via-primary/5 to-background">
@@ -379,6 +384,18 @@ export default function ProfilePage() {
               )}
             </Button>
           </CardContent>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border border-border/40 bg-gradient-to-br from-primary/5 to-primary/10 p-4 shadow-md">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Orders Fulfilled</p>
+            <p className="mt-2 text-2xl font-bold text-foreground">{ordersFulfilled}</p>
+          </div>
+          <div className="rounded-2xl border border-border/40 bg-gradient-to-br from-chart-3/5 to-chart-3/10 p-4 shadow-md">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Paid Till Date</p>
+            <p className="mt-2 text-2xl font-bold text-foreground">{formatCurrency(paidTillDate)}</p>
+          </div>
         </div>
 
         {/* Personal Information */}

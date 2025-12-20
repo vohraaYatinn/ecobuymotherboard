@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { LayoutDashboard, ShoppingBag, Users, Store, Package, Settings, Menu, LogOut, UserCircle, Bell, Send, BookOpen, BarChart3, FileText, Tag, HelpCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 const menuItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -18,6 +18,7 @@ const menuItems = [
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/reports", label: "Reports", icon: BarChart3 },
+  { href: "/admin/ledger", label: "Ledger", icon: FileText },
   { href: "/admin/learning-resources", label: "Learning Resources", icon: BookOpen },
   { href: "/admin/page-content", label: "Page Content", icon: FileText },
   { href: "/admin/push-notifications", label: "Push Notifications", icon: Send },

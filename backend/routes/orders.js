@@ -8,11 +8,40 @@ import CustomerAddress from "../models/CustomerAddress.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Vendor from "../models/Vendor.js"
+import Settings from "../models/Settings.js"
+import returnUpload from "../middleware/returnUpload.js"
 import { createRazorpayOrder, razorpayConfig, verifyRazorpaySignature, createRazorpayRefund } from "../services/razorpayService.js"
 import jwt from "jsonwebtoken"
 import nodemailer from "nodemailer"
 
 const router = express.Router()
+
+// Default shipping charges
+const DEFAULT_SHIPPING_CHARGES = 150
+
+// Helper function to get shipping charges from settings
+const getShippingCharges = async () => {
+  try {
+    const setting = await Settings.findOne({ key: "shipping_charges" })
+    if (setting && typeof setting.value === "number") {
+      return setting.value
+    }
+    // If setting doesn't exist, create it with default value
+    if (!setting) {
+      const newSetting = new Settings({
+        key: "shipping_charges",
+        value: DEFAULT_SHIPPING_CHARGES,
+        description: "Shipping and handling charges in INR",
+      })
+      await newSetting.save()
+      return DEFAULT_SHIPPING_CHARGES
+    }
+    return DEFAULT_SHIPPING_CHARGES
+  } catch (error) {
+    console.error("Error fetching shipping charges:", error)
+    return DEFAULT_SHIPPING_CHARGES // Fallback to default
+  }
+}
 
 // Email transporter helper (shared config with enquiries route)
 const getTransporter = () => {
@@ -356,7 +385,7 @@ const createOrderDraft = async ({ customerId, addressId }) => {
     })
   }
 
-  const shipping = 150 // Fixed shipping charges as per requirements
+  const shipping = await getShippingCharges() // Fetch shipping charges from settings
 
   const shippingState = address.state?.trim().toUpperCase() || ""
   const isTelangana = shippingState === "TELANGANA" || shippingState === "TS"
@@ -887,7 +916,7 @@ router.post("/:id/cancel", authenticate, async (req, res) => {
 })
 
 // Request return for delivered order
-router.post("/:id/return", authenticate, async (req, res) => {
+router.post("/:id/return", authenticate, returnUpload.array("attachments", 5), async (req, res) => {
   try {
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -926,6 +955,19 @@ router.post("/:id/return", authenticate, async (req, res) => {
       })
     }
 
+    // Enforce 3-day return window from delivery timestamp (using updatedAt as delivery marker)
+    const deliveredAt = order.updatedAt || order.createdAt
+    const now = new Date()
+    const diffInMs = now - new Date(deliveredAt)
+    const diffInDays = diffInMs / (1000 * 60 * 60 * 24)
+
+    if (diffInDays > 3) {
+      return res.status(400).json({
+        success: false,
+        message: "Return window expired. Returns are allowed within 3 days of delivery.",
+      })
+    }
+
     // Check if return request already exists
     if (order.returnRequest && order.returnRequest.type) {
       return res.status(400).json({
@@ -934,11 +976,23 @@ router.post("/:id/return", authenticate, async (req, res) => {
       })
     }
 
+    const attachments =
+      Array.isArray(req.files) && req.files.length > 0
+        ? req.files.map((file) => ({
+            url: `/uploads/${file.filename}`,
+            originalName: file.originalname,
+            mimeType: file.mimetype,
+            size: file.size,
+            uploadedAt: new Date(),
+          }))
+        : []
+
     // Create return request and update order status
     order.returnRequest = {
       type: "pending",
       reason: reason.trim(),
       requestedAt: new Date(),
+      attachments,
     }
     order.status = "return_requested"
 

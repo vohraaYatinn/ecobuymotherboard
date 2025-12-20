@@ -1,9 +1,70 @@
 import express from "express"
 import Customer from "../models/Customer.js"
 import Order from "../models/Order.js"
+import CustomerAddress from "../models/CustomerAddress.js"
+import Cart from "../models/Cart.js"
+import Wishlist from "../models/Wishlist.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 
 const router = express.Router()
+
+const removeCustomerRelations = async (customerId) => {
+  await Promise.all([
+    CustomerAddress.deleteMany({ customerId }),
+    Cart.deleteMany({ customerId }),
+    Wishlist.deleteMany({ customerId }),
+  ])
+}
+
+// Bulk delete customers (Admin only) - Hard delete
+router.post("/bulk-delete", verifyAdminToken, async (req, res) => {
+  try {
+    const { customerIds } = req.body
+
+    if (!customerIds || !Array.isArray(customerIds) || customerIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Customer IDs array is required",
+      })
+    }
+
+    const customers = await Customer.find({ _id: { $in: customerIds } })
+
+    if (!customers || customers.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No customers found for the provided IDs",
+      })
+    }
+
+    for (const customer of customers) {
+      await removeCustomerRelations(customer._id)
+    }
+
+    const deleteResult = await Customer.deleteMany({ _id: { $in: customerIds } })
+
+    res.status(200).json({
+      success: true,
+      message: `Deleted ${deleteResult.deletedCount} customer(s)`,
+      data: {
+        deletedCount: deleteResult.deletedCount,
+      },
+    })
+  } catch (error) {
+    console.error("Bulk delete customers error:", error)
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid customer IDs provided",
+      })
+    }
+    res.status(500).json({
+      success: false,
+      message: "Error deleting customers",
+      error: error.message,
+    })
+  }
+})
 
 // Get all customers with filters and pagination (Admin only)
 router.get("/", verifyAdminToken, async (req, res) => {
@@ -163,6 +224,44 @@ router.get("/:id", verifyAdminToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching customer",
+      error: error.message,
+    })
+  }
+})
+
+// Delete single customer (Admin only) - Hard delete
+router.delete("/:id", verifyAdminToken, async (req, res) => {
+  try {
+    const customer = await Customer.findById(req.params.id)
+
+    if (!customer) {
+      return res.status(404).json({
+        success: false,
+        message: "Customer not found",
+      })
+    }
+
+    await removeCustomerRelations(customer._id)
+    await Customer.deleteOne({ _id: customer._id })
+
+    res.status(200).json({
+      success: true,
+      message: "Customer deleted successfully",
+      data: {
+        deletedId: customer._id,
+      },
+    })
+  } catch (error) {
+    console.error("Delete customer error:", error)
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid customer ID",
+      })
+    }
+    res.status(500).json({
+      success: false,
+      message: "Error deleting customer",
       error: error.message,
     })
   }

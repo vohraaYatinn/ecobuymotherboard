@@ -556,6 +556,7 @@ router.get("/profile", verifyVendorToken, async (req, res) => {
               phone: vendor.phone,
               email: vendor.email,
               status: vendor.status,
+              commission: vendor.commission ?? 0,
               address: vendor.address,
               formattedAddress: formattedAddress,
               totalProducts: vendor.totalProducts,

@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface OrderItem {
   productId?: {
@@ -65,6 +65,13 @@ interface Vendor {
   }
 }
 
+interface ReturnAttachment {
+  url: string
+  originalName?: string
+  mimeType?: string
+  size?: number
+}
+
 interface ReturnRequest {
   type: "pending" | "accepted" | "denied" | "completed" | null
   reason?: string
@@ -74,6 +81,7 @@ interface ReturnRequest {
   adminNotes?: string
   refundStatus?: "pending" | "processing" | "completed" | "failed" | null
   refundTransactionId?: string
+  attachments?: ReturnAttachment[]
 }
 
 interface Order {
@@ -156,6 +164,18 @@ export function AdminOrdersList() {
   const [returnRequestOrder, setReturnRequestOrder] = useState<Order | null>(null)
   const [returnActionLoading, setReturnActionLoading] = useState(false)
   const [returnAdminNotes, setReturnAdminNotes] = useState("")
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return ""
+    const mb = bytes / 1024 / 1024
+    if (mb >= 1) return `${mb.toFixed(1)} MB`
+    return `${(bytes / 1024).toFixed(0)} KB`
+  }
+
+  const getFileUrl = (url: string) => {
+    if (!url) return ""
+    return url.startsWith("http") ? url : `${API_URL}${url}`
+  }
 
   useEffect(() => {
     fetchOrders()
@@ -386,9 +406,9 @@ export function AdminOrdersList() {
         setBulkDeleteDialogOpen(false)
         setSelectedOrders([])
         fetchOrders()
-        alert(`Successfully cancelled ${data.data.deletedCount} order(s)`)
+        alert(`Successfully deleted ${data.data.deletedCount} order(s)`)
       } else {
-        alert(data.message || "Failed to cancel orders")
+        alert(data.message || "Failed to delete orders")
       }
     } catch (error) {
       console.error("Error bulk deleting orders:", error)
@@ -945,7 +965,13 @@ export function AdminOrdersList() {
                           </TableCell>
                           <TableCell>
                             <div className="space-y-1">
-                              <Badge className={getStatusColor(order.status)}>{formatStatus(order.status)}</Badge>
+                              <Badge
+                                asChild
+                                className={`${getStatusColor(order.status)} cursor-pointer`}
+                                title="View order details"
+                              >
+                                <Link href={`/admin/orders/${order._id}`}>{formatStatus(order.status)}</Link>
+                              </Badge>
                               {order.returnRequest && order.returnRequest.type && (
                                 <Badge
                                   variant={
@@ -1099,7 +1125,13 @@ export function AdminOrdersList() {
                           <div>
                             <span className="text-muted-foreground">Status:</span>
                             <div className="mt-1 space-y-1">
-                              <Badge className={getStatusColor(order.status)}>{formatStatus(order.status)}</Badge>
+                              <Badge
+                                asChild
+                                className={`${getStatusColor(order.status)} cursor-pointer`}
+                                title="View order details"
+                              >
+                                <Link href={`/admin/orders/${order._id}`}>{formatStatus(order.status)}</Link>
+                              </Badge>
                               {order.returnRequest && order.returnRequest.type && (
                                 <Badge
                                   variant={
@@ -1363,7 +1395,8 @@ export function AdminOrdersList() {
           <DialogHeader>
             <DialogTitle>Confirm Bulk Delete</DialogTitle>
             <DialogDescription>
-              Are you sure you want to cancel {selectedOrders.length} order(s)? This action cannot be undone.
+              This will permanently delete {selectedOrders.length} order(s) and remove them from records. This action
+              cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-2 pt-4">
@@ -1424,6 +1457,29 @@ export function AdminOrdersList() {
                   <p className="text-sm text-muted-foreground">
                     {new Date(returnRequestOrder.returnRequest.requestedAt).toLocaleString("en-IN")}
                   </p>
+                </div>
+              )}
+
+              {returnRequestOrder.returnRequest.attachments && returnRequestOrder.returnRequest.attachments.length > 0 && (
+                <div>
+                  <Label>Customer Uploads</Label>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {returnRequestOrder.returnRequest.attachments.map((file, idx) => (
+                      <li key={`${file.url}-${idx}`} className="flex items-center justify-between gap-2">
+                        <a
+                          href={getFileUrl(file.url)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline"
+                        >
+                          {file.originalName || file.url?.split("/").pop()}
+                        </a>
+                        <span className="text-xs text-muted-foreground">
+                          {(file.mimeType?.split("/")?.[0] || "file").toUpperCase()} {formatFileSize(file.size)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 

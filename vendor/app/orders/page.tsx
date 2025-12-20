@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
-import { Loader2, AlertCircle } from "lucide-react"
+import { Loader2, AlertCircle, FileDown, CreditCard, Wallet } from "lucide-react"
 import { API_URL } from "@/lib/api-config"
 import { useNavigation } from "@/contexts/navigation-context"
 
@@ -37,8 +36,25 @@ interface Order {
   items: OrderItem[]
   status: string
   total: number
+  subtotal: number
+  shipping: number
   createdAt: string
+  updatedAt?: string
+  deliveredAt?: string | null
+  paymentStatus?: string
+  paymentMethod?: string
+  paymentTransactionId?: string | null
+  paymentGateway?: string | null
+  returnRequest?: {
+    type?: string | null
+    refundStatus?: string | null
+    requestedAt?: string | null
+  } | null
+  invoiceNumber?: string | null
 }
+
+const DEFAULT_COMMISSION_RATE = 20 // percent fallback if vendor commission is missing
+const PAYMENT_GATEWAY_RATE = 2 // percent of order total
 
 export default function OrdersPage() {
   const router = useRouter()
@@ -49,10 +65,16 @@ export default function OrdersPage() {
   const [activeTab, setActiveTab] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
+  const [vendorCommission, setVendorCommission] = useState<number | null>(null)
+  const [downloadingStatement, setDownloadingStatement] = useState(false)
 
   useEffect(() => {
     fetchOrders()
   }, [activeTab])
+
+  useEffect(() => {
+    fetchVendorProfile()
+  }, [])
 
   const fetchOrders = async () => {
     try {
@@ -95,6 +117,43 @@ export default function OrdersPage() {
       setError("Network error. Please try again.")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchVendorProfile = async () => {
+    try {
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        if (response.status === 401) {
+          localStorage.removeItem("vendorToken")
+          localStorage.removeItem("vendorData")
+          router.push("/login")
+          return
+        }
+        return
+      }
+
+      const commissionValue = data.data?.vendor?.commission
+      if (typeof commissionValue === "number") {
+        setVendorCommission(commissionValue)
+      } else {
+        setVendorCommission(DEFAULT_COMMISSION_RATE)
+      }
+    } catch (err) {
+      console.error("Error fetching vendor profile:", err)
     }
   }
 
@@ -169,10 +228,46 @@ export default function OrdersPage() {
     return order.items.reduce((sum, item) => sum + item.quantity, 0)
   }
 
+  const formatCurrency = (amount: number, withSymbol = true) => {
+    const formatted = amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    return withSymbol ? `₹${formatted}` : formatted
+  }
+
+  const getCommissionRate = () => {
+    if (typeof vendorCommission === "number") return vendorCommission
+    return DEFAULT_COMMISSION_RATE
+  }
+
+  const getPayoutBreakdown = (order: Order) => {
+    const commissionRate = getCommissionRate()
+    const productTotal = typeof order.subtotal === "number" ? order.subtotal : order.total
+    const commissionAmount = Math.max(0, (commissionRate / 100) * productTotal)
+    const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * order.total)
+    const netPayout = Math.max(productTotal - commissionAmount - gatewayFees, 0)
+
+    return {
+      commissionRate,
+      productTotal,
+      commissionAmount,
+      gatewayFees,
+      netPayout,
+    }
+  }
+
+  const formatDateLabel = (value?: Date | string | null) => {
+    if (!value) return "N/A"
+    const date = typeof value === "string" ? new Date(value) : value
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
+  }
+
   const tabs = [
     { id: "all", label: "All", count: orders.length },
     { id: "processing", label: "Processing", count: orders.filter((o) => o.status === "processing").length },
-    { id: "shipped", label: "Shipped", count: orders.filter((o) => o.status === "shipped").length },
+    { id: "shipped", label: "Packed", count: orders.filter((o) => o.status === "shipped").length },
     { id: "delivered", label: "Delivered", count: orders.filter((o) => o.status === "delivered").length },
   ]
 
@@ -184,6 +279,71 @@ export default function OrdersPage() {
       customer.mobile.includes(searchQuery)
     return matchesSearch
   })
+
+  const handleDownloadInvoice = (orderId: string) => {
+    const url = `${API_URL}/api/invoices/${orderId}/download`
+    window.open(url, "_blank")
+  }
+
+  const handleDownloadStatement = () => {
+    if (filteredOrders.length === 0) return
+    setDownloadingStatement(true)
+
+    try {
+      const headers = [
+        "Order Number",
+        "Status",
+        "Payment Status",
+        "Payment Method",
+        "Transaction ID",
+        "Order Total",
+        "Product Total",
+        "Commission %",
+        "Commission Amount",
+        "Gateway Fees",
+        "Net Payout",
+        "Delivered / Updated",
+      ]
+
+      const sanitize = (value: any) => `"${String(value ?? "").replace(/"/g, '""')}"`
+
+      const rows = filteredOrders.map((order) => {
+        const payout = getPayoutBreakdown(order)
+
+        return [
+          order.orderNumber,
+          order.status,
+          order.paymentStatus || "pending",
+          order.paymentMethod || "N/A",
+          order.paymentTransactionId || "",
+          formatCurrency(order.total),
+          formatCurrency(payout.productTotal),
+          `${payout.commissionRate}%`,
+          formatCurrency(payout.commissionAmount),
+          formatCurrency(payout.gatewayFees),
+          formatCurrency(payout.netPayout),
+          formatDateLabel(order.deliveredAt || order.updatedAt || order.createdAt),
+        ]
+      })
+
+      const csvContent = [headers, ...rows]
+        .map((row) => row.map(sanitize).join(","))
+        .join("\n")
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `vendor-statement-${new Date().toISOString().split("T")[0]}.csv`
+      link.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error("Error generating statement:", err)
+      alert("Unable to generate statement right now. Please try again.")
+    } finally {
+      setDownloadingStatement(false)
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -200,6 +360,11 @@ export default function OrdersPage() {
       default:
         return "bg-muted text-muted-foreground border-border"
     }
+  }
+
+  const getStatusLabel = (status: string) => {
+    if (status === "shipped") return "packed"
+    return status
   }
 
   const getStatusIcon = (status: string) => {
@@ -285,6 +450,21 @@ export default function OrdersPage() {
               className="pl-12 h-12 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground"
             />
           </div>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              Includes commission, gateway fees, return window and payout schedule.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadStatement}
+              disabled={filteredOrders.length === 0 || downloadingStatement}
+              className="flex items-center gap-2"
+            >
+              <FileDown className="h-4 w-4" />
+              {downloadingStatement ? "Preparing..." : "Download CSV"}
+            </Button>
+          </div>
         </div>
 
         <div className="flex gap-2 overflow-x-auto px-4 pb-3 scrollbar-hide">
@@ -348,7 +528,8 @@ export default function OrdersPage() {
             const customer = getCustomerInfo(order)
             const timeAgo = formatTimeAgo(order.createdAt)
             const items = itemCount(order)
-            const canUpdateStatus = order.status === "processing" || order.status === "shipped"
+            const canUpdateStatus = order.status === "processing"
+            const payout = getPayoutBreakdown(order)
 
             return (
               <Card
@@ -377,42 +558,98 @@ export default function OrdersPage() {
                           </button>
                           <p className="text-xs text-muted-foreground mt-0.5">{customer.name}</p>
                         </div>
-                        <span
-                          className={`rounded-lg border px-3 py-1 text-xs font-semibold ${getStatusColor(order.status)}`}
-                        >
-                          {order.status}
+                        <span className={`rounded-lg border px-3 py-1 text-xs font-semibold ${getStatusColor(order.status)}`}>
+                          {getStatusLabel(order.status)}
                         </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Status Update Selector */}
+                  {/* Status Update Button */}
                   {canUpdateStatus && (
                     <div className="mb-3 p-3 rounded-lg bg-muted/30 border border-border/50">
                       <label className="text-xs font-semibold text-foreground mb-2 block">Update Status:</label>
-                      <Select
-                        value={order.status}
-                        onValueChange={(value) => handleStatusUpdate(order._id, value)}
+                      <Button
+                        className="w-full"
+                        variant="outline"
                         disabled={updatingStatus === order._id}
+                        onClick={() => handleStatusUpdate(order._id, "shipped")}
                       >
-                        <SelectTrigger className="h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {order.status === "processing" && (
-                            <SelectItem value="shipped">
-                              {updatingStatus === order._id ? "Updating..." : "Mark as Shipped"}
-                            </SelectItem>
-                          )}
-                          {order.status === "shipped" && (
-                            <SelectItem value="delivered">
-                              {updatingStatus === order._id ? "Updating..." : "Mark as Delivered"}
-                            </SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
+                        {updatingStatus === order._id ? "Updating..." : "Mark as Packed"}
+                      </Button>
                     </div>
                   )}
+
+                  {/* Payout & Payment */}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                      <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                        <span className="flex items-center gap-1">
+                          <CreditCard className="h-4 w-4 text-primary" />
+                          Sales & delivery
+                        </span>
+                        <span className="text-[11px] uppercase text-muted-foreground">
+                          {order.paymentStatus || "pending"}
+                        </span>
+                      </div>
+                      <p className="text-lg font-bold text-foreground mt-1">{formatCurrency(order.total)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Payment: {order.paymentMethod?.toUpperCase() || "N/A"}{" "}
+                        {order.paymentTransactionId ? `• ${order.paymentTransactionId}` : ""}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                      <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                        <span className="flex items-center gap-1">
+                          <Wallet className="h-4 w-4 text-chart-3" />
+                          Net payout
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">Commission {payout.commissionRate}%</span>
+                      </div>
+                      <div className="mt-2 space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Product total</span>
+                          <span className="font-medium text-foreground">{formatCurrency(payout.productTotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Commission</span>
+                          <span className="text-destructive">- {formatCurrency(payout.commissionAmount)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Gateway ({PAYMENT_GATEWAY_RATE}%)</span>
+                          <span className="text-orange-600">- {formatCurrency(payout.gatewayFees)}</span>
+                        </div>
+                        <div className="flex justify-between pt-1 border-t border-border/60">
+                          <span className="text-xs font-semibold text-foreground">Net payout</span>
+                          <span className="text-sm font-bold text-chart-3">{formatCurrency(payout.netPayout)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Downloads */}
+                  <div className="mt-3">
+                    <div className="rounded-xl border border-border/60 bg-muted/10 p-3">
+                      <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                        <span>Downloadables</span>
+                        <span className="text-[11px] text-muted-foreground">Invoices & records</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDownloadInvoice(order._id)}
+                          className="gap-2"
+                        >
+                          <FileDown className="h-4 w-4" />
+                          Invoice PDF
+                        </Button>
+                        {order.invoiceNumber && (
+                          <span className="text-[11px] text-muted-foreground">#{order.invoiceNumber}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="flex items-center justify-between pt-3 border-t border-border/50">
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">

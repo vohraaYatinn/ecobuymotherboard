@@ -6,10 +6,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Search, Eye, Download, Filter, Loader2, AlertCircle, ChevronLeft, ChevronRight, FileDown } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Search, Eye, Loader2, AlertCircle, ChevronLeft, ChevronRight, FileDown, Trash2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface Customer {
   _id: string
@@ -35,6 +44,9 @@ export function AdminCustomersList() {
     pages: 0,
   })
   const [exporting, setExporting] = useState(false)
+  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     fetchCustomers()
@@ -68,6 +80,8 @@ export function AdminCustomersList() {
 
       setCustomers(data.data || [])
       setPagination(data.pagination || { page: 1, limit: 10, total: 0, pages: 0 })
+      // Drop any selected IDs not present in the refreshed list
+      setSelectedCustomers((prev) => prev.filter((id) => data.data?.some((c: Customer) => c._id === id)))
     } catch (err) {
       console.error("Error fetching customers:", err)
       setError("Network error. Please try again.")
@@ -97,6 +111,30 @@ export function AdminCustomersList() {
 
   const getCustomerId = (customer: Customer) => {
     return customer._id.slice(-6).toUpperCase()
+  }
+
+  const handleSelectCustomer = (customerId: string) => {
+    setSelectedCustomers((prev) =>
+      prev.includes(customerId) ? prev.filter((id) => id !== customerId) : [...prev, customerId]
+    )
+  }
+
+  const handleSelectAll = () => {
+    const allIds = customers.map((c) => c._id)
+    const allSelectedOnPage = allIds.every((id) => selectedCustomers.includes(id))
+    if (allSelectedOnPage) {
+      setSelectedCustomers((prev) => prev.filter((id) => !allIds.includes(id)))
+    } else {
+      setSelectedCustomers((prev) => Array.from(new Set([...prev, ...allIds])))
+    }
+  }
+
+  const handleOpenDeleteDialog = () => {
+    if (selectedCustomers.length === 0) {
+      alert("Select at least one customer to delete.")
+      return
+    }
+    setIsDeleteDialogOpen(true)
   }
 
   const handleExportCustomers = async () => {
@@ -183,6 +221,52 @@ export function AdminCustomersList() {
       setExporting(false)
     }
   }
+
+  const handleDeleteCustomers = async () => {
+    if (selectedCustomers.length === 0) return
+    try {
+      setDeleting(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login to delete customers")
+        setDeleting(false)
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/customers/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ customerIds: selectedCustomers }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.message || "Failed to delete customers")
+        alert(data.message || "Failed to delete customers")
+        return
+      }
+
+      const nextPage = customers.length === selectedCustomers.length && page > 1 ? page - 1 : page
+      setSelectedCustomers([])
+      setIsDeleteDialogOpen(false)
+
+      if (nextPage !== page) {
+        setPage(nextPage)
+      } else {
+        await fetchCustomers()
+      }
+    } catch (err) {
+      console.error("Error deleting customers:", err)
+      setError("Failed to delete customers")
+      alert("Failed to delete customers. Please try again.")
+    } finally {
+      setDeleting(false)
+    }
+  }
   if (loading && customers.length === 0) {
     return (
       <div className="space-y-6">
@@ -245,6 +329,29 @@ export function AdminCustomersList() {
         </CardContent>
       </Card>
 
+      {/* Bulk actions */}
+      {customers.length > 0 && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-4">
+            <div className="text-sm text-muted-foreground">
+              Selected {selectedCustomers.length} customer{selectedCustomers.length === 1 ? "" : "s"}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+                disabled={selectedCustomers.length === 0}
+                onClick={handleOpenDeleteDialog}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete Selected
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {error && (
         <Card className="border-destructive/50 bg-destructive/10">
           <CardContent className="p-4">
@@ -271,6 +378,13 @@ export function AdminCustomersList() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50">
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={customers.length > 0 && customers.every((c) => selectedCustomers.includes(c._id))}
+                      onCheckedChange={handleSelectAll}
+                      aria-label="Select all customers"
+                    />
+                  </TableHead>
                   <TableHead className="font-semibold">Customer ID</TableHead>
                   <TableHead className="font-semibold">Name</TableHead>
                   <TableHead className="font-semibold">Email</TableHead>
@@ -286,13 +400,20 @@ export function AdminCustomersList() {
               <TableBody>
                 {customers.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                       No customers found
                     </TableCell>
                   </TableRow>
                 ) : (
                   customers.map((customer) => (
                     <TableRow key={customer._id} className="hover:bg-muted/30 transition-colors">
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedCustomers.includes(customer._id)}
+                          onCheckedChange={() => handleSelectCustomer(customer._id)}
+                          aria-label="Select customer"
+                        />
+                      </TableCell>
                       <TableCell className="font-medium text-primary">
                         <Link href={`/admin/customers/${customer._id}`} className="hover:underline">
                           CUST{getCustomerId(customer)}
@@ -337,7 +458,12 @@ export function AdminCustomersList() {
               customers.map((customer) => (
                 <div key={customer._id} className="p-4 hover:bg-muted/30 transition-colors">
                   <div className="space-y-3">
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between gap-2">
+                      <Checkbox
+                        checked={selectedCustomers.includes(customer._id)}
+                        onCheckedChange={() => handleSelectCustomer(customer._id)}
+                        aria-label="Select customer"
+                      />
                       <div>
                         <Link href={`/admin/customers/${customer._id}`}>
                           <h3 className="font-semibold text-primary hover:underline">{customer.name || "N/A"}</h3>
@@ -413,6 +539,37 @@ export function AdminCustomersList() {
           </div>
         </div>
       )}
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete selected customers</DialogTitle>
+            <DialogDescription>
+              This will permanently remove {selectedCustomers.length} customer
+              {selectedCustomers.length === 1 ? "" : "s"} and related addresses, carts, and wishlists. Orders will
+              remain for records.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteCustomers} disabled={deleting} className="gap-2">
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -19,7 +19,7 @@ import {
 import { useCart } from "@/lib/cart-context"
 import { MapPin, Plus, Loader2, Check, CheckCircle, Sparkles } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 // All Indian States and Union Territories
 const INDIAN_STATES = [
@@ -113,6 +113,8 @@ export function CheckoutContent() {
   const [error, setError] = useState("")
   const [fetchingAddresses, setFetchingAddresses] = useState(true)
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
+  const [shippingCharges, setShippingCharges] = useState<number>(150)
+  const [fetchingShippingCharges, setFetchingShippingCharges] = useState(true)
 
   // Form state for new address
   const [formData, setFormData] = useState({
@@ -137,7 +139,30 @@ export function CheckoutContent() {
     }
 
     fetchAddresses()
+    fetchShippingCharges()
   }, [router])
+
+  const fetchShippingCharges = async () => {
+    try {
+      setFetchingShippingCharges(true)
+      const response = await fetch(`${API_URL}/api/settings/shipping-charges`)
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch shipping charges")
+      }
+
+      const data = await response.json()
+      if (data.success && data.data) {
+        setShippingCharges(data.data.shippingCharges || 150)
+      }
+    } catch (error) {
+      console.error("Error fetching shipping charges:", error)
+      // Keep default value of 150 if fetch fails
+      setShippingCharges(150)
+    } finally {
+      setFetchingShippingCharges(false)
+    }
+  }
 
   const fetchAddresses = async () => {
     try {
@@ -331,7 +356,7 @@ export function CheckoutContent() {
   }
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const shipping = 150 // Fixed shipping charges
+  const shipping = shippingCharges // Shipping charges fetched from backend
   
   // Calculate GST preview based on selected address
   const selectedAddress = addresses.find((addr) => addr._id === selectedAddressId)
@@ -358,7 +383,7 @@ export function CheckoutContent() {
   const gstTotal = cgst + sgst + igst
   const total = subtotal + shipping + gstTotal
 
-  if (cartLoading || fetchingAddresses) {
+  if (cartLoading || fetchingAddresses || fetchingShippingCharges) {
     return (
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="flex justify-center items-center h-64">

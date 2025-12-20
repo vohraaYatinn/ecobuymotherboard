@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface OrderItem {
   name: string
@@ -57,6 +57,13 @@ interface Vendor {
   }
 }
 
+interface ReturnAttachment {
+  url: string
+  originalName?: string
+  mimeType?: string
+  size?: number
+}
+
 interface ReturnRequest {
   type: "pending" | "accepted" | "denied" | "completed" | null
   reason?: string
@@ -66,6 +73,7 @@ interface ReturnRequest {
   adminNotes?: string
   refundStatus?: "pending" | "processing" | "completed" | "failed" | null
   refundTransactionId?: string
+  attachments?: ReturnAttachment[]
 }
 
 interface Order {
@@ -78,6 +86,9 @@ interface Order {
   subtotal: number
   shipping: number
   total: number
+  cgst?: number
+  sgst?: number
+  igst?: number
   status: string
   paymentMethod: string
   paymentStatus: string
@@ -99,6 +110,18 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const [awbSaving, setAwbSaving] = useState(false)
   const [returnActionLoading, setReturnActionLoading] = useState(false)
   const [returnAdminNotes, setReturnAdminNotes] = useState("")
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return ""
+    const mb = bytes / 1024 / 1024
+    if (mb >= 1) return `${mb.toFixed(1)} MB`
+    return `${(bytes / 1024).toFixed(0)} KB`
+  }
+
+  const getFileUrl = (url: string) => {
+    if (!url) return ""
+    return url.startsWith("http") ? url : `${API_URL}${url}`
+  }
 
   useEffect(() => {
     fetchOrder()
@@ -472,6 +495,17 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const shippingAddress = getShippingAddress()
   const vendor = getVendorInfo()
 
+  // GST & payout helpers
+  const gstTotal = (order.cgst || 0) + (order.sgst || 0) + (order.igst || 0)
+  const isIntraState = (order.cgst || 0) > 0 || (order.sgst || 0) > 0
+  const shippingCgst = isIntraState ? order.shipping * 0.09 : 0
+  const shippingSgst = isIntraState ? order.shipping * 0.09 : 0
+  const shippingIgst = !isIntraState ? order.shipping * 0.18 : 0
+  const platformCommission = order.subtotal * 0.2
+  const payoutBeforeGateway = order.subtotal * 0.8
+  const paymentGatewayCharges = order.total * 0.02
+  const netVendorPayout = payoutBeforeGateway - paymentGatewayCharges
+
   const isReturnRequested = order.status === "return_requested" && order.returnRequest && order.returnRequest.type === "pending"
 
   return (
@@ -491,6 +525,28 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                     <p className="text-xs text-muted-foreground mt-2">
                       Requested on: {new Date(order.returnRequest.requestedAt).toLocaleString("en-IN")}
                     </p>
+                  )}
+                  {order.returnRequest.attachments && order.returnRequest.attachments.length > 0 && (
+                    <div className="mt-3">
+                      <Label className="text-xs font-medium text-muted-foreground">Customer Uploads:</Label>
+                      <ul className="mt-1 space-y-1 text-sm">
+                        {order.returnRequest.attachments.map((file, idx) => (
+                          <li key={`${file.url}-${idx}`} className="flex items-center justify-between gap-2">
+                            <a
+                              href={getFileUrl(file.url)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary underline"
+                            >
+                              {file.originalName || file.url?.split("/").pop()}
+                            </a>
+                            <span className="text-xs text-muted-foreground">
+                              {(file.mimeType?.split("/")?.[0] || "file").toUpperCase()} {formatFileSize(file.size)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </div>
               </div>
@@ -568,6 +624,28 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                 <div className="mb-2">
                   <span className="font-medium text-sm">Customer Reason:</span>
                   <p className="text-sm mt-1">{order.returnRequest.reason}</p>
+                </div>
+              )}
+              {order.returnRequest.attachments && order.returnRequest.attachments.length > 0 && (
+                <div className="mb-2">
+                  <span className="font-medium text-sm">Customer Uploads:</span>
+                  <ul className="mt-1 space-y-1 text-sm">
+                    {order.returnRequest.attachments.map((file, idx) => (
+                      <li key={`${file.url}-${idx}`} className="flex items-center justify-between gap-2">
+                        <a
+                          href={getFileUrl(file.url)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline"
+                        >
+                          {file.originalName || file.url?.split("/").pop()}
+                        </a>
+                        <span className="text-xs text-muted-foreground">
+                          {(file.mimeType?.split("/")?.[0] || "file").toUpperCase()} {formatFileSize(file.size)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               {order.returnRequest.adminNotes && (
@@ -733,10 +811,63 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                 <span className="text-muted-foreground">Shipping</span>
                 <span>₹{order.shipping.toLocaleString("en-IN")}</span>
               </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>
+                  Shipping GST {isIntraState ? "(CGST + SGST @ 9%)" : "(IGST @ 18%)"}
+                </span>
+                <span>
+                  ₹
+                  {isIntraState
+                    ? (shippingCgst + shippingSgst).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : shippingIgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">GST on Order</span>
+                <span>
+                  ₹
+                  {gstTotal.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
               <div className="flex justify-between font-bold text-lg pt-2 border-t">
                 <span>Total</span>
                 <span className="text-green-600">₹{order.total.toLocaleString("en-IN")}</span>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Vendor Payout */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5" />
+              Vendor Payout
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Product Total</span>
+              <span>₹{order.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Platform Commission (20%)</span>
+              <span>- ₹{platformCommission.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between font-medium pt-1">
+              <span>Payout before Gateway</span>
+              <span>₹{payoutBeforeGateway.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Payment Gateway Charges (~2% of order total)</span>
+              <span>- ₹{paymentGatewayCharges.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+            <div className="flex justify-between font-bold text-base pt-2 border-t">
+              <span>Net Payout to Vendor</span>
+              <span>₹{netVendorPayout.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </CardContent>
         </Card>

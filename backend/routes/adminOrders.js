@@ -6,6 +6,8 @@ import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 import { createRazorpayRefund } from "../services/razorpayService.js"
+import { createShipmentForOrder } from "../services/dtdcService.js"
+import Vendor from "../models/Vendor.js"
 
 const router = express.Router()
 
@@ -180,6 +182,8 @@ router.get("/:id", verifyAdminToken, async (req, res) => {
     const order = await Order.findById(req.params.id)
       .populate("customerId", "name mobile email")
       .populate("shippingAddress")
+      .populate("vendorId", "name phone address")
+      .populate("vendorId")
       .populate("vendorId", "name email phone address")
       .populate("items.productId", "name brand sku images category")
 
@@ -237,6 +241,11 @@ router.put("/:id/status", verifyAdminToken, async (req, res) => {
         success: false,
         message: "Order not found",
       })
+    }
+
+    // Set deliveredAt when order is marked delivered for the first time
+    if (status === "delivered" && order.status !== "delivered" && !order.deliveredAt) {
+      order.deliveredAt = new Date()
     }
 
     order.status = status
@@ -466,6 +475,48 @@ router.put("/:id/assign-vendor", verifyAdminToken, async (req, res) => {
   }
 })
 
+// Bulk delete orders (Admin only) - Hard delete
+router.post("/bulk-delete", verifyAdminToken, async (req, res) => {
+  try {
+    const { orderIds } = req.body
+
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "orderIds array is required",
+      })
+    }
+
+    const invalidIds = orderIds.filter((id) => !mongoose.Types.ObjectId.isValid(id))
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid order IDs: ${invalidIds.join(", ")}`,
+      })
+    }
+
+    const result = await Order.deleteMany({ _id: { $in: orderIds } })
+
+    // Clean up related notifications to avoid dangling references
+    await Notification.deleteMany({ orderId: { $in: orderIds } })
+
+    return res.status(200).json({
+      success: true,
+      message: `Deleted ${result.deletedCount} order(s)`,
+      data: {
+        deletedCount: result.deletedCount,
+      },
+    })
+  } catch (error) {
+    console.error("Bulk delete orders error:", error)
+    return res.status(500).json({
+      success: false,
+      message: "Error deleting orders",
+      error: error.message,
+    })
+  }
+})
+
 // Delete order (Admin only) - Soft delete by setting status to cancelled
 router.delete("/:id", verifyAdminToken, async (req, res) => {
   try {
@@ -604,7 +655,9 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
 
     const { adminNotes } = req.body
 
-    const order = await Order.findById(req.params.id).populate("customerId", "name mobile email")
+    const order = await Order.findById(req.params.id)
+      .populate("customerId", "name mobile email")
+      .populate("shippingAddress")
 
     if (!order) {
       return res.status(404).json({
@@ -688,6 +741,81 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
       order.returnRequest.refundStatus = "completed"
     }
 
+    // Attempt to create DTDC pickup/shipment for the return (customer -> vendor)
+    let shipmentResult = null
+    let shipmentError = null
+    try {
+      console.log("🔵 [RETURN ACCEPT][DTDC] Preparing reverse pickup for order", order.orderNumber)
+      const customerAddress = order.shippingAddress
+        ? {
+            name: `${order.shippingAddress.firstName || ""} ${order.shippingAddress.lastName || ""}`.trim(),
+            phone: order.shippingAddress.phone || "",
+            address1: order.shippingAddress.address1,
+            address2: order.shippingAddress.address2 || "",
+            pincode: order.shippingAddress.postcode || "",
+            city: order.shippingAddress.city || "",
+            state: order.shippingAddress.state || "",
+          }
+        : undefined
+
+      let vendorAddress =
+        order.vendorId?.address && order.vendorId?.address.address1
+          ? {
+              name: order.vendorId?.name || "Vendor",
+              phone: order.vendorId?.phone || "",
+              address1: order.vendorId.address.address1,
+              address2: order.vendorId.address.address2 || "",
+              pincode: order.vendorId.address.postcode,
+              city: order.vendorId.address.city,
+              state: order.vendorId.address.state,
+            }
+          : undefined
+
+      // Fallback: fetch vendor from DB if populated doc is missing address
+      if (!vendorAddress && order.vendorId) {
+        try {
+          const vendorDoc = await Vendor.findById(order.vendorId).lean()
+          if (vendorDoc?.address?.address1) {
+            vendorAddress = {
+              name: vendorDoc.name || "Vendor",
+              phone: vendorDoc.phone || "",
+              address1: vendorDoc.address.address1,
+              address2: vendorDoc.address.address2 || "",
+              pincode: vendorDoc.address.postcode,
+              city: vendorDoc.address.city,
+              state: vendorDoc.address.state,
+            }
+            console.log("🔵 [RETURN ACCEPT][DTDC] Vendor address loaded via DB lookup")
+          }
+        } catch (lookupErr) {
+          console.error("❌ [RETURN ACCEPT][DTDC] Vendor lookup failed:", lookupErr)
+        }
+      }
+
+      if (!vendorAddress) {
+        throw new Error("Vendor address missing for DTDC reverse pickup")
+      }
+
+      console.log("🔵 [RETURN ACCEPT][DTDC] Origin (customer) ->", customerAddress)
+      console.log("🔵 [RETURN ACCEPT][DTDC] Destination (vendor) ->", vendorAddress)
+
+      shipmentResult = await createShipmentForOrder(order, {
+        origin: customerAddress,
+        destination: vendorAddress,
+        direction: "reverse",
+        referenceNumber: `${order.orderNumber}-RET`,
+      })
+      if (shipmentResult?.awbNumber) {
+        order.awbNumber = shipmentResult.awbNumber
+        order.dtdcTrackingData = shipmentResult.trackingData || null
+        console.log("✅ [RETURN ACCEPT][DTDC] Reverse pickup created. AWB:", shipmentResult.awbNumber)
+      }
+    } catch (shipErr) {
+      shipmentError = shipErr
+      console.error(`❌ [RETURN ACCEPT] DTDC pickup creation failed for order ${order.orderNumber}:`, shipErr)
+    }
+
+    // Persist changes (statuses + refund + shipment info if any)
     await order.save()
 
     // Create notification for customer
@@ -710,7 +838,9 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
       success: true,
       message: refundError
         ? "Return request accepted. Refund failed - please process manually."
-        : "Return request accepted successfully",
+          : shipmentError
+          ? "Return accepted. Pickup creation failed - please schedule manually."
+          : "Return request accepted successfully",
       data: {
         orderId: order._id,
         orderNumber: order.orderNumber,
@@ -723,6 +853,12 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
             }
           : null,
         refundError: refundError ? refundError.message : null,
+        dtdc: shipmentResult
+          ? {
+              awbNumber: shipmentResult.awbNumber,
+            }
+          : null,
+        shipmentError: shipmentError ? shipmentError.message : null,
       },
     })
   } catch (error) {

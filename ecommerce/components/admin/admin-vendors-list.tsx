@@ -18,9 +18,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-import { Search, Eye, Plus, Store, MapPin, Loader2, Smartphone, Download, Percent } from "lucide-react"
+import { Search, Eye, Plus, Store, MapPin, Loader2, Smartphone, Download, Percent, Trash2 } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface PushToken {
   token: string
@@ -93,6 +93,8 @@ export function AdminVendorsList() {
   const [commissionValue, setCommissionValue] = useState("")
   const [updatingCommission, setUpdatingCommission] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     const fetchVendors = async () => {
@@ -162,6 +164,18 @@ export function AdminVendorsList() {
       return
     }
     setIsCommissionDialogOpen(true)
+  }
+
+  const handleOpenDeleteDialog = () => {
+    if (selectedVendors.length === 0) {
+      toast({
+        title: "No vendors selected",
+        description: "Select at least one vendor to delete.",
+        variant: "destructive",
+      })
+      return
+    }
+    setIsDeleteDialogOpen(true)
   }
 
   const handleUpdateCommission = async () => {
@@ -300,6 +314,60 @@ export function AdminVendorsList() {
     }
   }
 
+  const handleDeleteVendors = async () => {
+    if (selectedVendors.length === 0) return
+
+    try {
+      setDeleting(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in again.",
+          variant: "destructive",
+        })
+        setDeleting(false)
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendors/bulk-delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ vendorIds: selectedVendors }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        toast({
+          title: "Vendors deleted",
+          description: `Removed ${data.data?.deletedCount || selectedVendors.length} vendor(s).`,
+        })
+        setVendors((prev) => prev.filter((vendor) => !selectedVendors.includes(vendor._id)))
+        setSelectedVendors([])
+      } else {
+        toast({
+          title: "Delete failed",
+          description: data.message || "Unable to delete vendors.",
+          variant: "destructive",
+        })
+      }
+    } catch (err) {
+      console.error("Error deleting vendors:", err)
+      toast({
+        title: "Error",
+        description: "Failed to delete vendors. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeleting(false)
+      setIsDeleteDialogOpen(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -393,6 +461,15 @@ export function AdminVendorsList() {
             >
               <Percent className="h-4 w-4" />
               Assign Commission
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleOpenDeleteDialog}
+              disabled={selectedVendors.length === 0}
+              className="gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Selected
             </Button>
           </div>
         </div>
@@ -596,6 +673,45 @@ export function AdminVendorsList() {
                 </>
               ) : (
                 "Update Commission"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete selected vendors</DialogTitle>
+            <DialogDescription>
+              This action will permanently remove {selectedVendors.length} vendor(s). This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteVendors}
+              disabled={deleting}
+              className="gap-2"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </>
               )}
             </Button>
           </DialogFooter>
