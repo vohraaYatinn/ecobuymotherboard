@@ -60,6 +60,7 @@ export function AdminLedger() {
   const [selectedVendor, setSelectedVendor] = useState<{ id: string; name: string } | null>(null)
   const [paymentDraft, setPaymentDraft] = useState<VendorLedgerPayment>({ paid: 0, notes: "" })
   const [payments, setPayments] = useState<Record<string, VendorLedgerPayment>>({})
+  const [savingPayment, setSavingPayment] = useState(false)
 
   const fetchOrders = async () => {
     try {
@@ -101,23 +102,35 @@ export function AdminLedger() {
     }
   }
 
+  const fetchLedgerPayments = async () => {
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        return
+      }
+
+      const res = await fetch(`${API_URL}/api/vendor-ledger/admin`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to load ledger payments")
+      }
+
+      setPayments(data.data?.payments || {})
+    } catch (err) {
+      console.error("Ledger payments fetch error:", err)
+    }
+  }
+
   useEffect(() => {
     fetchOrders()
-    const stored = localStorage.getItem("vendorLedgerPayments")
-    if (stored) {
-      try {
-        setPayments(JSON.parse(stored))
-      } catch (err) {
-        console.error("Failed to parse vendor ledger payments", err)
-      }
-    }
+    fetchLedgerPayments()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const savePayments = (next: Record<string, VendorLedgerPayment>) => {
-    setPayments(next)
-    localStorage.setItem("vendorLedgerPayments", JSON.stringify(next))
-  }
 
   const now = Date.now()
 
@@ -237,18 +250,44 @@ export function AdminLedger() {
     })
   }
 
-  const saveVendorLedger = () => {
+  const saveVendorLedger = async () => {
     if (!selectedVendor) return
-    const next = {
-      ...payments,
-      [selectedVendor.id]: {
-        paid: Number(paymentDraft.paid) || 0,
-        notes: paymentDraft.notes?.trim() || "",
-        updatedAt: new Date().toISOString(),
-      },
+
+    try {
+      setSavingPayment(true)
+      setError("")
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        setError("Not authenticated")
+        return
+      }
+
+      const res = await fetch(`${API_URL}/api/vendor-ledger/admin/${selectedVendor.id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          paid: Number(paymentDraft.paid) || 0,
+          notes: paymentDraft.notes?.trim() || "",
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "Failed to save ledger entry")
+      }
+
+      const nextPayments = data.data?.payments || payments
+      setPayments(nextPayments)
+      setSelectedVendor(null)
+    } catch (err) {
+      console.error("Ledger save error:", err)
+      setError(err instanceof Error ? err.message : "Failed to save payment")
+    } finally {
+      setSavingPayment(false)
     }
-    savePayments(next)
-    setSelectedVendor(null)
   }
 
   return (
@@ -480,7 +519,9 @@ export function AdminLedger() {
               <Button variant="outline" onClick={() => setSelectedVendor(null)}>
                 Cancel
               </Button>
-              <Button onClick={saveVendorLedger}>Save</Button>
+              <Button onClick={saveVendorLedger} disabled={savingPayment}>
+                {savingPayment ? "Saving..." : "Save"}
+              </Button>
             </div>
           </div>
         </DialogContent>

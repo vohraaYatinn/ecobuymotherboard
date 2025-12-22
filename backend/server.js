@@ -31,6 +31,7 @@ import dtdcRoutes from "./routes/dtdc.js"
 import invoiceRoutes from "./routes/invoices.js"
 import supportRoutes from "./routes/support.js"
 import settingsRoutes from "./routes/settings.js"
+import vendorLedgerRoutes from "./routes/vendorLedger.js"
 import { startOrderResetCron } from "./services/orderResetCron.js"
 import { startAdminReviewCron } from "./services/adminReviewCron.js"
 
@@ -146,6 +147,7 @@ app.use("/api/dtdc", dtdcRoutes)
 app.use("/api/invoices", invoiceRoutes)
 app.use("/api/support", supportRoutes)
 app.use("/api/settings", settingsRoutes)
+app.use("/api/vendor-ledger", vendorLedgerRoutes)
 
 // Health check
 app.get("/api/health", (req, res) => {

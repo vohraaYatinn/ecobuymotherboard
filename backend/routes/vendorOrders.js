@@ -4,6 +4,7 @@ import Customer from "../models/Customer.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Vendor from "../models/Vendor.js"
+import Settings from "../models/Settings.js"
 import { verifyVendorToken } from "../middleware/auth.js"
 import { createShipmentForOrder } from "../services/dtdcService.js"
 
@@ -12,6 +13,13 @@ const router = express.Router()
 const RETURN_WINDOW_DAYS = 3
 const PLATFORM_COMMISSION_RATE = 0.2 // 20%
 const GATEWAY_RATE = 0.02 // 2% of order total
+const LEDGER_SETTINGS_KEY = "vendor_ledger_payments"
+
+const getVendorLedgerPayments = async () => {
+  const setting = await Settings.findOne({ key: LEDGER_SETTINGS_KEY })
+  if (!setting) return {}
+  return typeof setting.value === "object" && setting.value !== null ? setting.value : {}
+}
 
 // Get unassigned orders (orders without a vendor)
 router.get("/unassigned", verifyVendorToken, async (req, res) => {
@@ -250,6 +258,16 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
     const now = new Date()
     const returnWindowCutoff = new Date(now.getTime() - RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000)
 
+    const calculateNetPayout = (order) => {
+      // Payout Formula: (Product Cost × 0.80) - Payment Gateway Charges
+      // Product Cost = subtotal, Gateway Charges = 2% of order total
+      const productCost = typeof order.subtotal === "number" ? order.subtotal : order.total || 0
+      const orderTotal = order.total || productCost
+      const payoutBeforeGateway = productCost * 0.80
+      const paymentGatewayCharges = orderTotal * GATEWAY_RATE
+      return Math.max(payoutBeforeGateway - paymentGatewayCharges, 0)
+    }
+
     const eligibleOrders = await Order.find({
       vendorId,
       status: "delivered",
@@ -261,13 +279,31 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
     }).select("subtotal total status updatedAt returnRequest")
 
     const totalRevenue = eligibleOrders.reduce((sum, order) => {
-      const subtotal = typeof order.subtotal === "number" ? order.subtotal : order.total || 0
-      const total = order.total || subtotal
-      const commission = subtotal * PLATFORM_COMMISSION_RATE
-      const gatewayFees = total * GATEWAY_RATE
-      const netPayout = subtotal - commission - gatewayFees
-      return sum + Math.max(netPayout, 0)
+      return sum + calculateNetPayout(order)
     }, 0)
+
+    const pendingPayoutOrders = await Order.find({
+      vendorId,
+      $or: [
+        { status: { $in: ["pending", "confirmed", "processing", "shipped", "admin_review_required", "return_requested", "return_accepted", "return_rejected"] } },
+        {
+          status: "delivered",
+          $or: [
+            { updatedAt: { $gt: returnWindowCutoff } },
+            { "returnRequest.type": { $nin: [null, "denied"] } },
+          ],
+        },
+      ],
+    }).select("subtotal total status updatedAt returnRequest")
+
+    const pendingAmount = pendingPayoutOrders.reduce((sum, order) => {
+      return sum + calculateNetPayout(order)
+    }, 0)
+
+    const ledgerPayments = await getVendorLedgerPayments()
+    const vendorLedgerKey = vendorId.toString()
+    const ledgerEntry = ledgerPayments?.[vendorLedgerKey]
+    const paidAmount = Math.max(Number(ledgerEntry?.paid || 0), 0)
 
     // Calculate average order value
     const avgOrderResult = await Order.aggregate([
@@ -294,6 +330,8 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
           delivered: deliveredOrders,
           revenue: totalRevenue,
           avgOrderValue,
+          pendingAmount,
+          paidAmount,
         },
         recentOrders,
       },

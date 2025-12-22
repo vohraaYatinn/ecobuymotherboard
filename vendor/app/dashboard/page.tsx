@@ -18,6 +18,8 @@ interface DashboardStats {
     delivered: number
     revenue: number
     avgOrderValue: number
+    pendingAmount: number
+    paidAmount: number
   }
   recentOrders: Array<{
     _id: string
@@ -198,6 +200,34 @@ export default function DashboardPage() {
 
   const dashboardStats = [
     {
+      title: "Pending Amount",
+      value: formatCurrency(stats.totals.pendingAmount || 0),
+      change: "Awaiting delivery/return window",
+      trend: stats.totals.pendingAmount > 0 ? "up" : "down",
+      href: "/orders?status=processing",
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      bgColor: "bg-chart-5/10",
+      iconColor: "text-chart-5",
+    },
+    {
+      title: "Paid Amount",
+      value: formatCurrency(stats.totals.paidAmount || 0),
+      change: "Marked paid in ledger",
+      trend: stats.totals.paidAmount > 0 ? "up" : "down",
+      href: "/orders",
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+        </svg>
+      ),
+      bgColor: "bg-chart-3/10",
+      iconColor: "text-chart-3",
+    },
+    {
       title: "Total Orders",
       value: stats.totals.orders.toString(),
       change: `${stats.totals.delivered} delivered`,
@@ -234,25 +264,6 @@ export default function DashboardPage() {
       ),
       bgColor: "bg-chart-5/10",
       iconColor: "text-chart-5",
-    },
-    {
-      title: "Revenue",
-      value: formatCurrency(stats.totals.revenue),
-      change: `${stats.totals.delivered} delivered`,
-      trend: "up",
-      href: "/orders?status=delivered",
-      icon: (
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      ),
-      bgColor: "bg-chart-3/10",
-      iconColor: "text-chart-3",
     },
     {
       title: "Avg. Value",
