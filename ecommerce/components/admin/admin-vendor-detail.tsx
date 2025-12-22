@@ -9,10 +9,10 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Save, Store, MapPin, Package, CheckCircle, Loader2, Smartphone, Download } from "lucide-react"
+import { ArrowLeft, Save, Store, MapPin, CheckCircle, Loader2, Smartphone, Download } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface AdminVendorDetailProps {
   vendorId: string
@@ -710,19 +710,7 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
 
         {/* Vendor Stats */}
         {vendor && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Package className="h-4 w-4" />
-                  Total Products
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-3xl font-bold">{vendor.totalProducts}</p>
-                <p className="text-xs text-muted-foreground mt-1">Active listings</p>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
@@ -732,7 +720,7 @@ export function AdminVendorDetail({ vendorId }: AdminVendorDetailProps) {
               </CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold">{vendor.ordersFulfilled}</p>
-                <p className="text-xs text-muted-foreground mt-1">All time</p>
+                <p className="text-xs text-muted-foreground mt-1">Delivered orders with return period expired</p>
               </CardContent>
             </Card>
             <Card>

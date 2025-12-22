@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface OrderItem {
   name: string
@@ -110,6 +110,10 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const [awbSaving, setAwbSaving] = useState(false)
   const [returnActionLoading, setReturnActionLoading] = useState(false)
   const [returnAdminNotes, setReturnAdminNotes] = useState("")
+  const [createdAt, setCreatedAt] = useState("")
+  const [createdAtSaving, setCreatedAtSaving] = useState(false)
+  const [deliveredAt, setDeliveredAt] = useState("")
+  const [deliveredAtSaving, setDeliveredAtSaving] = useState(false)
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return ""
@@ -175,6 +179,31 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
       setAwbNumber(data.data.awbNumber || "")
       if (data.data.vendorId && typeof data.data.vendorId === "object") {
         setSelectedVendor(data.data.vendorId._id)
+      }
+      // Set createdAt in datetime-local format (YYYY-MM-DDTHH:mm)
+      if (data.data.createdAt) {
+        const date = new Date(data.data.createdAt)
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, "0")
+        const day = String(date.getDate()).padStart(2, "0")
+        const hours = String(date.getHours()).padStart(2, "0")
+        const minutes = String(date.getMinutes()).padStart(2, "0")
+        setCreatedAt(`${year}-${month}-${day}T${hours}:${minutes}`)
+      } else {
+        setCreatedAt("")
+      }
+
+      // Set deliveredAt in datetime-local format (YYYY-MM-DDTHH:mm)
+      if (data.data.deliveredAt) {
+        const date = new Date(data.data.deliveredAt)
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, "0")
+        const day = String(date.getDate()).padStart(2, "0")
+        const hours = String(date.getHours()).padStart(2, "0")
+        const minutes = String(date.getMinutes()).padStart(2, "0")
+        setDeliveredAt(`${year}-${month}-${day}T${hours}:${minutes}`)
+      } else {
+        setDeliveredAt("")
       }
     } catch (err) {
       console.error("Error fetching order:", err)
@@ -298,6 +327,82 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
       alert(err instanceof Error ? err.message : "Failed to save AWB number")
     } finally {
       setAwbSaving(false)
+    }
+  }
+
+  const handleSaveCreatedAt = async () => {
+    if (!order || !createdAt) {
+      alert("Please select a valid date and time")
+      return
+    }
+
+    try {
+      setCreatedAtSaving(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login again")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/orders/${orderId}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ createdAt }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to update order created date")
+      }
+
+      await fetchOrder()
+      alert("Order created date updated successfully!")
+    } catch (err) {
+      console.error("Error saving createdAt:", err)
+      alert(err instanceof Error ? err.message : "Failed to save created date")
+    } finally {
+      setCreatedAtSaving(false)
+    }
+  }
+
+  const handleSaveDeliveredAt = async () => {
+    if (!order || !deliveredAt) {
+      alert("Please select a valid delivered date and time")
+      return
+    }
+
+    try {
+      setDeliveredAtSaving(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please login again")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/orders/${orderId}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ deliveredAt }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to update delivered date")
+      }
+
+      await fetchOrder()
+      alert("Order delivered date updated successfully!")
+    } catch (err) {
+      console.error("Error saving deliveredAt:", err)
+      alert(err instanceof Error ? err.message : "Failed to save delivered date")
+    } finally {
+      setDeliveredAtSaving(false)
     }
   }
 
@@ -966,6 +1071,64 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   </a>
                 </div>
               )}
+            </div>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="createdAt">Order Created At</Label>
+                <div className="mt-1.5 flex gap-2">
+                  <Input
+                    id="createdAt"
+                    type="datetime-local"
+                    value={createdAt}
+                    onChange={(e) => setCreatedAt(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={handleSaveCreatedAt}
+                    disabled={createdAtSaving || !createdAt}
+                    size="sm"
+                  >
+                    {createdAtSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Current: {formatDate(order.createdAt)} at {formatTime(order.createdAt)}
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="deliveredAt">Delivered At</Label>
+                <div className="mt-1.5 flex gap-2">
+                  <Input
+                    id="deliveredAt"
+                    type="datetime-local"
+                    value={deliveredAt}
+                    onChange={(e) => setDeliveredAt(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    onClick={handleSaveDeliveredAt}
+                    disabled={deliveredAtSaving || !deliveredAt}
+                    size="sm"
+                  >
+                    {deliveredAtSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      "Save"
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Current:{" "}
+                  {order.deliveredAt
+                    ? `${formatDate(order.deliveredAt)} at ${formatTime(order.deliveredAt)}`
+                    : "Not marked as delivered"}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 const RETURN_WINDOW_DAYS = 3
 
 interface Vendor {
@@ -30,6 +30,7 @@ interface Order {
   subtotal: number
   total: number
   updatedAt: string
+  deliveredAt?: string | null
   returnRequest?: {
     type: "pending" | "accepted" | "denied" | "completed" | null
   } | null
@@ -139,7 +140,10 @@ export function AdminLedger() {
       .filter((order) => {
         if (!order.vendorId) return false // must be assigned to a vendor
         if (order.status !== "delivered") return false
-        const deliveredAt = new Date(order.updatedAt).getTime()
+        
+        // Use deliveredAt if available, otherwise fallback to updatedAt (for older orders)
+        const deliveryDate = order.deliveredAt ? new Date(order.deliveredAt) : new Date(order.updatedAt)
+        const deliveredAt = deliveryDate.getTime()
         const returnDeadline = deliveredAt + RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000
         const isWindowOver = now > returnDeadline
         if (showReadyOnly && !isWindowOver) return false
@@ -150,7 +154,9 @@ export function AdminLedger() {
         return true
       })
       .map((order) => {
-        const deliveredAt = new Date(order.updatedAt)
+        // Use deliveredAt if available, otherwise fallback to updatedAt (for older orders)
+        const deliveryDate = order.deliveredAt ? new Date(order.deliveredAt) : new Date(order.updatedAt)
+        const deliveredAt = deliveryDate
         const returnDeadline = new Date(deliveredAt.getTime() + RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000)
 
         const platformCommission = order.subtotal * 0.2

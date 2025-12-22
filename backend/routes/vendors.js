@@ -195,9 +195,40 @@ router.get("/:id", async (req, res) => {
       })
     }
 
+    // Calculate ordersFulfilled dynamically: delivered orders where return period is over
+    const Order = (await import("../models/Order.js")).default
+    const RETURN_WINDOW_DAYS = 3
+    const now = Date.now()
+    const returnWindowMs = RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000
+
+    // Get all delivered orders for this vendor
+    const deliveredOrders = await Order.find({
+      vendorId: vendor._id,
+      status: "delivered",
+      $or: [
+        { returnRequest: { $exists: false } },
+        { "returnRequest.type": { $in: [null, "denied"] } },
+      ],
+    })
+      .select("deliveredAt updatedAt")
+      .lean()
+
+    // Filter orders where return period is over (using deliveredAt or updatedAt as fallback)
+    const fulfilledOrders = deliveredOrders.filter((order) => {
+      const deliveryDate = order.deliveredAt 
+        ? new Date(order.deliveredAt).getTime()
+        : new Date(order.updatedAt).getTime()
+      const returnDeadline = deliveryDate + returnWindowMs
+      return now > returnDeadline
+    }).length
+
+    // Convert vendor to plain object and update ordersFulfilled
+    const vendorData = vendor.toObject()
+    vendorData.ordersFulfilled = fulfilledOrders
+
     res.status(200).json({
       success: true,
-      data: vendor,
+      data: vendorData,
     })
   } catch (error) {
     console.error("Get vendor error:", error)

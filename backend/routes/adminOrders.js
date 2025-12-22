@@ -328,7 +328,7 @@ router.put("/:id/payment-status", verifyAdminToken, async (req, res) => {
 // Update order (Admin only) - Full update
 router.put("/:id", verifyAdminToken, async (req, res) => {
   try {
-    const { status, paymentStatus, paymentMethod, vendorId } = req.body
+    const { status, paymentStatus, paymentMethod, vendorId, createdAt, deliveredAt } = req.body
 
     const order = await Order.findById(req.params.id)
 
@@ -382,18 +382,93 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
       }
     }
 
+    // Save other changes first (status, paymentStatus, etc.)
     await order.save()
 
+    // Update createdAt separately AFTER saving other changes
+    // Use direct MongoDB update to bypass Mongoose timestamps
+    if (createdAt) {
+      const createdAtDate = new Date(createdAt)
+      if (!isNaN(createdAtDate.getTime())) {
+        const updateResult = await Order.collection.updateOne(
+          { _id: order._id },
+          { $set: { createdAt: createdAtDate } }
+        )
+        console.log(`Updated createdAt for order ${order.orderNumber} (${order._id}) to ${createdAtDate.toISOString()}`)
+        console.log("createdAt update result:", {
+          matchedCount: updateResult.matchedCount,
+          modifiedCount: updateResult.modifiedCount,
+          acknowledged: updateResult.acknowledged,
+        })
+
+        if (updateResult.matchedCount === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Order not found for createdAt update",
+          })
+        }
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid createdAt date format",
+        })
+      }
+    }
+
+    // Update deliveredAt separately (optional manual override)
+    if (deliveredAt) {
+      const deliveredAtDate = new Date(deliveredAt)
+      if (!isNaN(deliveredAtDate.getTime())) {
+        const updateResult = await Order.collection.updateOne(
+          { _id: order._id },
+          { $set: { deliveredAt: deliveredAtDate } }
+        )
+        console.log(`Updated deliveredAt for order ${order.orderNumber} (${order._id}) to ${deliveredAtDate.toISOString()}`)
+        console.log("deliveredAt update result:", {
+          matchedCount: updateResult.matchedCount,
+          modifiedCount: updateResult.modifiedCount,
+          acknowledged: updateResult.acknowledged,
+        })
+
+        if (updateResult.matchedCount === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "Order not found for deliveredAt update",
+          })
+        }
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid deliveredAt date format",
+        })
+      }
+    }
+
+    // Reload order to ensure we have the latest data (especially createdAt / deliveredAt if updated)
+    const finalOrder = await Order.findById(order._id)
+    if (!finalOrder) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found after update",
+      })
+    }
+    
+    // Log createdAt value for debugging
+    if (createdAt) {
+      console.log(`Reloaded order ${finalOrder.orderNumber} createdAt:`, finalOrder.createdAt)
+      console.log(`Expected createdAt:`, new Date(createdAt).toISOString())
+    }
+
     // Populate before returning
-    await order.populate("customerId", "name mobile email")
-    await order.populate("shippingAddress")
-    await order.populate("vendorId", "name email phone address")
-    await order.populate("items.productId", "name brand sku images")
+    await finalOrder.populate("customerId", "name mobile email")
+    await finalOrder.populate("shippingAddress")
+    await finalOrder.populate("vendorId", "name email phone address")
+    await finalOrder.populate("items.productId", "name brand sku images")
 
     res.status(200).json({
       success: true,
       message: "Order updated successfully",
-      data: order,
+      data: finalOrder,
     })
   } catch (error) {
     console.error("Update order error:", error)
