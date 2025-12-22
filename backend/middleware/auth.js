@@ -68,16 +68,12 @@ export const verifyVendorToken = async (req, res, next) => {
       })
     }
 
-    // Get vendor details if linked
+    // Get vendor details if linked (allow all statuses - pending, approved, etc.)
     let vendor = null
     if (vendorUser.vendorId) {
       vendor = await Vendor.findById(vendorUser.vendorId)
-      if (!vendor || !vendor.isActive || vendor.status !== "approved") {
-        return res.status(401).json({
-          success: false,
-          message: "Vendor account is not active or approved"
-        })
-      }
+      // Don't reject based on status - allow pending vendors to access
+      // Individual endpoints can check status if needed
     }
 
     req.vendorUser = {
@@ -94,6 +90,7 @@ export const verifyVendorToken = async (req, res, next) => {
       email: vendor.email,
       phone: vendor.phone,
       status: vendor.status,
+      isActive: vendor.isActive,
     } : null
 
     next()

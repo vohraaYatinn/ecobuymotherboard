@@ -33,6 +33,9 @@ interface DashboardStats {
     status: string
     createdAt: string
   }>
+  vendorNotLinked?: boolean
+  vendorNotApproved?: boolean
+  vendorStatus?: string | null
 }
 
 export default function DashboardPage() {
@@ -70,8 +73,12 @@ export default function DashboardPage() {
 
       if (response.ok && data.success) {
         setUnreadNotifications(data.data.unreadCount || 0)
+      } else if (response.status === 401) {
+        // Token expired or invalid - silently fail, don't redirect
+        console.warn("Notification fetch unauthorized - token may be invalid")
       }
     } catch (err) {
+      // Silently fail for notifications - don't disrupt the dashboard
       console.error("Error fetching unread notifications:", err)
     }
   }
@@ -323,6 +330,87 @@ export default function DashboardPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8 space-y-5" style={{ paddingBottom: `calc(7rem + env(safe-area-inset-bottom, 0px))` }}>
+        {/* Vendor Status Notices */}
+        {stats.vendorNotLinked && (
+          <Card className="border-orange-200 bg-orange-50/50">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100">
+                  <svg className="h-5 w-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-orange-900 mb-1">Vendor Account Not Linked</h3>
+                  <p className="text-xs text-orange-700">
+                    Your account is not yet linked to a vendor profile. Please contact support to complete your vendor registration.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {stats.vendorNotApproved && stats.vendorStatus === "pending" && (
+          <Card className="border-blue-200 bg-blue-50/50">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
+                  <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-blue-900 mb-1">Vendor Account Pending Approval</h3>
+                  <p className="text-xs text-blue-700">
+                    Your vendor account is pending approval. Once approved by admin, you'll be able to view orders and manage your dashboard.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {stats.vendorNotApproved && stats.vendorStatus === "rejected" && (
+          <Card className="border-red-200 bg-red-50/50">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-100">
+                  <svg className="h-5 w-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-red-900 mb-1">Vendor Account Rejected</h3>
+                  <p className="text-xs text-red-700">
+                    Your vendor account has been rejected. Please contact support for more information.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
+        {stats.vendorNotApproved && stats.vendorStatus === "suspended" && (
+          <Card className="border-yellow-200 bg-yellow-50/50">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-100">
+                  <svg className="h-5 w-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-yellow-900 mb-1">Vendor Account Suspended</h3>
+                  <p className="text-xs text-yellow-700">
+                    Your vendor account has been suspended. Please contact support for more information.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        
         {/* Stats Grid - Modern curvy design */}
         <div className="grid grid-cols-2 gap-4">
           {dashboardStats.map((stat, index) => (

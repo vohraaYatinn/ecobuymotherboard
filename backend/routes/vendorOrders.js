@@ -240,11 +240,49 @@ router.get("/", verifyVendorToken, async (req, res) => {
 router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
   try {
     const vendorId = req.vendorUser.vendorId
+    const vendor = req.vendor
 
+    // If vendor account is not linked, return empty stats
     if (!vendorId) {
-      return res.status(400).json({
-        success: false,
-        message: "Vendor account not linked. Please contact support.",
+      return res.status(200).json({
+        success: true,
+        data: {
+          totals: {
+            orders: 0,
+            pending: 0,
+            shipped: 0,
+            delivered: 0,
+            revenue: 0,
+            avgOrderValue: 0,
+            pendingAmount: 0,
+            paidAmount: 0,
+          },
+          recentOrders: [],
+          vendorStatus: null,
+          vendorNotLinked: true,
+        },
+      })
+    }
+
+    // Check if vendor is approved - if not, return empty stats with status
+    if (!vendor || vendor.status !== "approved") {
+      return res.status(200).json({
+        success: true,
+        data: {
+          totals: {
+            orders: 0,
+            pending: 0,
+            shipped: 0,
+            delivered: 0,
+            revenue: 0,
+            avgOrderValue: 0,
+            pendingAmount: 0,
+            paidAmount: 0,
+          },
+          recentOrders: [],
+          vendorStatus: vendor?.status || "pending",
+          vendorNotApproved: true,
+        },
       })
     }
 
@@ -334,6 +372,7 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
           paidAmount,
         },
         recentOrders,
+        vendorStatus: vendor?.status || "approved",
       },
     })
   } catch (error) {

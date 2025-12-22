@@ -295,16 +295,50 @@ router.post("/verify-otp", async (req, res) => {
 
     // Check if vendor exists and link it
     let linkedVendor = null
-    if (!vendorUser.vendorId) {
+    
+    // First, try to find vendor by phone number (try multiple formats)
+    const phoneVariations = [
+      fullMobile.slice(-10), // Last 10 digits: 7995524585
+      fullMobile, // Full with country code: 917995524585
+      mobile, // Original mobile: 7995524585
+    ]
+    
+    for (const phone of phoneVariations) {
       linkedVendor = await Vendor.findOne({
-        $or: [{ phone: { $regex: fullMobile.slice(-10) } }, { email: vendorUser.email }],
+        $or: [
+          { phone: phone },
+          { phone: { $regex: phone.slice(-10) } },
+        ],
       })
       if (linkedVendor) {
+        console.log(`✅ [VENDOR AUTH] Found vendor by phone: ${phone}`)
+        break
+      }
+    }
+    
+    // If no vendor found by phone, try by email
+    if (!linkedVendor && vendorUser.email) {
+      linkedVendor = await Vendor.findOne({ email: vendorUser.email })
+      if (linkedVendor) {
+        console.log(`✅ [VENDOR AUTH] Found vendor by email`)
+      }
+    }
+    
+    // Link or update vendor link if found
+    if (linkedVendor) {
+      // Update vendorId if it's different or null
+      if (!vendorUser.vendorId || vendorUser.vendorId.toString() !== linkedVendor._id.toString()) {
         vendorUser.vendorId = linkedVendor._id
         await vendorUser.save()
+        console.log(`✅ [VENDOR AUTH] Linked vendor user to vendor: ${linkedVendor.name} (${linkedVendor.status})`)
       }
-    } else {
+    } else if (vendorUser.vendorId) {
+      // If vendor user has a vendorId but we couldn't find vendor by phone/email, 
+      // try to load the existing linked vendor
       linkedVendor = await Vendor.findById(vendorUser.vendorId)
+      if (!linkedVendor) {
+        console.log(`⚠️ [VENDOR AUTH] Vendor user has vendorId but vendor not found: ${vendorUser.vendorId}`)
+      }
     }
 
     // Store FCM token if provided
