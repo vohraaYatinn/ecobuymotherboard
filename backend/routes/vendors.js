@@ -75,6 +75,22 @@ const removeVendorDocuments = async (vendor) => {
   }
 }
 
+// Helper function to normalize phone number for consistent storage
+const normalizePhoneForStorage = (phone) => {
+  if (!phone) return null
+  // Remove all non-digits
+  const cleaned = phone.replace(/\D/g, "")
+  // If it starts with country code (91), remove it
+  if (cleaned.startsWith("91") && cleaned.length === 12) {
+    return cleaned.substring(2) // Return last 10 digits
+  }
+  // Return last 10 digits or original if already 10 digits
+  if (cleaned.length >= 10) {
+    return cleaned.slice(-10)
+  }
+  return cleaned.length === 10 ? cleaned : phone // Fallback to original if can't normalize
+}
+
 const handleVendorDocsUpload = (req, res, next) => {
   const contentType = req.headers["content-type"] || ""
 
@@ -290,12 +306,15 @@ router.post("/", verifyAdminToken, handleVendorDocsUpload, async (req, res) => {
       })
     }
 
+    // Normalize phone number for consistent storage
+    const normalizedPhone = normalizePhoneForStorage(phone)
+
     // Create vendor
     const vendor = new Vendor({
       name,
       username: username.toLowerCase(),
       email: email.toLowerCase(),
-      phone,
+      phone: normalizedPhone || phone, // Use normalized or fallback to original
       status: status || "pending",
       address: {
         firstName: address.firstName,
@@ -692,12 +711,15 @@ router.post("/register", handleVendorDocsUpload, async (req, res) => {
       })
     }
 
+    // Normalize phone number for consistent storage
+    const normalizedPhone = normalizePhoneForStorage(storePhone)
+
     // Create vendor with pending status
     const vendor = new Vendor({
       name: `${firstName} ${lastName}`,
       username: username.toLowerCase(),
       email: email.toLowerCase(),
-      phone: storePhone,
+      phone: normalizedPhone || storePhone, // Use normalized or fallback to original
       status: "pending",
       address: {
         firstName: firstName,
@@ -721,6 +743,46 @@ router.post("/register", handleVendorDocsUpload, async (req, res) => {
     await vendor.save()
 
     console.log("✅ New vendor registration:", vendor._id, vendor.name)
+
+    // Try to automatically link to existing VendorUser if one exists
+    try {
+      const VendorUser = (await import("../models/VendorUser.js")).default
+      const normalizedPhone = normalizePhoneForStorage(vendor.phone)
+      
+      if (normalizedPhone) {
+        // Try to find VendorUser by phone (normalized to 91XXXXXXXXXX format)
+        const phoneVariations = [
+          `91${normalizedPhone}`, // 917995524585
+          normalizedPhone, // 7995524585
+        ]
+        
+        for (const phoneVar of phoneVariations) {
+          const vendorUser = await VendorUser.findOne({ mobile: phoneVar })
+          if (vendorUser && !vendorUser.vendorId) {
+            vendorUser.vendorId = vendor._id
+            await vendorUser.save()
+            console.log(`✅ [VENDOR REGISTER] Auto-linked VendorUser ${vendorUser._id} to Vendor ${vendor._id} by phone`)
+            break
+          }
+        }
+      }
+      
+      // Also try by email if phone didn't match
+      if (vendor.email) {
+        const vendorUserByEmail = await VendorUser.findOne({ 
+          email: vendor.email.toLowerCase().trim(),
+          vendorId: { $exists: false }
+        })
+        if (vendorUserByEmail) {
+          vendorUserByEmail.vendorId = vendor._id
+          await vendorUserByEmail.save()
+          console.log(`✅ [VENDOR REGISTER] Auto-linked VendorUser ${vendorUserByEmail._id} to Vendor ${vendor._id} by email`)
+        }
+      }
+    } catch (linkError) {
+      // Don't fail registration if linking fails - it can be done manually later
+      console.error("⚠️ [VENDOR REGISTER] Error auto-linking vendor user:", linkError)
+    }
 
     res.status(201).json({
       success: true,

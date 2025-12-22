@@ -30,6 +30,18 @@ const normalizeMobile = (mobile, countryCode = "91") => {
   return null
 }
 
+// Normalize phone number to last 10 digits (for matching)
+const normalizePhoneForMatching = (phone) => {
+  if (!phone) return null
+  // Remove all non-digits
+  const cleaned = phone.replace(/\D/g, "")
+  // Return last 10 digits
+  if (cleaned.length >= 10) {
+    return cleaned.slice(-10)
+  }
+  return cleaned.length === 10 ? cleaned : null
+}
+
 // Send OTP for vendor login
 router.post("/send-otp", async (req, res) => {
   try {
@@ -296,31 +308,38 @@ router.post("/verify-otp", async (req, res) => {
     // Check if vendor exists and link it
     let linkedVendor = null
     
-    // First, try to find vendor by phone number (try multiple formats)
-    const phoneVariations = [
-      fullMobile.slice(-10), // Last 10 digits: 7995524585
-      fullMobile, // Full with country code: 917995524585
-      mobile, // Original mobile: 7995524585
-    ]
+    // Normalize the mobile number to last 10 digits for matching
+    const normalizedMobile = normalizePhoneForMatching(fullMobile)
     
-    for (const phone of phoneVariations) {
-      linkedVendor = await Vendor.findOne({
-        $or: [
-          { phone: phone },
-          { phone: { $regex: phone.slice(-10) } },
-        ],
-      })
-      if (linkedVendor) {
-        console.log(`✅ [VENDOR AUTH] Found vendor by phone: ${phone}`)
-        break
+    if (normalizedMobile) {
+      // Try to find vendor by phone number (normalized to last 10 digits)
+      // This handles various formats: 7995524585, 917995524585, +917995524585, etc.
+      const vendors = await Vendor.find({})
+      for (const vendor of vendors) {
+        const vendorPhoneNormalized = normalizePhoneForMatching(vendor.phone)
+        if (vendorPhoneNormalized === normalizedMobile) {
+          linkedVendor = vendor
+          console.log(`✅ [VENDOR AUTH] Found vendor by phone match: ${vendor.phone} -> ${normalizedMobile}`)
+          break
+        }
+      }
+      
+      // If still not found, try regex search on phone field (fallback)
+      if (!linkedVendor) {
+        linkedVendor = await Vendor.findOne({
+          phone: { $regex: normalizedMobile },
+        })
+        if (linkedVendor) {
+          console.log(`✅ [VENDOR AUTH] Found vendor by phone regex: ${normalizedMobile}`)
+        }
       }
     }
     
     // If no vendor found by phone, try by email
     if (!linkedVendor && vendorUser.email) {
-      linkedVendor = await Vendor.findOne({ email: vendorUser.email })
+      linkedVendor = await Vendor.findOne({ email: vendorUser.email.toLowerCase().trim() })
       if (linkedVendor) {
-        console.log(`✅ [VENDOR AUTH] Found vendor by email`)
+        console.log(`✅ [VENDOR AUTH] Found vendor by email: ${vendorUser.email}`)
       }
     }
     
@@ -339,6 +358,17 @@ router.post("/verify-otp", async (req, res) => {
       if (!linkedVendor) {
         console.log(`⚠️ [VENDOR AUTH] Vendor user has vendorId but vendor not found: ${vendorUser.vendorId}`)
       }
+    } else {
+      // No vendor found and no existing link - this is a new user without vendor registration
+      console.log(`⚠️ [VENDOR AUTH] No vendor found for mobile: ${fullMobile}. User must register as vendor first.`)
+    }
+    
+    // Require vendor to be linked before allowing login
+    if (!linkedVendor) {
+      return res.status(403).json({
+        success: false,
+        message: "No vendor account found. Please register as a vendor first before logging in. Visit the vendor registration page to create your vendor account.",
+      })
     }
 
     // Store FCM token if provided
