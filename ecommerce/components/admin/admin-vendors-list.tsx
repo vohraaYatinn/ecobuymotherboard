@@ -155,14 +155,6 @@ export function AdminVendorsList() {
   }
 
   const handleOpenCommissionDialog = () => {
-    if (selectedVendors.length === 0) {
-      toast({
-        title: "No vendors selected",
-        description: "Please select at least one vendor to assign commission.",
-        variant: "destructive",
-      })
-      return
-    }
     setIsCommissionDialogOpen(true)
   }
 
@@ -217,7 +209,8 @@ export function AdminVendorsList() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          vendorIds: selectedVendors,
+          // Apply commission to all vendors currently in the list (respecting filters)
+          vendorIds: vendors.map((v) => v._id),
           commission: commission,
         }),
       })
@@ -456,7 +449,7 @@ export function AdminVendorsList() {
             <Button
               variant="outline"
               onClick={handleOpenCommissionDialog}
-              disabled={selectedVendors.length === 0}
+              disabled={vendors.length === 0}
               className="gap-2"
             >
               <Percent className="h-4 w-4" />
@@ -633,7 +626,8 @@ export function AdminVendorsList() {
           <DialogHeader>
             <DialogTitle>Assign Commission</DialogTitle>
             <DialogDescription>
-              Set commission percentage for {selectedVendors.length} selected vendor(s). Commission must be between 0 and 100.
+              Set a commission percentage that will apply to all vendors in the current list (after filters). Commission
+              must be between 0 and 100.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -650,7 +644,7 @@ export function AdminVendorsList() {
                 onChange={(e) => setCommissionValue(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Enter a value between 0 and 100. This will be applied to all selected vendors.
+                Enter a value between 0 and 100. This will be applied to all vendors currently visible in the list.
               </p>
             </div>
           </div>
