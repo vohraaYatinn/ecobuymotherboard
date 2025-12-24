@@ -31,7 +31,7 @@ ipconfig getifaddr en0
 If both frontend and backend are on the same machine, you can use:
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_API_URL=https://api.elecobuy.com
 ```
 
 ## Quick Fix Script

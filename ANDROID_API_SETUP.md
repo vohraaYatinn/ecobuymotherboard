@@ -16,7 +16,7 @@ The backend server (`backend/server.js`) is configured to:
 ### Starting the Backend Server
 
 The server will automatically bind to `0.0.0.0:5000`, making it accessible from:
-- Local: `http://localhost:5000`
+- Local: `https://api.elecobuy.com`
 - Network: `https://api.elecobuy.com`
 
 ```bash
@@ -30,7 +30,7 @@ You should see:
 ```
 🚀 Server is running on http://0.0.0.0:5000
 🌐 Network access: https://api.elecobuy.com
-📍 Local access: http://localhost:5000
+📍 Local access: https://api.elecobuy.com
 ```
 
 ## Frontend/Vendor App Configuration

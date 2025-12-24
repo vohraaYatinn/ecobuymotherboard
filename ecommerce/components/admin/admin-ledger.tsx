@@ -250,7 +250,7 @@ export function AdminLedger() {
     setSelectedVendor({ id: vendorId, name: vendorName })
     const record = payments[vendorId] || { paid: 0, notes: "" }
     setPaymentDraft({
-      paid: record.paid,
+      paid: 0, // Start with 0 for additional payment amount
       notes: record.notes || "",
       updatedAt: record.updatedAt,
     })
@@ -491,20 +491,34 @@ export function AdminLedger() {
           <DialogHeader>
             <DialogTitle>Vendor Ledger</DialogTitle>
             <DialogDescription>
-              Record payouts for {selectedVendor?.name || "vendor"} (adjust “Paid” to reflect total paid-to-date).
+              Record additional payout for {selectedVendor?.name || "vendor"}. The amount will be added to the existing total.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {selectedVendor && payments[selectedVendor.id]?.paid > 0 && (
+              <div className="p-3 bg-muted rounded-md">
+                <p className="text-sm text-muted-foreground">Currently Paid (Total)</p>
+                <p className="text-lg font-semibold">₹{(payments[selectedVendor.id].paid || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+            )}
             <div>
-              <Label htmlFor="paidAmount">Amount Paid (total to-date)</Label>
+              <Label htmlFor="paidAmount">Additional Payment Amount</Label>
               <Input
                 id="paidAmount"
                 type="number"
                 min="0"
                 step="0.01"
-                value={paymentDraft.paid}
-                onChange={(e) => setPaymentDraft({ ...paymentDraft, paid: Number(e.target.value) })}
+                placeholder="Enter additional amount to pay"
+                value={paymentDraft.paid || ""}
+                onChange={(e) => setPaymentDraft({ ...paymentDraft, paid: Number(e.target.value) || 0 })}
               />
+              <p className="text-xs text-muted-foreground mt-1">
+                {paymentDraft.paid > 0 && selectedVendor && (
+                  <>
+                    New total will be: ₹{((payments[selectedVendor.id]?.paid || 0) + paymentDraft.paid).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </>
+                )}
+              </p>
             </div>
             <div>
               <Label htmlFor="ledgerNotes">Notes</Label>

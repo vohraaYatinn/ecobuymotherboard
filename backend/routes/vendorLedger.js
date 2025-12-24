@@ -64,8 +64,15 @@ router.put("/admin/:vendorId", verifyAdminToken, async (req, res) => {
     const setting = await getOrCreateLedgerSettings()
     const payments = typeof setting.value === "object" && setting.value !== null ? setting.value : {}
 
+    // Get existing paid amount for this vendor
+    const existingPaid = payments[vendorId]?.paid || 0
+    const existingPaidNumber = Number(existingPaid) || 0
+    
+    // Add the new payment amount to the existing total
+    const newTotalPaid = existingPaidNumber + paidNumber
+
     payments[vendorId] = {
-      paid: paidNumber,
+      paid: newTotalPaid,
       notes: typeof notes === "string" ? notes : "",
       updatedAt: new Date().toISOString(),
       updatedBy: req.admin?.id,

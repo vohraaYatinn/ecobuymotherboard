@@ -60,6 +60,7 @@ export default function OrdersPage() {
   const router = useRouter()
   const { setSelectedOrderId } = useNavigation()
   const [orders, setOrders] = useState<Order[]>([])
+  const [allOrders, setAllOrders] = useState<Order[]>([]) // Store all orders for tab counts
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState("all")
@@ -74,7 +75,17 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchVendorProfile()
+    // Fetch all orders on initial load for tab counts
+    fetchAllOrders()
   }, [])
+
+  // Refresh all orders when orders are updated (e.g., after status change)
+  useEffect(() => {
+    if (orders.length > 0 && allOrders.length === 0) {
+      // If we have orders but no allOrders, fetch them
+      fetchAllOrders()
+    }
+  }, [orders.length])
 
   const fetchOrders = async () => {
     try {
@@ -117,6 +128,30 @@ export default function OrdersPage() {
       setError("Network error. Please try again.")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAllOrders = async () => {
+    try {
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendor/orders?page=1&limit=1000`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setAllOrders(data.data || [])
+      }
+    } catch (err) {
+      console.error("Error fetching all orders for counts:", err)
+      // Don't show error to user, just use current orders as fallback
     }
   }
 
@@ -190,6 +225,10 @@ export default function OrdersPage() {
 
       // Update order in list
       setOrders((prev) =>
+        prev.map((order) => (order._id === orderId ? { ...order, status: newStatus } : order))
+      )
+      // Also update in allOrders for accurate tab counts
+      setAllOrders((prev) =>
         prev.map((order) => (order._id === orderId ? { ...order, status: newStatus } : order))
       )
     } catch (err) {
@@ -266,11 +305,14 @@ export default function OrdersPage() {
     })
   }
 
+  // Use allOrders for tab counts to show accurate numbers regardless of active tab
+  // Fallback to orders if allOrders is not yet loaded (e.g., on "all" tab)
+  const ordersForCounts = allOrders.length > 0 ? allOrders : (activeTab === "all" ? orders : [])
   const tabs = [
-    { id: "all", label: "All", count: orders.length },
-    { id: "processing", label: "Processing", count: orders.filter((o) => o.status === "processing").length },
-    { id: "shipped", label: "Packed", count: orders.filter((o) => o.status === "shipped").length },
-    { id: "delivered", label: "Delivered", count: orders.filter((o) => o.status === "delivered").length },
+    { id: "all", label: "All", count: ordersForCounts.length },
+    { id: "processing", label: "Processing", count: ordersForCounts.filter((o) => o.status === "processing").length },
+    { id: "shipped", label: "Packed", count: ordersForCounts.filter((o) => o.status === "shipped").length },
+    { id: "delivered", label: "Delivered", count: ordersForCounts.filter((o) => o.status === "delivered").length },
   ]
 
   const filteredOrders = orders.filter((order) => {
@@ -282,13 +324,65 @@ export default function OrdersPage() {
     return matchesSearch
   })
 
-  const handleDownloadInvoice = (orderId: string) => {
-    const url = `${API_URL}/api/invoices/${orderId}/download`
-    window.open(url, "_blank")
+  const handleDownloadInvoice = async (orderId: string) => {
+    try {
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        alert("Please login to download invoice")
+        router.push("/login")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/invoices/${orderId}/download/vendor`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Failed to download invoice" }))
+        alert(errorData.message || "Failed to download invoice")
+        return
+      }
+
+      // Get the PDF blob
+      const blob = await response.blob()
+      
+      // Create a download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get("Content-Disposition")
+      let filename = `Invoice_${orderId}.pdf`
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
+        if (filenameMatch) {
+          filename = filenameMatch[1]
+        }
+      }
+      
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error("Error downloading invoice:", err)
+      alert("Failed to download invoice. Please try again.")
+    }
   }
 
   const handleDownloadStatement = () => {
-    if (filteredOrders.length === 0) return
+    // Use orders from current tab, not filteredOrders (which includes search filter)
+    const ordersToExport = orders.length > 0 ? orders : []
+    
+    if (ordersToExport.length === 0) {
+      alert("No orders to export")
+      return
+    }
+    
     setDownloadingStatement(true)
 
     try {
@@ -309,7 +403,7 @@ export default function OrdersPage() {
 
       const sanitize = (value: any) => `"${String(value ?? "").replace(/"/g, '""')}"`
 
-      const rows = filteredOrders.map((order) => {
+      const rows = ordersToExport.map((order) => {
         const payout = getPayoutBreakdown(order)
 
         return [
@@ -318,12 +412,12 @@ export default function OrdersPage() {
           order.paymentStatus || "pending",
           order.paymentMethod || "N/A",
           order.paymentTransactionId || "",
-          formatCurrency(order.total),
-          formatCurrency(payout.productTotal),
+          formatCurrency(order.total, false),
+          formatCurrency(payout.productTotal, false),
           `${payout.commissionRate}%`,
-          formatCurrency(payout.commissionAmount),
-          formatCurrency(payout.gatewayFees),
-          formatCurrency(payout.netPayout),
+          formatCurrency(payout.commissionAmount, false),
+          formatCurrency(payout.gatewayFees, false),
+          formatCurrency(payout.netPayout, false),
           formatDateLabel(order.deliveredAt || order.updatedAt || order.createdAt),
         ]
       })
@@ -337,7 +431,9 @@ export default function OrdersPage() {
       const link = document.createElement("a")
       link.href = url
       link.download = `vendor-statement-${new Date().toISOString().split("T")[0]}.csv`
+      document.body.appendChild(link)
       link.click()
+      document.body.removeChild(link)
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error("Error generating statement:", err)
@@ -460,7 +556,7 @@ export default function OrdersPage() {
               variant="outline"
               size="sm"
               onClick={handleDownloadStatement}
-              disabled={filteredOrders.length === 0 || downloadingStatement}
+              disabled={orders.length === 0 || downloadingStatement}
               className="flex items-center gap-2"
             >
               <FileDown className="h-4 w-4" />

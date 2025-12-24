@@ -166,7 +166,20 @@ export async function generateInvoicePDF(order) {
       })
 
       // Summary Section - Match invoice format exactly with proper spacing
+      // Check if we need a new page for the summary section
       const summaryY = currentY + 30
+      const pageHeight = 841.89 // A4 height in points
+      const bottomMargin = 60
+      const minSpaceNeeded = 120 // Minimum space needed for summary + footer
+      const estimatedSummaryEnd = summaryY + minSpaceNeeded
+      
+      // If summary would be cut off, add a new page
+      if (estimatedSummaryEnd > pageHeight - bottomMargin) {
+        doc.addPage()
+        currentY = 60 // Reset to top margin
+      }
+      
+      const finalSummaryY = currentY + 30
       const labelX = 410
       const amountX = 490
       const amountWidth = 65 // Width for amount column
@@ -174,12 +187,12 @@ export async function generateInvoicePDF(order) {
       doc.fontSize(9)
       
       // Subtotal
-      doc.text("Subtotal", labelX, summaryY)
+      doc.text("Subtotal", labelX, finalSummaryY)
       const subtotalText = `₹${order.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
-      doc.text(subtotalText, amountX, summaryY, { align: "right", width: amountWidth })
+      doc.text(subtotalText, amountX, finalSummaryY, { align: "right", width: amountWidth })
       
       // Shipping - Calculate proper position to align with other amounts
-      const shippingY = summaryY + 18
+      const shippingY = finalSummaryY + 18
       doc.text("Shipping", labelX, shippingY)
       const shippingAmount = `₹${order.shipping.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
       const shippingText = `${shippingAmount} via Shipping`
@@ -189,7 +202,7 @@ export async function generateInvoicePDF(order) {
       doc.text(shippingText, shippingTextX, shippingY)
       
       // GST - Match invoice format exactly (with proper spacing)
-      let gstY = summaryY + 36
+      let gstY = finalSummaryY + 36
       if (order.cgst > 0 && order.sgst > 0) {
         // Telangana - CGST + SGST
         doc.text("CGST", labelX, gstY)
@@ -215,9 +228,10 @@ export async function generateInvoicePDF(order) {
       doc.text(totalText, amountX, totalY, { align: "right", width: amountWidth })
 
       // Footer - Position dynamically based on content, ensure it's on the page
-      const footerY = Math.max(totalY + 40, 750)
+      // Ensure at least 40 points of space after total before footer
+      const footerY = Math.max(totalY + 40, pageHeight - bottomMargin - 20)
       // Ensure footer doesn't go beyond page (A4 height: 841.89, margin: 60, so max Y: 781.89)
-      const safeFooterY = Math.min(footerY, 781)
+      const safeFooterY = Math.min(footerY, pageHeight - bottomMargin - 10)
       // Ensure footer text stays on single line with wide width to prevent wrapping
       doc.font("Helvetica").fontSize(8).text("Thank you for your business!", 60, safeFooterY, { 
         align: "center", 

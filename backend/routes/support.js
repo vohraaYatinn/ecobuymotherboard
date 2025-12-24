@@ -1,6 +1,8 @@
 import express from "express"
 import nodemailer from "nodemailer"
 import SupportRequest from "../models/SupportRequest.js"
+import Notification from "../models/Notification.js"
+import Customer from "../models/Customer.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 
 const router = express.Router()
@@ -256,6 +258,17 @@ router.patch("/admin/:id/status", verifyAdminToken, async (req, res) => {
       })
     }
 
+    // Get the support request before update to check if status is changing
+    const existingRequest = await SupportRequest.findById(req.params.id)
+      .populate("customerId", "name email mobile")
+
+    if (!existingRequest) {
+      return res.status(404).json({
+        success: false,
+        message: "Support request not found",
+      })
+    }
+
     const updateData = { status }
     if (adminNotes) updateData.adminNotes = adminNotes
 
@@ -277,6 +290,48 @@ router.patch("/admin/:id/status", verifyAdminToken, async (req, res) => {
         success: false,
         message: "Support request not found",
       })
+    }
+
+    // Create notification for customer when status changes to resolved or closed
+    if ((status === "resolved" || status === "closed") && existingRequest.status !== status) {
+      try {
+        // Try to find customer by customerId first, then by email/phone
+        let customer = null
+        if (supportRequest.customerId) {
+          customer = supportRequest.customerId
+        } else if (supportRequest.email || supportRequest.phone) {
+          const query = {}
+          if (supportRequest.email) query.email = supportRequest.email.toLowerCase()
+          if (supportRequest.phone) query.mobile = supportRequest.phone
+          customer = await Customer.findOne(query)
+        }
+
+        if (customer) {
+          const statusLabel = status === "resolved" ? "resolved" : "closed"
+          const message = status === "resolved" 
+            ? `Your support request (Ticket #${supportRequest._id.toString().slice(-8)}) has been resolved. ${adminNotes ? `Admin notes: ${adminNotes}` : ""}`
+            : `Your support request (Ticket #${supportRequest._id.toString().slice(-8)}) has been closed. ${adminNotes ? `Admin notes: ${adminNotes}` : ""}`
+
+          await Notification.create({
+            userId: customer._id,
+            userType: "customer",
+            type: "support_request_" + statusLabel,
+            title: `Support Request ${status === "resolved" ? "Resolved" : "Closed"}`,
+            message: message,
+            metadata: {
+              supportRequestId: supportRequest._id,
+              ticketId: supportRequest._id.toString().slice(-8),
+            },
+          })
+
+          console.log(`✅ [SUPPORT] Notification created for customer ${customer._id} for ${statusLabel} support request`)
+        } else {
+          console.log(`⚠️  [SUPPORT] Could not find customer for support request ${supportRequest._id} - notification not sent`)
+        }
+      } catch (notifError) {
+        console.error("❌ [SUPPORT] Error creating notification:", notifError)
+        // Don't fail the request if notification fails
+      }
     }
 
     res.json({

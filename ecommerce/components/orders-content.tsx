@@ -192,10 +192,12 @@ export function OrdersContent() {
                   Reorder
                 </Button>
               )}
-              {order.status === "shipped" && (
-                <Button variant="outline" className="flex-1 h-9 sm:h-10 text-xs sm:text-sm bg-transparent touch-manipulation">
-                  Track Order
-                </Button>
+              {(order.status === "shipped" || order.status === "packed") && (
+                <Link href={`/dashboard/orders/${order._id}`} className="flex-1">
+                  <Button variant="outline" className="w-full h-9 sm:h-10 text-xs sm:text-sm bg-transparent touch-manipulation">
+                    Track Order
+                  </Button>
+                </Link>
               )}
             </div>
           </div>

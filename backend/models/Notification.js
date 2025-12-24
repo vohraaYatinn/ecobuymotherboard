@@ -27,6 +27,8 @@ const notificationSchema = new mongoose.Schema(
         "return_requested",
         "return_accepted",
         "return_denied",
+        "support_request_resolved",
+        "support_request_closed",
       ],
       required: true,
     },
