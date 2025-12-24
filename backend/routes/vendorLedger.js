@@ -80,6 +80,8 @@ router.put("/admin/:vendorId", verifyAdminToken, async (req, res) => {
 
     setting.value = payments
     setting.lastUpdatedBy = req.admin?.id
+    // Mark the value field as modified so Mongoose detects the nested object changes
+    setting.markModified('value')
     await setting.save()
 
     res.json({
