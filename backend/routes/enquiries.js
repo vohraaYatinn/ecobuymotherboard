@@ -4,6 +4,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import fs from "fs"
 import nodemailer from "nodemailer"
+import SupportRequest from "../models/SupportRequest.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -90,6 +91,34 @@ router.post("/submit", upload.single("image"), async (req, res) => {
 
     const adminEmail = process.env.ADMIN_EMAIL || "mahender@ekranfix.com"
 
+    // Create a linked support request so admins can see this in the Support Requests screen
+    let supportRequest
+    try {
+      const messageParts = [
+        productSearched ? `Product searched: ${productSearched}` : null,
+        note ? `Customer note: ${note}` : null,
+      ].filter(Boolean)
+
+      supportRequest = new SupportRequest({
+        name,
+        email,
+        phone,
+        category: "new_product_request",
+        message:
+          messageParts.join("\n\n") ||
+          "New product request submitted from the product search form.",
+        status: "pending",
+      })
+
+      await supportRequest.save()
+    } catch (dbError) {
+      console.error("❌ [ENQUIRY] Error creating support request:", dbError)
+      return res.status(500).json({
+        success: false,
+        message: "Error submitting enquiry. Please try again.",
+      })
+    }
+
     // Prepare email content
     const imageAttachment = req.file
       ? {
@@ -175,6 +204,7 @@ router.post("/submit", upload.single("image"), async (req, res) => {
       res.json({
         success: true,
         message: "Enquiry submitted successfully. We will contact you soon.",
+        ticketId: supportRequest?._id,
       })
     } catch (emailError) {
       console.error("❌ [ENQUIRY] Error sending email:", emailError)
@@ -184,6 +214,7 @@ router.post("/submit", upload.single("image"), async (req, res) => {
       res.json({
         success: true,
         message: "Enquiry submitted successfully. We will contact you soon.",
+        ticketId: supportRequest?._id,
         warning: "Email notification may not have been sent. Please check server logs.",
       })
     }

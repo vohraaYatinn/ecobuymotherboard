@@ -34,6 +34,8 @@ import settingsRoutes from "./routes/settings.js"
 import vendorLedgerRoutes from "./routes/vendorLedger.js"
 import { startOrderResetCron } from "./services/orderResetCron.js"
 import { startAdminReviewCron } from "./services/adminReviewCron.js"
+import { startDtdcStatusCron } from "./services/dtdcStatusCron.js"
+import { startRefundCron } from "./services/refundCron.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -48,13 +50,14 @@ const PORT = process.env.PORT || 5000
 connectDB()
 
 // Middleware - CORS configuration
-const BACKEND_URL = process.env.BACKEND_URL || "https://api.elecobuy.com"
+const BACKEND_URL = process.env.BACKEND_URL || "http://192.168.1.34:5000"
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "https://api.elecobuy.com",
+  "http://192.168.1.34:5000",
   "https://elecobuy.com",
   "https://www.elecobuy.com",
+  "http://192.168.1.34:3000",
   "http://127.0.0.1:5000",
   process.env.FRONTEND_URL,
   process.env.BACKEND_URL
@@ -100,7 +103,7 @@ if (process.env.NODE_ENV !== "production") {
       } else if (
         origin === "https://elecobuy.com" ||
         origin === "https://www.elecobuy.com" ||
-        origin === "https://api.elecobuy.com"
+        origin === "http://192.168.1.34:5000"
       ) {
         callback(null, true)
       } else {
@@ -166,5 +169,7 @@ app.listen(PORT, HOST, () => {
   // Start cron jobs
   startOrderResetCron()
   startAdminReviewCron()
+  startDtdcStatusCron()
+  startRefundCron()
 })
 

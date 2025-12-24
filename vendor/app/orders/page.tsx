@@ -54,7 +54,7 @@ interface Order {
 }
 
 const DEFAULT_COMMISSION_RATE = 20 // percent fallback if vendor commission is missing
-const PAYMENT_GATEWAY_RATE = 2 // percent of order total
+const PAYMENT_GATEWAY_RATE = 2 // percent of payout-before-gateway
 
 export default function OrdersPage() {
   const router = useRouter()
@@ -242,13 +242,15 @@ export default function OrdersPage() {
     const commissionRate = getCommissionRate()
     const productTotal = typeof order.subtotal === "number" ? order.subtotal : order.total
     const commissionAmount = Math.max(0, (commissionRate / 100) * productTotal)
-    const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * order.total)
-    const netPayout = Math.max(productTotal - commissionAmount - gatewayFees, 0)
+    const payoutBeforeGateway = Math.max(productTotal - commissionAmount, 0)
+    const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * payoutBeforeGateway)
+    const netPayout = Math.max(payoutBeforeGateway - gatewayFees, 0)
 
     return {
       commissionRate,
       productTotal,
       commissionAmount,
+      payoutBeforeGateway,
       gatewayFees,
       netPayout,
     }

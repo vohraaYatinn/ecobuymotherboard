@@ -25,7 +25,7 @@ const supportRequestSchema = new mongoose.Schema(
     category: {
       type: String,
       required: [true, "Category is required"],
-      enum: ["order", "product", "shipping", "payment", "return", "other"],
+      enum: ["order", "product", "shipping", "payment", "return", "new_product_request", "other"],
     },
     message: {
       type: String,
@@ -67,6 +67,7 @@ supportRequestSchema.index({ phone: 1 })
 const SupportRequest = mongoose.model("SupportRequest", supportRequestSchema)
 
 export default SupportRequest
+
 
 
 

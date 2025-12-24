@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 const RETURN_WINDOW_DAYS = 3
 
 interface Vendor {
@@ -161,7 +161,7 @@ export function AdminLedger() {
 
         const platformCommission = order.subtotal * 0.2
         const payoutBeforeGateway = order.subtotal * 0.8
-        const paymentGatewayCharges = order.total * 0.02
+        const paymentGatewayCharges = payoutBeforeGateway * 0.02
         const netPayout = payoutBeforeGateway - paymentGatewayCharges
 
         const vendorName = typeof order.vendorId === "object" && order.vendorId !== null ? order.vendorId.name : "Vendor"

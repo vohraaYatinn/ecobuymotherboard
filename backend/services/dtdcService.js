@@ -11,11 +11,13 @@ const DTDC_CONFIG = {
   staging: {
     authenticate: "http://dtdcstagingapi.dtdc.com/dtdc-tracking-api/dtdc-api/api/dtdc/authenticate",
     track: "http://dtdcstagingapi.dtdc.com/dtdc-tracking-api/dtdc-api/rest/XMLSchemaTrk/getDetails",
+    trackJson: "http://dtdcstagingapi.dtdc.com/dtdc-tracking-api/dtdc-api/rest/JSONCnTrk/getTrackDetails",
     serviceability: "http://dtdcstagingapi.dtdc.com/dtdc-tracking-api/dtdc-api/rest/pincode-serviceability",
   },
   production: {
     authenticate: "https://blktracksvc.dtdc.com/dtdc-api/api/dtdc/authenticate",
     track: "https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails",
+    trackJson: "https://blktracksvc.dtdc.com/dtdc-api/rest/JSONCnTrk/getTrackDetails",
     serviceability: "https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails", // placeholder for pincode service
     orderUpload: "https://dtdcapi.shipsy.io/api/customer/integration/consignment/softdata",
   },
@@ -488,6 +490,131 @@ export async function createShipmentForOrder(order, options = {}) {
     console.error(`❌ [DTDC-DEBUG] ========================================`)
     throw error
   }
+}
+
+/**
+ * Track consignment using JSON endpoint (newer API)
+ * Uses x-access-token header instead of authentication
+ */
+export async function trackConsignmentJson(awbNumber, includeAdditionalDetails = true) {
+  if (!awbNumber || typeof awbNumber !== "string") {
+    throw new Error("AWB number is required")
+  }
+
+  const cleanAWB = awbNumber.trim().toUpperCase()
+  if (!/^[A-Z0-9]{9,12}$/.test(cleanAWB)) {
+    throw new Error(
+      "Invalid AWB number format. Expected 9-12 alphanumeric characters (e.g., V01197967 or 7X109986044)"
+    )
+  }
+
+  const baseUrl =
+    DTDC_CONFIG.environment === "staging"
+      ? DTDC_CONFIG.staging.trackJson
+      : DTDC_CONFIG.production.trackJson
+
+  try {
+    const response = await axios.post(
+      baseUrl,
+      {
+        trkType: "cnno",
+        strcnno: cleanAWB,
+        addtnlDtl: includeAdditionalDetails ? "Y" : "N",
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+          "x-access-token": DTDC_CONFIG.trackingCredentials,
+        },
+        timeout: 15000,
+      }
+    )
+
+    if (response.status !== 200 || !response.data) {
+      throw new Error(`DTDC tracking failed with status ${response.status}`)
+    }
+
+    return transformTrackingData(response.data)
+  } catch (error) {
+    const status = error?.response?.status
+    const data = error?.response?.data
+    const detail = status ? `status ${status}` : error.message
+    const body = data ? ` | body: ${JSON.stringify(data).slice(0, 500)}` : ""
+    throw new Error(`DTDC JSON tracking request failed (${detail})${body}`)
+  }
+}
+
+/**
+ * Map DTDC status text to our dtdcStatus enum values
+ */
+export function mapDtdcStatusToEnum(statusText) {
+  if (!statusText || typeof statusText !== "string") {
+    return null
+  }
+
+  const normalized = statusText.toLowerCase().trim()
+
+  // Pickup related
+  if (
+    normalized.includes("picked up") ||
+    normalized.includes("pickup completed") ||
+    normalized.includes("pickup done")
+  ) {
+    return "booked" // For returns, "picked up" means the return shipment has been collected
+  }
+
+  if (
+    normalized.includes("pickup scheduled") ||
+    normalized.includes("pickup awaited") ||
+    normalized.includes("softdata upload")
+  ) {
+    return "booked"
+  }
+
+  if (normalized.includes("not picked") || normalized.includes("pickup reassigned")) {
+    return "pending"
+  }
+
+  // In transit
+  if (
+    normalized.includes("in transit") ||
+    normalized.includes("dispatched") ||
+    normalized.includes("in transit to") ||
+    normalized.includes("arrived at")
+  ) {
+    return "in_transit"
+  }
+
+  // Out for delivery
+  if (
+    normalized.includes("out for delivery") ||
+    normalized.includes("out for") ||
+    normalized.includes("on the way")
+  ) {
+    return "out_for_delivery"
+  }
+
+  // Delivered
+  if (normalized.includes("delivered") || normalized.includes("delivery completed")) {
+    return "delivered"
+  }
+
+  // RTO (Return to Origin)
+  if (normalized.includes("rto") || normalized.includes("return to origin")) {
+    return "rto"
+  }
+
+  // Failed/Cancelled
+  if (
+    normalized.includes("failed") ||
+    normalized.includes("cancelled") ||
+    normalized.includes("canceled")
+  ) {
+    return "failed"
+  }
+
+  // Default to pending if status is unclear
+  return "pending"
 }
 
 export { DTDC_CONFIG }

@@ -69,6 +69,7 @@ router.post("/submit", async (req, res) => {
       shipping: "Shipping & Delivery",
       payment: "Payment Issues",
       return: "Returns & Refunds",
+      new_product_request: "New Product Request",
       other: "Other",
     }
 

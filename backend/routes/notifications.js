@@ -141,9 +141,13 @@ router.get("/admin", verifyAdminToken, async (req, res) => {
   try {
     const { page = 1, limit = 20, unreadOnly = false } = req.query
 
+    // Only show return-related and cancelled order notifications to admin
+    const allowedTypes = ["order_cancelled", "return_requested", "return_accepted", "return_denied"]
+
     const filter = {
       userId: req.admin.id,
       userType: "admin",
+      type: { $in: allowedTypes },
     }
 
     if (unreadOnly === "true") {
@@ -162,11 +166,13 @@ router.get("/admin", verifyAdminToken, async (req, res) => {
       .lean()
 
     const total = await Notification.countDocuments(filter)
-    const unreadCount = await Notification.countDocuments({
+    const unreadCountFilter = {
       userId: req.admin.id,
       userType: "admin",
       isRead: false,
-    })
+      type: { $in: allowedTypes },
+    }
+    const unreadCount = await Notification.countDocuments(unreadCountFilter)
 
     res.status(200).json({
       success: true,

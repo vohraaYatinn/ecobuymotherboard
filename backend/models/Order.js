@@ -60,7 +60,7 @@ const orderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "admin_review_required", "return_requested", "return_accepted", "return_rejected"],
+      enum: ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "admin_review_required", "return_requested", "return_accepted", "return_rejected", "return_picked_up"],
       default: "pending",
     },
     paymentMethod: {
@@ -72,6 +72,15 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "paid", "failed", "refunded"],
       default: "pending",
+    },
+    refundStatus: {
+      type: String,
+      enum: ["pending", "processing", "completed", "failed", null],
+      default: null,
+    },
+    refundTransactionId: {
+      type: String,
+      default: null,
     },
     paymentGateway: {
       type: String,
@@ -109,6 +118,11 @@ const orderSchema = new mongoose.Schema(
     // DTDC Tracking fields
     awbNumber: {
       type: String,
+      default: null,
+    },
+    dtdcStatus: {
+      type: String,
+      enum: ["pending", "booked", "in_transit", "out_for_delivery", "delivered", "rto", "failed", "cancelled"],
       default: null,
     },
     dtdcTrackingData: {

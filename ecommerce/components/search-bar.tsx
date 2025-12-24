@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Search, Loader2, MessageSquarePlus } from "lucide-react"
 import { EnquiryModal } from "@/components/enquiry-modal"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface SearchSuggestion {
   _id: string

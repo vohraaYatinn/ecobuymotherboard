@@ -12,7 +12,7 @@ const router = express.Router()
 
 const RETURN_WINDOW_DAYS = 3
 const PLATFORM_COMMISSION_RATE = 0.2 // 20%
-const GATEWAY_RATE = 0.02 // 2% of order total
+const GATEWAY_RATE = 0.02 // 2% of payout before gateway
 const LEDGER_SETTINGS_KEY = "vendor_ledger_payments"
 
 const getVendorLedgerPayments = async () => {
@@ -298,11 +298,10 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
 
     const calculateNetPayout = (order) => {
       // Payout Formula: (Product Cost × 0.80) - Payment Gateway Charges
-      // Product Cost = subtotal, Gateway Charges = 2% of order total
+      // Product Cost = subtotal, Gateway Charges = 2% of payout-before-gateway
       const productCost = typeof order.subtotal === "number" ? order.subtotal : order.total || 0
-      const orderTotal = order.total || productCost
       const payoutBeforeGateway = productCost * 0.80
-      const paymentGatewayCharges = orderTotal * GATEWAY_RATE
+      const paymentGatewayCharges = payoutBeforeGateway * GATEWAY_RATE
       return Math.max(payoutBeforeGateway - paymentGatewayCharges, 0)
     }
 

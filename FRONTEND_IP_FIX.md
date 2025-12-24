@@ -10,7 +10,7 @@ Create a `.env.local` file in the `ecommerce` directory:
 
 ```bash
 cd ecommerce
-echo "NEXT_PUBLIC_API_URL=https://api.elecobuy.com" > .env.local
+echo "NEXT_PUBLIC_API_URL=http://192.168.1.34:5000" > .env.local
 ```
 
 Then restart your Next.js dev server.
@@ -52,7 +52,7 @@ echo "Updated API URL to: http://${CURRENT_IP}:5000"
 After updating, verify the connection:
 
 ```bash
-curl https://api.elecobuy.com/api/health
+curl http://192.168.1.34:5000/api/health
 ```
 
 Should return: `{"status":"OK","message":"Server is running"}`
@@ -63,6 +63,8 @@ Should return: `{"status":"OK","message":"Server is running"}`
 - Restart the Next.js dev server after changing `.env.local`
 - The IP address may change when you reconnect to WiFi or change networks
 - For production, use a fixed domain name or IP address
+
+
 
 
 

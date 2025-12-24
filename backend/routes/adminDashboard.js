@@ -51,13 +51,14 @@ const buildFinancialReport = (orders, vendorMap, gatewayRate, startDate) => {
     const commissionBase = order.subtotal ?? order.total ?? 0
     const commissionRate = vendor?.commission || 0
     const commissionForOrder = Math.round((commissionBase * commissionRate) / 100)
+    const payoutBeforeGateway = Math.max(commissionBase - commissionForOrder, 0)
 
     grossCollections += total
     gstCollected += gst
     commissionEarned += commissionForOrder
 
     if (order.paymentMethod === "online" || order.paymentMethod === "wallet") {
-      gatewayCharges += Math.round(total * gatewayRate)
+      gatewayCharges += Math.round(payoutBeforeGateway * gatewayRate)
     }
 
     if (order.returnRequest && order.returnRequest.type) {
@@ -145,10 +146,18 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
       bucket.amount += order.total || 0
       bucket.count += 1
     })
-    const gatewayRate = 0.018 // 1.8% assumed blended rate for online + wallet
-    const estimatedGatewayCharges = Math.round(
-      (paymentMethodBreakdown.online.amount + paymentMethodBreakdown.wallet.amount) * gatewayRate
-    )
+    const gatewayRate = 0.018 // 1.8% applied on payout-before-gateway for online + wallet
+    const estimatedGatewayCharges = settledOrders.reduce((sum, order) => {
+      if (order.paymentMethod !== "online" && order.paymentMethod !== "wallet") return sum
+
+      const vendor = order.vendorId ? vendorMap.get(order.vendorId.toString()) : null
+      const commissionBase = order.subtotal ?? order.total ?? 0
+      const commissionRate = vendor?.commission || 0
+      const commissionForOrder = Math.round((commissionBase * commissionRate) / 100)
+      const payoutBeforeGateway = Math.max(commissionBase - commissionForOrder, 0)
+
+      return sum + Math.round(payoutBeforeGateway * gatewayRate)
+    }, 0)
 
     // Commission + seller payout liability
     let commissionEarned = 0
@@ -234,6 +243,27 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
         requestedAt: order.returnRequest?.requestedAt || order.createdAt,
       }))
 
+    // Fetch cancelled orders
+    const cancelledOrders = await Order.find({ status: "cancelled" })
+      .populate("customerId", "name mobile")
+      .sort({ updatedAt: -1 })
+      .limit(5)
+      .select("orderNumber customerId total status paymentStatus createdAt updatedAt paymentMeta")
+      .lean()
+
+    const recentCancelled = cancelledOrders.map((order) => ({
+      _id: order._id,
+      orderNumber: order.orderNumber,
+      total: order.total,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      cancelledAt: order.paymentMeta?.cancelledAt || order.updatedAt || order.createdAt,
+      customer: order.customerId ? {
+        name: order.customerId.name,
+        mobile: order.customerId.mobile,
+      } : null,
+    }))
+
     // Date ranges for reports
     const now = new Date()
     const startToday = new Date(now)
@@ -287,6 +317,10 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
           returns: {
             summary: returnSummary,
             recent: recentReturns,
+          },
+          cancelled: {
+            count: orderStatus.cancelled || 0,
+            recent: recentCancelled,
           },
           reports,
         },

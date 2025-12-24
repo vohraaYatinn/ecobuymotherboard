@@ -21,7 +21,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 type PaymentBreakdown = {
   amount: number
@@ -56,6 +56,24 @@ interface ReturnSummary {
   completed: number
   refunded: number
   inReview: number
+}
+
+interface CancelledEntry {
+  _id: string
+  orderNumber: string
+  total: number
+  status: string
+  paymentStatus?: string
+  cancelledAt?: string
+  customer?: {
+    name?: string
+    mobile?: string
+  }
+}
+
+interface CancelledData {
+  count: number
+  recent: CancelledEntry[]
 }
 
 interface ReportMetrics {
@@ -100,6 +118,7 @@ interface Financials {
     summary: ReturnSummary
     recent: ReturnEntry[]
   }
+  cancelled?: CancelledData
   reports: {
     daily: ReportMetrics
     weekly: ReportMetrics
@@ -456,6 +475,47 @@ export function AdminDashboard() {
                   ) : (
                     <p className="text-sm text-muted-foreground text-center py-4">No recent returns</p>
                   )}
+                </div>
+
+                {/* Cancelled Orders Section */}
+                <div className="pt-4 border-t">
+                  <div className="flex items-center justify-between mb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Package className="h-4 w-4" />
+                      Cancelled Orders
+                    </CardTitle>
+                    <Badge variant="outline">Total: {financials.cancelled?.count || 0}</Badge>
+                  </div>
+                  <div className="space-y-3">
+                    {financials.cancelled?.recent?.length ? (
+                      financials.cancelled.recent.map((order) => (
+                        <div key={order._id} className="rounded-lg border p-3 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <Link href={`/admin/orders/${order._id}`} className="font-semibold text-primary hover:underline">
+                              {order.orderNumber}
+                            </Link>
+                            <span className="text-sm font-medium">{formatCurrency(order.total || 0)}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <Badge variant="secondary">cancelled</Badge>
+                            {order.paymentStatus && (
+                              <Badge variant="outline">Payment: {order.paymentStatus}</Badge>
+                            )}
+                            {order.customer && (
+                              <span>
+                                {order.customer.name || "N/A"} • {order.customer.mobile || "N/A"}
+                              </span>
+                            )}
+                            <span>
+                              Cancelled {formatTimeAgo(order.cancelledAt || new Date().toISOString())}
+                            </span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No recent cancelled orders</p>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

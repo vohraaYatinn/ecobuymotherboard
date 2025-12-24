@@ -10,7 +10,9 @@
     "seed": "node scripts/seedAdmin.js",
     "seed:products": "node scripts/seedProducts.js",
     "fix:cart-index": "node scripts/fixCartIndex.js",
-    "check:firebase": "node scripts/check-firebase-config.js"
+    "check:firebase": "node scripts/check-firebase-config.js",
+    "test:dtdc-status": "node scripts/testDtdcStatusCron.js",
+    "test:refund": "node scripts/testRefundCron.js"
   },
   "keywords": [
     "ecommerce",

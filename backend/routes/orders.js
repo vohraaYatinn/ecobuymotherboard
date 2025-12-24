@@ -809,16 +809,27 @@ router.post("/:id/cancel", authenticate, async (req, res) => {
           amount: refundResult.amount,
         })
 
-        // Update payment status to refunded
+        // Update payment status and refund tracking
         order.paymentStatus = "refunded"
+        order.refundStatus = "completed"
+        order.refundTransactionId = refundResult.id
         order.paymentMeta = {
           ...(order.paymentMeta || {}),
           refund: refundResult,
           refundedAt: new Date().toISOString(),
+          refundProcessedBy: "customer_cancellation",
         }
       } catch (refundErr) {
         refundError = refundErr
         console.error(`❌ [ORDER CANCEL] Refund failed for order ${order.orderNumber}:`, refundErr)
+        // Mark refund as failed
+        order.refundStatus = "failed"
+        order.paymentMeta = {
+          ...(order.paymentMeta || {}),
+          refundError: refundErr.message,
+          refundAttemptedAt: new Date().toISOString(),
+          refundProcessedBy: "customer_cancellation",
+        }
         // Continue with cancellation even if refund fails - admin can handle manually
         // But we should still mark the order as cancelled
       }

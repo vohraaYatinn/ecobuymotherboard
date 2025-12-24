@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface OrderItem {
   productId?: {
@@ -95,9 +95,13 @@ interface Order {
   status: string
   paymentMethod: string
   paymentStatus: string
+  refundStatus?: string | null
+  refundTransactionId?: string | null
   total: number
   subtotal: number
   shipping: number
+  awbNumber?: string | null
+  dtdcStatus?: string | null
   returnRequest?: ReturnRequest
   createdAt: string
 }
@@ -116,6 +120,14 @@ const getStatusColor = (status: string) => {
       return "bg-green-100 text-green-800 border-green-200"
     case "cancelled":
       return "bg-red-100 text-red-800 border-red-200"
+    case "return_requested":
+      return "bg-orange-100 text-orange-800 border-orange-200"
+    case "return_accepted":
+      return "bg-green-100 text-green-800 border-green-200"
+    case "return_rejected":
+      return "bg-red-100 text-red-800 border-red-200"
+    case "return_picked_up":
+      return "bg-blue-100 text-blue-800 border-blue-200"
     default:
       return "bg-gray-100 text-gray-800 border-gray-200"
   }
@@ -126,6 +138,59 @@ const formatStatus = (status: string) => {
     .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ")
+}
+
+const getDtdcStatusColor = (status: string | null | undefined) => {
+  if (!status) return "bg-gray-100 text-gray-800 border-gray-200"
+  switch (status.toLowerCase()) {
+    case "pending":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200"
+    case "booked":
+      return "bg-blue-100 text-blue-800 border-blue-200"
+    case "in_transit":
+      return "bg-purple-100 text-purple-800 border-purple-200"
+    case "out_for_delivery":
+      return "bg-orange-100 text-orange-800 border-orange-200"
+    case "delivered":
+      return "bg-green-100 text-green-800 border-green-200"
+    case "rto":
+      return "bg-red-100 text-red-800 border-red-200"
+    case "failed":
+      return "bg-red-100 text-red-800 border-red-200"
+    case "cancelled":
+      return "bg-gray-100 text-gray-800 border-gray-200"
+    default:
+      return "bg-gray-100 text-gray-800 border-gray-200"
+  }
+}
+
+const formatDtdcStatus = (status: string | null | undefined) => {
+  if (!status) return "Not Set"
+  return status
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
+const getRefundStatusColor = (status: string | null | undefined) => {
+  if (!status) return "bg-gray-100 text-gray-800 border-gray-200"
+  switch (status.toLowerCase()) {
+    case "pending":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200"
+    case "processing":
+      return "bg-blue-100 text-blue-800 border-blue-200"
+    case "completed":
+      return "bg-green-100 text-green-800 border-green-200"
+    case "failed":
+      return "bg-red-100 text-red-800 border-red-200"
+    default:
+      return "bg-gray-100 text-gray-800 border-gray-200"
+  }
+}
+
+const formatRefundStatus = (status: string | null | undefined) => {
+  if (!status) return "N/A"
+  return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
 export function AdminOrdersList() {
@@ -153,8 +218,6 @@ export function AdminOrdersList() {
   const [selectedVendorId, setSelectedVendorId] = useState<string>("")
   const [updateForm, setUpdateForm] = useState({
     status: "",
-    paymentStatus: "",
-    paymentMethod: "",
   })
   const [exporting, setExporting] = useState(false)
   const [selectedOrders, setSelectedOrders] = useState<string[]>([])
@@ -265,7 +328,10 @@ export function AdminOrdersList() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(updateForm),
+        // Only allow updating fields that are meant to be editable from this dialog
+        body: JSON.stringify({
+          status: updateForm.status,
+        }),
       })
 
       const data = await response.json()
@@ -273,7 +339,7 @@ export function AdminOrdersList() {
       if (data.success) {
         setUpdateDialogOpen(false)
         setSelectedOrder(null)
-        setUpdateForm({ status: "", paymentStatus: "", paymentMethod: "" })
+        setUpdateForm({ status: "" })
         fetchOrders()
       } else {
         alert(data.message || "Failed to update order")
@@ -515,8 +581,6 @@ export function AdminOrdersList() {
     setSelectedOrder(order)
     setUpdateForm({
       status: order.status,
-      paymentStatus: order.paymentStatus,
-      paymentMethod: order.paymentMethod,
     })
     setUpdateDialogOpen(true)
   }
@@ -602,6 +666,10 @@ export function AdminOrdersList() {
         "Payment Method",
         "Payment Status",
         "Order Status",
+        "AWB Number",
+        "DTDC Status",
+        "Refund Status",
+        "Refund Transaction ID",
         "Shipping Address",
         "City",
         "State",
@@ -641,6 +709,10 @@ export function AdminOrdersList() {
           order.paymentMethod.toUpperCase(),
           formatStatus(order.paymentStatus),
           formatStatus(order.status),
+          order.awbNumber || "",
+          formatDtdcStatus(order.dtdcStatus),
+          formatRefundStatus(order.refundStatus),
+          order.refundTransactionId || "",
           address ? `${address.address1 || ""}` : "",
           address?.city || "",
           address?.state || "",
@@ -868,6 +940,8 @@ export function AdminOrdersList() {
                       <TableHead className="font-semibold">Items</TableHead>
                       <TableHead className="font-semibold">Payment</TableHead>
                       <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold">DTDC Status</TableHead>
+                      <TableHead className="font-semibold">Refund Status</TableHead>
                       <TableHead className="font-semibold">Total</TableHead>
                       <TableHead className="font-semibold">Date</TableHead>
                       <TableHead className="font-semibold text-right">Actions</TableHead>
@@ -988,6 +1062,34 @@ export function AdminOrdersList() {
                                 </Badge>
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell>
+                            {order.awbNumber ? (
+                              <div className="space-y-1">
+                                <Badge className={getDtdcStatusColor(order.dtdcStatus)}>
+                                  {formatDtdcStatus(order.dtdcStatus)}
+                                </Badge>
+                                <p className="text-xs text-muted-foreground mt-1">AWB: {order.awbNumber}</p>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {order.refundStatus ? (
+                              <div className="space-y-1">
+                                <Badge className={getRefundStatusColor(order.refundStatus)}>
+                                  {formatRefundStatus(order.refundStatus)}
+                                </Badge>
+                                {order.refundTransactionId && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    ID: {order.refundTransactionId.slice(0, 12)}...
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
                           </TableCell>
                           <TableCell className="font-semibold">₹{order.total.toLocaleString()}</TableCell>
                           <TableCell className="text-sm text-muted-foreground">
@@ -1122,6 +1224,32 @@ export function AdminOrdersList() {
                             <span className="text-muted-foreground">Total:</span>
                             <p className="font-semibold text-green-600">₹{order.total.toLocaleString()}</p>
                           </div>
+                          {order.awbNumber && (
+                            <div>
+                              <span className="text-muted-foreground">DTDC Status:</span>
+                              <div className="mt-1 space-y-1">
+                                <Badge className={getDtdcStatusColor(order.dtdcStatus)}>
+                                  {formatDtdcStatus(order.dtdcStatus)}
+                                </Badge>
+                                <p className="text-xs text-muted-foreground mt-1">AWB: {order.awbNumber}</p>
+                              </div>
+                            </div>
+                          )}
+                          {order.refundStatus && (
+                            <div>
+                              <span className="text-muted-foreground">Refund Status:</span>
+                              <div className="mt-1 space-y-1">
+                                <Badge className={getRefundStatusColor(order.refundStatus)}>
+                                  {formatRefundStatus(order.refundStatus)}
+                                </Badge>
+                                {order.refundTransactionId && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    ID: {order.refundTransactionId.slice(0, 12)}...
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
                           <div>
                             <span className="text-muted-foreground">Status:</span>
                             <div className="mt-1 space-y-1">
@@ -1256,41 +1384,26 @@ export function AdminOrdersList() {
                     <SelectItem value="shipped">Shipped</SelectItem>
                     <SelectItem value="delivered">Delivered</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="return_requested">Return Requested</SelectItem>
+                    <SelectItem value="return_accepted">Return Accepted</SelectItem>
+                    <SelectItem value="return_rejected">Return Rejected</SelectItem>
+                    <SelectItem value="return_picked_up">Return Picked Up</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label htmlFor="paymentStatus">Payment Status</Label>
-                <Select
-                  value={updateForm.paymentStatus}
-                  onValueChange={(value) => setUpdateForm({ ...updateForm, paymentStatus: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="paid">Paid</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                    <SelectItem value="refunded">Refunded</SelectItem>
-                  </SelectContent>
-                </Select>
+                <p className="font-semibold mt-1">{formatStatus(selectedOrder.paymentStatus)}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Payment status is updated automatically and cannot be changed here.
+                </p>
               </div>
               <div>
                 <Label htmlFor="paymentMethod">Payment Method</Label>
-                <Select
-                  value={updateForm.paymentMethod}
-                  onValueChange={(value) => setUpdateForm({ ...updateForm, paymentMethod: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cod">COD</SelectItem>
-                    <SelectItem value="online">Online</SelectItem>
-                    <SelectItem value="wallet">Wallet</SelectItem>
-                  </SelectContent>
-                </Select>
+                <p className="font-semibold mt-1">{selectedOrder.paymentMethod.toUpperCase()}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Payment method is set when the order is created and cannot be changed here.
+                </p>
               </div>
               <div className="flex gap-2 pt-4">
                 <Button

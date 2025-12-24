@@ -5,7 +5,6 @@ import Customer from "../models/Customer.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import { verifyAdminToken } from "../middleware/auth.js"
-import { createRazorpayRefund } from "../services/razorpayService.js"
 import { createShipmentForOrder } from "../services/dtdcService.js"
 import Vendor from "../models/Vendor.js"
 
@@ -226,7 +225,7 @@ router.put("/:id/status", verifyAdminToken, async (req, res) => {
       })
     }
 
-    const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]
+    const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "return_requested", "return_accepted", "return_rejected", "return_picked_up"]
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -340,7 +339,7 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
     }
 
     if (status) {
-      const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]
+      const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "return_requested", "return_accepted", "return_rejected", "return_picked_up"]
       if (validStatuses.includes(status)) {
         order.status = status
       }
@@ -764,57 +763,11 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
     if (adminNotes) {
       order.returnRequest.adminNotes = adminNotes.trim()
     }
+    // Set refund status to pending - will be processed by cron job when order reaches return_picked_up status
     order.returnRequest.refundStatus = "pending"
+    // Set order-level refundStatus to pending for cron job to pick up
+    order.refundStatus = "pending"
     order.status = "return_accepted"
-
-    // Process refund if payment was made online
-    let refundResult = null
-    let refundError = null
-
-    if (order.paymentMethod === "online" && order.paymentStatus === "paid" && order.paymentTransactionId) {
-      try {
-        const paymentId = order.paymentMeta?.razorpayPaymentId || order.paymentTransactionId
-        const amountInPaise = Math.round(order.total * 100)
-
-        console.log(`🔄 [RETURN ACCEPT] Initiating refund for order ${order.orderNumber}`, {
-          paymentId,
-          amount: order.total,
-          amountInPaise,
-        })
-
-        refundResult = await createRazorpayRefund({
-          paymentId,
-          amountInPaise,
-          notes: {
-            orderId: order._id.toString(),
-            orderNumber: order.orderNumber,
-            reason: "return_accepted_by_admin",
-            acceptedAt: new Date().toISOString(),
-          },
-        })
-
-        console.log(`✅ [RETURN ACCEPT] Refund successful for order ${order.orderNumber}`, {
-          refundId: refundResult.id,
-          amount: refundResult.amount,
-        })
-
-        order.returnRequest.refundStatus = "completed"
-        order.returnRequest.refundTransactionId = refundResult.id
-        order.paymentStatus = "refunded"
-        order.paymentMeta = {
-          ...(order.paymentMeta || {}),
-          returnRefund: refundResult,
-          refundedAt: new Date().toISOString(),
-        }
-      } catch (refundErr) {
-        refundError = refundErr
-        console.error(`❌ [RETURN ACCEPT] Refund failed for order ${order.orderNumber}:`, refundErr)
-        order.returnRequest.refundStatus = "failed"
-      }
-    } else if (order.paymentMethod === "cod") {
-      // For COD, refund is not applicable but we mark it as completed
-      order.returnRequest.refundStatus = "completed"
-    }
 
     // Attempt to create DTDC pickup/shipment for the return (customer -> vendor)
     let shipmentResult = null
@@ -890,7 +843,7 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
       console.error(`❌ [RETURN ACCEPT] DTDC pickup creation failed for order ${order.orderNumber}:`, shipErr)
     }
 
-    // Persist changes (statuses + refund + shipment info if any)
+    // Persist changes (statuses + shipment info if any)
     await order.save()
 
     // Create notification for customer
@@ -900,7 +853,7 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
         userType: "customer",
         type: "return_accepted",
         title: "Return Request Accepted",
-        message: `Your return request for order ${order.orderNumber} has been accepted.${refundResult ? " Refund will be processed shortly." : order.paymentMethod === "cod" ? "" : refundError ? " Please contact support for refund." : ""}`,
+        message: `Your return request for order ${order.orderNumber} has been accepted. Refund will be processed automatically once the return is picked up.`,
         orderId: order._id,
         orderNumber: order.orderNumber,
         customerId: order.customerId._id,
@@ -911,23 +864,13 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: refundError
-        ? "Return request accepted. Refund failed - please process manually."
-          : shipmentError
-          ? "Return accepted. Pickup creation failed - please schedule manually."
-          : "Return request accepted successfully",
+      message: shipmentError
+        ? "Return accepted. Pickup creation failed - please schedule manually."
+        : "Return request accepted successfully. Refund will be processed automatically once the return is picked up.",
       data: {
         orderId: order._id,
         orderNumber: order.orderNumber,
         returnRequest: order.returnRequest,
-        refund: refundResult
-          ? {
-              id: refundResult.id,
-              amount: refundResult.amount / 100,
-              status: refundResult.status,
-            }
-          : null,
-        refundError: refundError ? refundError.message : null,
         dtdc: shipmentResult
           ? {
               awbNumber: shipmentResult.awbNumber,

@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.34:5000"
 
 interface OrderItem {
   name: string
@@ -92,7 +92,10 @@ interface Order {
   status: string
   paymentMethod: string
   paymentStatus: string
+  refundStatus?: "pending" | "processing" | "completed" | "failed" | null
+  refundTransactionId?: string | null
   awbNumber?: string
+  dtdcStatus?: string | null
   returnRequest?: ReturnRequest
   createdAt: string
   updatedAt: string
@@ -457,6 +460,59 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
     })
   }
 
+  const getDtdcStatusColor = (status: string | null | undefined) => {
+    if (!status) return "bg-gray-100 text-gray-800 border-gray-200"
+    switch (status.toLowerCase()) {
+      case "pending":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+      case "booked":
+        return "bg-blue-100 text-blue-800 border-blue-200"
+      case "in_transit":
+        return "bg-purple-100 text-purple-800 border-purple-200"
+      case "out_for_delivery":
+        return "bg-orange-100 text-orange-800 border-orange-200"
+      case "delivered":
+        return "bg-green-100 text-green-800 border-green-200"
+      case "rto":
+        return "bg-red-100 text-red-800 border-red-200"
+      case "failed":
+        return "bg-red-100 text-red-800 border-red-200"
+      case "cancelled":
+        return "bg-gray-100 text-gray-800 border-gray-200"
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200"
+    }
+  }
+
+  const formatDtdcStatus = (status: string | null | undefined) => {
+    if (!status) return "Not Set"
+    return status
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  }
+
+  const getRefundStatusColor = (status: string | null | undefined) => {
+    if (!status) return "bg-gray-100 text-gray-800 border-gray-200"
+    switch (status.toLowerCase()) {
+      case "pending":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+      case "processing":
+        return "bg-blue-100 text-blue-800 border-blue-200"
+      case "completed":
+        return "bg-green-100 text-green-800 border-green-200"
+      case "failed":
+        return "bg-red-100 text-red-800 border-red-200"
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200"
+    }
+  }
+
+  const formatRefundStatus = (status: string | null | undefined) => {
+    if (!status) return "N/A"
+    return status.charAt(0).toUpperCase() + status.slice(1)
+  }
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending":
@@ -477,6 +533,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
         return "bg-green-100 text-green-800"
       case "return_rejected":
         return "bg-red-100 text-red-800"
+      case "return_picked_up":
+        return "bg-blue-100 text-blue-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
@@ -608,7 +666,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const shippingIgst = !isIntraState ? order.shipping * 0.18 : 0
   const platformCommission = order.subtotal * 0.2
   const payoutBeforeGateway = order.subtotal * 0.8
-  const paymentGatewayCharges = order.total * 0.02
+  const paymentGatewayCharges = payoutBeforeGateway * 0.02
   const netVendorPayout = payoutBeforeGateway - paymentGatewayCharges
 
   const isReturnRequested = order.status === "return_requested" && order.returnRequest && order.returnRequest.type === "pending"
@@ -795,9 +853,16 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
             </p>
           </div>
         </div>
-        <Badge className={`${getStatusColor(order.status)} w-fit capitalize`}>
-          {order.status.replace(/_/g, " ")}
-        </Badge>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge className={`${getStatusColor(order.status)} w-fit capitalize`}>
+            {order.status.replace(/_/g, " ")}
+          </Badge>
+          {order.awbNumber && order.dtdcStatus && (
+            <Badge className={getDtdcStatusColor(order.dtdcStatus)}>
+              DTDC: {formatDtdcStatus(order.dtdcStatus)}
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Order Information */}
@@ -907,6 +972,21 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                 {order.paymentStatus}
               </Badge>
             </div>
+            {order.refundStatus && (
+              <div>
+                <Label>Refund Status</Label>
+                <div className="mt-1.5 space-y-1">
+                  <Badge className={getRefundStatusColor(order.refundStatus)}>
+                    {formatRefundStatus(order.refundStatus)}
+                  </Badge>
+                  {order.refundTransactionId && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Transaction ID: {order.refundTransactionId}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="border-t pt-4 space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
@@ -967,7 +1047,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
               <span>₹{payoutBeforeGateway.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Payment Gateway Charges (~2% of order total)</span>
+              <span className="text-muted-foreground">Payment Gateway Charges (~2% of payout before gateway)</span>
               <span>- ₹{paymentGatewayCharges.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between font-bold text-base pt-2 border-t">
@@ -1023,6 +1103,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   <SelectItem value="return_requested">Return Requested</SelectItem>
                   <SelectItem value="return_accepted">Return Accepted</SelectItem>
                   <SelectItem value="return_rejected">Return Rejected</SelectItem>
+                  <SelectItem value="return_picked_up">Return Picked Up</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1054,6 +1135,14 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   <p className="text-xs text-muted-foreground">
                     Current: {order.awbNumber}
                   </p>
+                  {order.dtdcStatus && (
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs">DTDC Status:</Label>
+                      <Badge className={getDtdcStatusColor(order.dtdcStatus)}>
+                        {formatDtdcStatus(order.dtdcStatus)}
+                      </Badge>
+                    </div>
+                  )}
                   <a
                     href={getDTDCTrackingUrl(order.awbNumber)}
                     target="_blank"
