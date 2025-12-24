@@ -6,7 +6,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   AlertCircle,
-  Banknote,
   CalendarRange,
   CreditCard,
   Factory,
@@ -358,17 +357,6 @@ export function AdminDashboard() {
                   CGST ₹{formatNumber(financials.gst?.cgst || 0)} • SGST ₹{formatNumber(financials.gst?.sgst || 0)} •
                   IGST ₹{formatNumber(financials.gst?.igst || 0)}
                 </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Commission Earned</CardTitle>
-                <Banknote className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(financials.commissions?.total || 0)}</div>
-                <p className="text-xs text-muted-foreground">Delivered seller orders</p>
               </CardContent>
             </Card>
 
