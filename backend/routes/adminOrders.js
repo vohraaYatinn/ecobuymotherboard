@@ -138,7 +138,7 @@ router.get("/", verifyAdminToken, async (req, res) => {
     const orders = await Order.find(filter)
       .populate("customerId", "name mobile email")
       .populate("shippingAddress", "firstName lastName phone address1 city state postcode")
-      .populate("vendorId", "name email phone address")
+      .populate("vendorId", "name email phone address commission")
       .populate("items.productId", "name brand sku images")
       .sort(sort)
       .skip(skip)
@@ -181,9 +181,7 @@ router.get("/:id", verifyAdminToken, async (req, res) => {
     const order = await Order.findById(req.params.id)
       .populate("customerId", "name mobile email")
       .populate("shippingAddress")
-      .populate("vendorId", "name phone address")
-      .populate("vendorId")
-      .populate("vendorId", "name email phone address")
+      .populate("vendorId", "name email phone address commission")
       .populate("items.productId", "name brand sku images category")
 
     if (!order) {

@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Loader2, AlertCircle, FileDown, CreditCard, Wallet } from "lucide-react"
 import { API_URL } from "@/lib/api-config"
 import { useNavigation } from "@/contexts/navigation-context"
+import { Capacitor } from "@capacitor/core"
+import { Filesystem, Directory, Encoding } from "@capacitor/filesystem"
 
 interface OrderItem {
   name: string
@@ -50,10 +52,8 @@ interface Order {
     refundStatus?: string | null
     requestedAt?: string | null
   } | null
-  invoiceNumber?: string | null
 }
 
-const DEFAULT_COMMISSION_RATE = 20 // percent fallback if vendor commission is missing
 const PAYMENT_GATEWAY_RATE = 2 // percent of payout-before-gateway
 
 export default function OrdersPage() {
@@ -185,7 +185,8 @@ export default function OrdersPage() {
       if (typeof commissionValue === "number") {
         setVendorCommission(commissionValue)
       } else {
-        setVendorCommission(DEFAULT_COMMISSION_RATE)
+        // If commission is not available, set to null - calculations will handle this
+        setVendorCommission(null)
       }
     } catch (err) {
       console.error("Error fetching vendor profile:", err)
@@ -274,7 +275,9 @@ export default function OrdersPage() {
 
   const getCommissionRate = () => {
     if (typeof vendorCommission === "number") return vendorCommission
-    return DEFAULT_COMMISSION_RATE
+    // If commission is not available, return 0 (no commission)
+    // This should not happen in normal operation, but provides a safe fallback
+    return 0
   }
 
   const getPayoutBreakdown = (order: Order) => {
@@ -324,57 +327,8 @@ export default function OrdersPage() {
     return matchesSearch
   })
 
-  const handleDownloadInvoice = async (orderId: string) => {
-    try {
-      const token = localStorage.getItem("vendorToken")
-      if (!token) {
-        alert("Please login to download invoice")
-        router.push("/login")
-        return
-      }
 
-      const response = await fetch(`${API_URL}/api/invoices/${orderId}/download/vendor`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: "Failed to download invoice" }))
-        alert(errorData.message || "Failed to download invoice")
-        return
-      }
-
-      // Get the PDF blob
-      const blob = await response.blob()
-      
-      // Create a download link
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      
-      // Get filename from Content-Disposition header or use default
-      const contentDisposition = response.headers.get("Content-Disposition")
-      let filename = `Invoice_${orderId}.pdf`
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/i)
-        if (filenameMatch) {
-          filename = filenameMatch[1]
-        }
-      }
-      
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
-    } catch (err) {
-      console.error("Error downloading invoice:", err)
-      alert("Failed to download invoice. Please try again.")
-    }
-  }
-
-  const handleDownloadStatement = () => {
+  const handleDownloadStatement = async () => {
     // Use orders from current tab, not filteredOrders (which includes search filter)
     const ordersToExport = orders.length > 0 ? orders : []
     
@@ -426,15 +380,60 @@ export default function OrdersPage() {
         .map((row) => row.map(sanitize).join(","))
         .join("\n")
 
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `vendor-statement-${new Date().toISOString().split("T")[0]}.csv`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
+      const filename = `vendor-statement-${new Date().toISOString().split("T")[0]}.csv`
+
+      // Check if running in Capacitor native app
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const platform = Capacitor.getPlatform()
+          
+          // Use Documents directory - works on both Android and iOS
+          // On Android: saves to app's Documents folder (accessible via file manager)
+          // On iOS: saves to app's Documents folder (accessible via Files app)
+          const result = await Filesystem.writeFile({
+            path: filename,
+            data: csvContent,
+            directory: Directory.Documents,
+            encoding: Encoding.UTF8,
+          })
+
+          const folderName = platform === "android" 
+            ? "Documents folder (accessible via file manager)" 
+            : "Documents folder (accessible via Files app)"
+          
+          alert(`CSV file saved successfully!\n\nFile: ${filename}\nLocation: ${folderName}`)
+        } catch (filesystemError) {
+          console.error("Error saving file with Filesystem API:", filesystemError)
+          
+          // Fallback: Try to use browser download method (works in some Capacitor webviews)
+          try {
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+            const url = URL.createObjectURL(blob)
+            const link = document.createElement("a")
+            link.href = url
+            link.download = filename
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(url)
+            alert("File download initiated")
+          } catch (fallbackError) {
+            console.error("Error with fallback download:", fallbackError)
+            alert("Unable to save file. Please check app permissions or try again.")
+          }
+        }
+      } else {
+        // Use browser download for web
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement("a")
+        link.href = url
+        link.download = filename
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+      }
     } catch (err) {
       console.error("Error generating statement:", err)
       alert("Unable to generate statement right now. Please try again.")
@@ -721,30 +720,6 @@ export default function OrdersPage() {
                           <span className="text-xs font-semibold text-foreground">Net payout</span>
                           <span className="text-sm font-bold text-chart-3">{formatCurrency(payout.netPayout)}</span>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Downloads */}
-                  <div className="mt-3">
-                    <div className="rounded-xl border border-border/60 bg-muted/10 p-3">
-                      <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                        <span>Downloadables</span>
-                        <span className="text-[11px] text-muted-foreground">Invoices & records</span>
-                      </div>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownloadInvoice(order._id)}
-                          className="gap-2"
-                        >
-                          <FileDown className="h-4 w-4" />
-                          Invoice PDF
-                        </Button>
-                        {order.invoiceNumber && (
-                          <span className="text-[11px] text-muted-foreground">#{order.invoiceNumber}</span>
-                        )}
                       </div>
                     </div>
                   </div>

@@ -20,6 +20,7 @@ interface Vendor {
   _id: string
   name: string
   phone?: string
+  commission?: number
 }
 
 interface Order {
@@ -159,13 +160,19 @@ export function AdminLedger() {
         const deliveredAt = deliveryDate
         const returnDeadline = new Date(deliveredAt.getTime() + RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000)
 
-        const platformCommission = order.subtotal * 0.2
-        const payoutBeforeGateway = order.subtotal * 0.8
+        // Get vendor commission rate (default to 0 if not set)
+        const vendor = typeof order.vendorId === "object" && order.vendorId !== null ? order.vendorId : null
+        const commissionRate = vendor?.commission || 0
+        const commissionMultiplier = commissionRate / 100
+        const payoutMultiplier = 1 - commissionMultiplier
+
+        const platformCommission = order.subtotal * commissionMultiplier
+        const payoutBeforeGateway = order.subtotal * payoutMultiplier
         const paymentGatewayCharges = payoutBeforeGateway * 0.02
         const netPayout = payoutBeforeGateway - paymentGatewayCharges
 
-        const vendorName = typeof order.vendorId === "object" && order.vendorId !== null ? order.vendorId.name : "Vendor"
-        const vendorPhone = typeof order.vendorId === "object" && order.vendorId !== null ? order.vendorId.phone : ""
+        const vendorName = vendor?.name || "Vendor"
+        const vendorPhone = vendor?.phone || ""
 
         return {
           order,

@@ -51,6 +51,7 @@ interface Vendor {
   name: string
   email?: string
   phone?: string
+  commission?: number
   address?: {
     city?: string
     state?: string
@@ -664,8 +665,14 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const shippingCgst = isIntraState ? order.shipping * 0.09 : 0
   const shippingSgst = isIntraState ? order.shipping * 0.09 : 0
   const shippingIgst = !isIntraState ? order.shipping * 0.18 : 0
-  const platformCommission = order.subtotal * 0.2
-  const payoutBeforeGateway = order.subtotal * 0.8
+  
+  // Get vendor commission rate (default to 0 if not set)
+  const commissionRate = vendor?.commission || 0
+  const commissionMultiplier = commissionRate / 100
+  const payoutMultiplier = 1 - commissionMultiplier
+  
+  const platformCommission = order.subtotal * commissionMultiplier
+  const payoutBeforeGateway = order.subtotal * payoutMultiplier
   const paymentGatewayCharges = payoutBeforeGateway * 0.02
   const netVendorPayout = payoutBeforeGateway - paymentGatewayCharges
 
@@ -1039,7 +1046,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
               <span>₹{order.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Platform Commission (20%)</span>
+              <span className="text-muted-foreground">Platform Commission ({commissionRate}%)</span>
               <span>- ₹{platformCommission.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
             <div className="flex justify-between font-medium pt-1">

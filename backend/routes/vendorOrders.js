@@ -11,7 +11,6 @@ import { createShipmentForOrder } from "../services/dtdcService.js"
 const router = express.Router()
 
 const RETURN_WINDOW_DAYS = 3
-const PLATFORM_COMMISSION_RATE = 0.2 // 20%
 const GATEWAY_RATE = 0.02 // 2% of payout before gateway
 const LEDGER_SETTINGS_KEY = "vendor_ledger_payments"
 
@@ -296,11 +295,16 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
     const now = new Date()
     const returnWindowCutoff = new Date(now.getTime() - RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000)
 
+    // Get vendor commission rate (default to 0 if not set)
+    const commissionRate = vendor?.commission || 0
+    const commissionMultiplier = commissionRate / 100
+    const payoutMultiplier = 1 - commissionMultiplier
+
     const calculateNetPayout = (order) => {
-      // Payout Formula: (Product Cost × 0.80) - Payment Gateway Charges
+      // Payout Formula: (Product Cost × (1 - commission rate)) - Payment Gateway Charges
       // Product Cost = subtotal, Gateway Charges = 2% of payout-before-gateway
       const productCost = typeof order.subtotal === "number" ? order.subtotal : order.total || 0
-      const payoutBeforeGateway = productCost * 0.80
+      const payoutBeforeGateway = productCost * payoutMultiplier
       const paymentGatewayCharges = payoutBeforeGateway * GATEWAY_RATE
       return Math.max(payoutBeforeGateway - paymentGatewayCharges, 0)
     }
