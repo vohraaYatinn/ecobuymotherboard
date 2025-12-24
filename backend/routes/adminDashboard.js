@@ -52,10 +52,15 @@ const buildFinancialReport = (orders, vendorMap, gatewayRate, startDate) => {
     const commissionRate = vendor?.commission || 0
     const commissionForOrder = Math.round((commissionBase * commissionRate) / 100)
     const payoutBeforeGateway = Math.max(commissionBase - commissionForOrder, 0)
+    const isDelivered = order.status === "delivered" && order.paymentStatus !== "refunded"
 
     grossCollections += total
     gstCollected += gst
-    commissionEarned += commissionForOrder
+    
+    // Only count commission for delivered, non-refunded orders (matching main dashboard logic)
+    if (isDelivered) {
+      commissionEarned += commissionForOrder
+    }
 
     if (order.paymentMethod === "online" || order.paymentMethod === "wallet") {
       gatewayCharges += Math.round(payoutBeforeGateway * gatewayRate)
