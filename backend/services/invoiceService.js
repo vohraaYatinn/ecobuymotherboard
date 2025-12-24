@@ -46,50 +46,70 @@ export async function generateInvoicePDF(order) {
       const customerEmail = order.customerId?.email || ""
       const customerPhone = order.customerId?.mobile || ""
       
+      // Address column widths for proper wrapping
+      const leftColumnWidth = 250 // Width for Bill To and Ship To sections
+      const rightColumnX = 350 // X position for From section
+      const rightColumnWidth = 185 // Width for From section (535 - 350 = 185)
+      
       // Bill To Section
       doc.fontSize(10).font("Helvetica-Bold").text("Bill to", 60, billToY)
-      doc.font("Helvetica")
+      doc.font("Helvetica").fontSize(9)
       
       let billToText = customerName
       if (order.shippingAddress && typeof order.shippingAddress === "object") {
         const addr = order.shippingAddress
-        billToText += `\n${addr.address1}`
-        if (addr.address2) billToText += `, ${addr.address2}`
-        billToText += `\n${addr.city}, ${addr.state} - ${addr.postcode}`
+        const addressLine = addr.address1 + (addr.address2 ? `, ${addr.address2}` : "")
+        billToText += `\n${addressLine}\n${addr.city}, ${addr.state} - ${addr.postcode}`
         if (customerEmail) billToText += `\n${customerEmail}`
         if (customerPhone) billToText += `\n${customerPhone}`
       }
       
-      doc.fontSize(9).text(billToText, 60, billToY + 15)
-      const billToHeight = (billToText.split('\n').length * 12) + 15
+      // Draw Bill To with wrapping and calculate actual height
+      doc.y = billToY + 15
+      const billToStartY = doc.y
+      doc.text(billToText, 60, billToStartY, { width: leftColumnWidth, lineGap: 3 })
+      const billToEndY = doc.y
+      const billToHeight = billToEndY - billToY + 10
 
       // Ship To Section - Position after Bill To with proper spacing
-      const shipToY = billToY + billToHeight + 25
+      const shipToY = billToY + billToHeight + 5
       doc.fontSize(10).font("Helvetica-Bold").text("Ship to", 60, shipToY)
-      doc.font("Helvetica")
+      doc.font("Helvetica").fontSize(9)
       
       let shipToText = customerName
       if (order.shippingAddress && typeof order.shippingAddress === "object") {
         const addr = order.shippingAddress
-        shipToText += `\n${addr.address1}`
-        if (addr.address2) shipToText += `, ${addr.address2}`
-        shipToText += `\n${addr.city}, ${addr.state} - ${addr.postcode}`
+        const addressLine = addr.address1 + (addr.address2 ? `, ${addr.address2}` : "")
+        shipToText += `\n${addressLine}\n${addr.city}, ${addr.state} - ${addr.postcode}`
       }
       
-      doc.fontSize(9).text(shipToText, 60, shipToY + 15)
-      const shipToHeight = (shipToText.split('\n').length * 12) + 15
+      // Draw Ship To with wrapping and calculate actual height
+      doc.y = shipToY + 15
+      const shipToStartY = doc.y
+      doc.text(shipToText, 60, shipToStartY, { width: leftColumnWidth, lineGap: 3 })
+      const shipToEndY = doc.y
+      const shipToHeight = shipToEndY - shipToY + 10
 
       // From Section (Company Address) - Position at top right, aligned with Bill To
       const fromY = billToY
-      doc.fontSize(10).font("Helvetica-Bold").text("From", 350, fromY)
-      doc.font("Helvetica")
+      doc.fontSize(10).font("Helvetica-Bold").text("From", rightColumnX, fromY)
+      doc.font("Helvetica").fontSize(9)
+      
+      // Build From text with proper line breaks
       const fromText = `${COMPANY_INFO.name}\n${COMPANY_INFO.address}\n${COMPANY_INFO.city} ${COMPANY_INFO.pincode}\n${COMPANY_INFO.state}\n${COMPANY_INFO.phone}\n${COMPANY_INFO.gstin}`
-      doc.fontSize(9).text(fromText, 350, fromY + 15)
-      const fromHeight = (fromText.split('\n').length * 12) + 15
+      
+      // Draw From with wrapping and calculate actual height
+      doc.y = fromY + 15
+      const fromStartY = doc.y
+      doc.text(fromText, rightColumnX, fromStartY, { width: rightColumnWidth, lineGap: 3 })
+      const fromEndY = doc.y
+      const fromHeight = fromEndY - fromY + 10
 
       // Invoice Details - Position after the address sections with proper spacing
-      const maxAddressHeight = Math.max(billToHeight + 25 + shipToHeight, fromHeight)
-      const invoiceY = billToY + maxAddressHeight + 30
+      // Calculate the maximum height from both columns (left: Bill To + Ship To, right: From)
+      const leftColumnHeight = billToHeight + shipToHeight
+      const maxAddressHeight = Math.max(leftColumnHeight, fromHeight)
+      const invoiceY = billToY + maxAddressHeight + 20
       doc.fontSize(10).font("Helvetica-Bold")
       
       const invoiceDate = new Date(order.createdAt).toLocaleDateString("en-IN", {

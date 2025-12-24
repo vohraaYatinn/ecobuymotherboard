@@ -89,6 +89,7 @@ interface Order {
   igst?: number
   shippingState?: string
   returnRequest?: ReturnRequest
+  deliveredAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -400,8 +401,11 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const isDelivered = order?.status.toLowerCase() === "delivered"
   const hasReturnRequest = order?.returnRequest && order.returnRequest.type
   const returnStatus = order?.returnRequest?.type
-  const deliveredAt =
-    order?.status.toLowerCase() === "delivered" ? new Date(order.updatedAt) : null
+  const deliveredAt = isDelivered
+    ? order?.deliveredAt
+      ? new Date(order.deliveredAt)
+      : new Date(order.updatedAt)
+    : null
   const returnDeadline = deliveredAt
     ? new Date(deliveredAt.getTime() + 3 * 24 * 60 * 60 * 1000)
     : null
@@ -416,6 +420,11 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
         minute: "2-digit",
       })
     : ""
+  
+  // Check if invoice is available (3 days after delivery)
+  const invoiceAvailable = deliveredAt
+    ? Date.now() >= deliveredAt.getTime() + 3 * 24 * 60 * 60 * 1000
+    : false
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
@@ -431,46 +440,57 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       <div className="mb-6 sm:mb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
           <h1 className="text-2xl sm:text-3xl font-bold">Order Details</h1>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full sm:w-auto text-xs sm:text-sm bg-transparent"
-            onClick={async () => {
-              try {
-                const token = localStorage.getItem("customerToken")
-                if (!token) {
-                  alert("Please login to download invoice")
-                  return
+          <div className="flex flex-col gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full sm:w-auto text-xs sm:text-sm bg-transparent"
+              disabled={!invoiceAvailable}
+              onClick={async () => {
+                if (!invoiceAvailable) return
+                
+                try {
+                  const token = localStorage.getItem("customerToken")
+                  if (!token) {
+                    alert("Please login to download invoice")
+                    return
+                  }
+
+                  const response = await fetch(`${API_URL}/api/invoices/${orderId}/download`, {
+                    headers: {
+                      Authorization: `Bearer ${token}`,
+                    },
+                  })
+
+                  if (!response.ok) {
+                    throw new Error("Failed to download invoice")
+                  }
+
+                  const blob = await response.blob()
+                  const url = window.URL.createObjectURL(blob)
+                  const a = document.createElement("a")
+                  a.href = url
+                  a.download = `Invoice_${order?.invoiceNumber || order?.orderNumber || "invoice"}.pdf`
+                  document.body.appendChild(a)
+                  a.click()
+                  window.URL.revokeObjectURL(url)
+                  document.body.removeChild(a)
+                } catch (err) {
+                  console.error("Error downloading invoice:", err)
+                  alert("Failed to download invoice. Please try again.")
                 }
-
-                const response = await fetch(`${API_URL}/api/invoices/${orderId}/download`, {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
-                })
-
-                if (!response.ok) {
-                  throw new Error("Failed to download invoice")
-                }
-
-                const blob = await response.blob()
-                const url = window.URL.createObjectURL(blob)
-                const a = document.createElement("a")
-                a.href = url
-                a.download = `Invoice_${order?.invoiceNumber || order?.orderNumber || "invoice"}.pdf`
-                document.body.appendChild(a)
-                a.click()
-                window.URL.revokeObjectURL(url)
-                document.body.removeChild(a)
-              } catch (err) {
-                console.error("Error downloading invoice:", err)
-                alert("Failed to download invoice. Please try again.")
-              }
-            }}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Download Invoice
-          </Button>
+              }}
+              title={!invoiceAvailable ? "Invoice will be available when return period gets over" : "Download Invoice"}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Download Invoice
+            </Button>
+            {!invoiceAvailable && isDelivered && (
+              <p className="text-xs text-muted-foreground text-center sm:text-left">
+                Invoice will be available when return period gets over
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
           <p className="text-sm sm:text-base text-muted-foreground">
@@ -756,33 +776,34 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
               {isDelivered && (
                 <>
                   {!hasReturnRequest ? (
-                    <Dialog
-                      open={returnDialogOpen}
-                      onOpenChange={(open) => {
-                        setReturnDialogOpen(open)
-                        if (!open) {
-                          setReturnReason("")
-                          setReturnAttachments([])
-                        }
-                      }}
-                    >
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="w-full text-sm bg-transparent"
-                          disabled={!isReturnWindowOpen}
-                          title={
-                            isReturnWindowOpen
-                              ? "Request a return"
-                              : "Return window (3 days from delivery) has expired"
+                    <div className="space-y-1">
+                      <Dialog
+                        open={returnDialogOpen}
+                        onOpenChange={(open) => {
+                          setReturnDialogOpen(open)
+                          if (!open) {
+                            setReturnReason("")
+                            setReturnAttachments([])
                           }
-                        >
-                          <RotateCcw className="mr-2 h-4 w-4" />
-                          Request Return
-                        </Button>
-                      </DialogTrigger>
-                      {isReturnWindowOpen && (
-                      <DialogContent>
+                        }}
+                      >
+                        <DialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className="w-full text-sm bg-transparent"
+                            disabled={!isReturnWindowOpen}
+                            title={
+                              isReturnWindowOpen
+                                ? "Request a return"
+                                : "Order cannot be return return window is over"
+                            }
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Request Return
+                          </Button>
+                        </DialogTrigger>
+                        {isReturnWindowOpen && (
+                        <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Request Return</DialogTitle>
                           <DialogDescription>
@@ -854,6 +875,12 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
                       </DialogContent>
                       )}
                     </Dialog>
+                    {!isReturnWindowOpen && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        Order cannot be return return window is over
+                      </p>
+                    )}
+                    </div>
                   ) : (
                     <div className="space-y-2">
                       <Alert className={returnStatus === "accepted" ? "border-green-500" : returnStatus === "denied" ? "border-red-500" : "border-yellow-500"}>
@@ -880,15 +907,6 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
                         </AlertDescription>
                       </Alert>
                     </div>
-                  )}
-                  {!isReturnWindowOpen && !hasReturnRequest && (
-                    <Alert className="border-yellow-500 bg-yellow-50 text-xs">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        Return window has expired. Returns are allowed within 3 days of delivery
-                        {returnDeadlineText ? ` (until ${returnDeadlineText})` : ""}.
-                      </AlertDescription>
-                    </Alert>
                   )}
                 </>
               )}
