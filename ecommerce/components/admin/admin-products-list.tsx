@@ -696,6 +696,7 @@ export function AdminProductsList() {
                   </CardContent>
                 </Card>
               ))}
+              </div>
             </div>
           )}
         </>
