@@ -17,8 +17,9 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Search, Eye, Plus, Edit, Loader2, Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
+import { Search, Eye, Plus, Edit, Loader2, Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Trash2, CheckSquare, Square } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
@@ -78,6 +79,11 @@ export function AdminProductsList() {
   const [uploadError, setUploadError] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Bulk delete state
+  const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
 
   // Fetch filter options
   useEffect(() => {
@@ -237,6 +243,78 @@ export function AdminProductsList() {
     }
   }
 
+  // Handle product selection
+  const handleSelectProduct = (productId: string) => {
+    const newSelected = new Set(selectedProducts)
+    if (newSelected.has(productId)) {
+      newSelected.delete(productId)
+    } else {
+      newSelected.add(productId)
+    }
+    setSelectedProducts(newSelected)
+  }
+
+  // Handle select all
+  const handleSelectAll = () => {
+    if (selectedProducts.size === products.length) {
+      setSelectedProducts(new Set())
+    } else {
+      setSelectedProducts(new Set(products.map((p) => p._id)))
+    }
+  }
+
+  // Handle bulk hard delete
+  const handleBulkDelete = async () => {
+    if (selectedProducts.size === 0) return
+
+    setBulkDeleting(true)
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Please log in again")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/products/bulk/delete`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          productIds: Array.from(selectedProducts),
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert(`Successfully deleted ${data.data.deletedCount} product(s)`)
+        setSelectedProducts(new Set())
+        setBulkDeleteDialogOpen(false)
+        // Refresh products list
+        const params = new URLSearchParams()
+        if (search) params.append("search", search)
+        if (statusFilter && statusFilter !== "all") params.append("status", statusFilter)
+        if (categoryFilter && categoryFilter !== "all") params.append("category", categoryFilter)
+        if (brandFilter && brandFilter !== "all") params.append("brand", brandFilter)
+        params.append("limit", "50")
+        const productsResponse = await fetch(`${API_URL}/api/products?${params.toString()}`)
+        const productsData = await productsResponse.json()
+        if (productsData.success) {
+          setProducts(productsData.data)
+        }
+      } else {
+        alert(data.message || "Failed to delete products")
+      }
+    } catch (err) {
+      console.error("Error deleting products:", err)
+      alert("Error deleting products. Please try again.")
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -245,6 +323,53 @@ export function AdminProductsList() {
           <p className="text-sm text-muted-foreground mt-1">View and manage all products</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* Bulk Delete Button */}
+          {selectedProducts.size > 0 && (
+            <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="destructive" className="gap-2">
+                  <Trash2 className="h-4 w-4" />
+                  <span className="hidden sm:inline">Delete Selected ({selectedProducts.size})</span>
+                  <span className="sm:hidden">Delete ({selectedProducts.size})</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Confirm Bulk Hard Delete</DialogTitle>
+                  <DialogDescription>
+                    Are you sure you want to permanently delete {selectedProducts.size} product(s)? This action cannot be undone. The products will be completely removed from the database.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setBulkDeleteDialogOpen(false)}
+                    disabled={bulkDeleting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleting}
+                  >
+                    {bulkDeleting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Permanently
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+
           {/* Download Template Button */}
           <Button variant="outline" className="gap-2" onClick={handleDownloadTemplate}>
             <Download className="h-4 w-4" />
@@ -462,26 +587,60 @@ export function AdminProductsList() {
               <p className="text-muted-foreground">No products found</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {products.map((product) => (
-                <Card key={product._id} className="hover:shadow-lg transition-shadow">
-                  <CardContent className="p-4 sm:p-6">
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      {/* Product Image */}
-                      <div className="relative w-full sm:w-24 h-40 sm:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                        <Image
-                          src={
-                            product.images?.[0]
-                              ? product.images[0].startsWith("http")
-                                ? product.images[0]
-                                : `${API_URL}${product.images[0]}`
-                              : "/placeholder.svg"
-                          }
-                          alt={product.name}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
+            <div className="space-y-4">
+              {/* Select All Checkbox */}
+              <div className="flex items-center gap-2 pb-2 border-b">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2 h-auto p-1"
+                  onClick={handleSelectAll}
+                >
+                  {selectedProducts.size === products.length ? (
+                    <CheckSquare className="h-5 w-5" />
+                  ) : (
+                    <Square className="h-5 w-5" />
+                  )}
+                  <span className="text-sm">
+                    {selectedProducts.size === products.length
+                      ? "Deselect All"
+                      : `Select All (${products.length})`}
+                  </span>
+                </Button>
+                {selectedProducts.size > 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    {selectedProducts.size} product(s) selected
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                {products.map((product) => (
+                  <Card key={product._id} className="hover:shadow-lg transition-shadow">
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        {/* Checkbox for selection */}
+                        <div className="flex items-start pt-1">
+                          <Checkbox
+                            checked={selectedProducts.has(product._id)}
+                            onCheckedChange={() => handleSelectProduct(product._id)}
+                            className="mt-1"
+                          />
+                        </div>
+                        {/* Product Image */}
+                        <div className="relative w-full sm:w-24 h-40 sm:h-24 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                          <Image
+                            src={
+                              product.images?.[0]
+                                ? product.images[0].startsWith("http")
+                                  ? product.images[0]
+                                  : `${API_URL}${product.images[0]}`
+                                : "/placeholder.svg"
+                            }
+                            alt={product.name}
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
 
                       {/* Product Details */}
                       <div className="flex-1 space-y-3">

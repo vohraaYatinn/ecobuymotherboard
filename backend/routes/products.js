@@ -569,6 +569,52 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
   }
 })
 
+// Bulk hard delete products (Admin only)
+router.post("/bulk/delete", verifyAdminToken, async (req, res) => {
+  try {
+    const { productIds } = req.body
+
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide an array of product IDs to delete",
+      })
+    }
+
+    // Validate all IDs are valid MongoDB ObjectIds
+    const validIds = productIds.filter((id) => mongoose.Types.ObjectId.isValid(id))
+    
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid product IDs provided",
+      })
+    }
+
+    // Hard delete products
+    const deleteResult = await Product.deleteMany({
+      _id: { $in: validIds },
+    })
+
+    res.status(200).json({
+      success: true,
+      message: `Successfully deleted ${deleteResult.deletedCount} product(s)`,
+      data: {
+        deletedCount: deleteResult.deletedCount,
+        requestedCount: productIds.length,
+        validCount: validIds.length,
+      },
+    })
+  } catch (error) {
+    console.error("Bulk delete products error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error deleting products",
+      error: error.message,
+    })
+  }
+})
+
 // Get filter options (categories, brands, etc.)
 router.get("/filters/options", async (req, res) => {
   try {
