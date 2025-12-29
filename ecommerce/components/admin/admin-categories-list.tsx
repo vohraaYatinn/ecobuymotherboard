@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Search, Plus, Edit, Trash2, Loader2, CheckCircle2, XCircle, Tag, AlertCircle } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000"
 
 interface Category {
   _id: string

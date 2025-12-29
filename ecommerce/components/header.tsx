@@ -58,7 +58,7 @@ export function Header() {
           } else {
             // If name is not in localStorage, fetch from API to get latest data
             try {
-              const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"}/api/customer-auth/profile`, {
+              const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000"}/api/customer-auth/profile`, {
                 headers: {
                   Authorization: `Bearer ${token}`,
                 },
@@ -131,7 +131,7 @@ export function Header() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"}/api/categories`)
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000"}/api/categories`)
         const data = await response.json()
         if (data.success) {
           setCategories(data.data.filter((cat: Category) => cat.isActive))
@@ -150,7 +150,7 @@ export function Header() {
       const token = localStorage.getItem("customerToken")
       if (!token) return
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"}/api/notifications/customer?unreadOnly=true&limit=1`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000"}/api/notifications/customer?unreadOnly=true&limit=1`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
