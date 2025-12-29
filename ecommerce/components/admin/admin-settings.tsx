@@ -221,7 +221,7 @@ export function AdminSettings() {
               </div>
               <div>
                 <Label htmlFor="supportEmail">Support Email</Label>
-                <Input id="supportEmail" defaultValue="mahender@ekranfix.com" className="mt-1.5" />
+                <Input id="supportEmail" defaultValue="SUPPORT@ELECOBUY.COM" className="mt-1.5" />
               </div>
             </div>
           </CardContent>

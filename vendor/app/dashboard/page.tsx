@@ -45,10 +45,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const [vendorCommission, setVendorCommission] = useState<number | null>(null)
 
   useEffect(() => {
     fetchDashboardStats()
     fetchUnreadNotifications()
+    fetchVendorProfile()
     
     // Refresh notifications every 30 seconds
     const interval = setInterval(fetchUnreadNotifications, 30000)
@@ -146,6 +148,59 @@ export default function DashboardPage() {
     if (diffMins < 60) return `${diffMins}m ago`
     if (diffHours < 24) return `${diffHours}h ago`
     return `${diffDays}d ago`
+  }
+
+  const fetchVendorProfile = async () => {
+    try {
+      const token = localStorage.getItem("vendorToken")
+      if (!token) return
+
+      const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        const commissionValue = data.data?.vendor?.commission
+        if (typeof commissionValue === "number") {
+          setVendorCommission(commissionValue)
+        } else {
+          setVendorCommission(null)
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching vendor profile:", err)
+    }
+  }
+
+  const getCommissionRate = () => {
+    if (typeof vendorCommission === "number") return vendorCommission
+    return 0
+  }
+
+  const getPayoutBreakdown = (order: DashboardStats["recentOrders"][0]) => {
+    const PAYMENT_GATEWAY_RATE = 2
+    const commissionRate = getCommissionRate()
+    // For dashboard orders, we need to estimate subtotal from total
+    // Since we don't have subtotal, we'll use total as an approximation
+    // In a real scenario, the API should provide subtotal
+    const productTotal = order.total // This is an approximation
+    const commissionAmount = Math.max(0, (commissionRate / 100) * productTotal)
+    const payoutBeforeGateway = Math.max(productTotal - commissionAmount, 0)
+    const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * payoutBeforeGateway)
+    const netPayout = Math.max(payoutBeforeGateway - gatewayFees, 0)
+
+    return {
+      commissionRate,
+      productTotal,
+      commissionAmount,
+      payoutBeforeGateway,
+      gatewayFees,
+      netPayout,
+    }
   }
 
   const getCustomerName = (order: DashboardStats["recentOrders"][0]) => {
@@ -546,62 +601,65 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="divide-y divide-border/30">
-                {stats.recentOrders.map((order, index) => (
-                  <button
-                    key={order._id}
-                    onClick={() => {
-                      setSelectedOrderId(order._id)
-                      router.push("/order-detail")
-                    }}
-                    className="w-full text-left"
-                  >
-                    <div className="flex items-center gap-4 p-4 transition-all hover:bg-gradient-to-r hover:from-primary/5 hover:to-transparent cursor-pointer group">
-                      <div
-                        className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl shadow-lg transition-transform group-hover:scale-110 ${
-                          order.status === "delivered"
-                            ? "bg-gradient-to-br from-chart-3/20 to-chart-3/10"
-                            : order.status === "processing" || order.status === "shipped"
-                              ? "bg-gradient-to-br from-primary/20 to-primary/10"
-                              : "bg-gradient-to-br from-chart-5/20 to-chart-5/10"
-                        }`}
-                      >
-                        <svg
-                          className={`h-6 w-6 ${order.status === "delivered" ? "text-chart-3" : order.status === "processing" || order.status === "shipped" ? "text-primary" : "text-chart-5"}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-                          />
-                        </svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-foreground truncate mb-1">{getCustomerName(order)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {order.orderNumber} • {formatTimeAgo(order.createdAt)}
-                        </p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-sm font-bold text-foreground mb-1">₹{order.total.toLocaleString("en-IN")}</p>
-                        <span
-                          className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold ${
+                {stats.recentOrders.map((order, index) => {
+                  const payout = getPayoutBreakdown(order)
+                  return (
+                    <button
+                      key={order._id}
+                      onClick={() => {
+                        setSelectedOrderId(order._id)
+                        router.push("/order-detail")
+                      }}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-center gap-4 p-4 transition-all hover:bg-gradient-to-r hover:from-primary/5 hover:to-transparent cursor-pointer group">
+                        <div
+                          className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl shadow-lg transition-transform group-hover:scale-110 ${
                             order.status === "delivered"
-                              ? "bg-gradient-to-r from-chart-3/20 to-chart-3/10 text-chart-3"
+                              ? "bg-gradient-to-br from-chart-3/20 to-chart-3/10"
                               : order.status === "processing" || order.status === "shipped"
-                                ? "bg-gradient-to-r from-primary/20 to-primary/10 text-primary"
-                                : "bg-gradient-to-r from-chart-5/20 to-chart-5/10 text-chart-5"
+                                ? "bg-gradient-to-br from-primary/20 to-primary/10"
+                                : "bg-gradient-to-br from-chart-5/20 to-chart-5/10"
                           }`}
                         >
-                          {order.status}
-                        </span>
+                          <svg
+                            className={`h-6 w-6 ${order.status === "delivered" ? "text-chart-3" : order.status === "processing" || order.status === "shipped" ? "text-primary" : "text-chart-5"}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+                            />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-foreground truncate mb-1">{getCustomerName(order)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {order.orderNumber} • {formatTimeAgo(order.createdAt)}
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-sm font-bold text-foreground mb-1">₹{payout.netPayout.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                          <span
+                            className={`inline-flex items-center rounded-full px-3 py-1 text-[10px] font-bold ${
+                              order.status === "delivered"
+                                ? "bg-gradient-to-r from-chart-3/20 to-chart-3/10 text-chart-3"
+                                : order.status === "processing" || order.status === "shipped"
+                                  ? "bg-gradient-to-r from-primary/20 to-primary/10 text-primary"
+                                  : "bg-gradient-to-r from-chart-5/20 to-chart-5/10 text-chart-5"
+                            }`}
+                          >
+                            {order.status}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>

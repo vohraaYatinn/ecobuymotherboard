@@ -66,6 +66,7 @@ export default function OrderDetailPage() {
   const [error, setError] = useState("")
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [accepting, setAccepting] = useState(false)
+  const [vendorCommission, setVendorCommission] = useState<number | null>(null)
 
   useEffect(() => {
     if (!selectedOrderId) {
@@ -73,6 +74,7 @@ export default function OrderDetailPage() {
       return
     }
     fetchOrderDetails(selectedOrderId)
+    fetchVendorProfile()
   }, [selectedOrderId])
 
   const fetchOrderDetails = async (id: string) => {
@@ -257,6 +259,56 @@ export default function OrderDetailPage() {
     })
   }
 
+  const fetchVendorProfile = async () => {
+    try {
+      const token = localStorage.getItem("vendorToken")
+      if (!token) return
+
+      const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        const commissionValue = data.data?.vendor?.commission
+        if (typeof commissionValue === "number") {
+          setVendorCommission(commissionValue)
+        } else {
+          setVendorCommission(null)
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching vendor profile:", err)
+    }
+  }
+
+  const getCommissionRate = () => {
+    if (typeof vendorCommission === "number") return vendorCommission
+    return 0
+  }
+
+  const getPayoutBreakdown = (order: Order) => {
+    const PAYMENT_GATEWAY_RATE = 2
+    const commissionRate = getCommissionRate()
+    const productTotal = typeof order.subtotal === "number" ? order.subtotal : order.total
+    const commissionAmount = Math.max(0, (commissionRate / 100) * productTotal)
+    const payoutBeforeGateway = Math.max(productTotal - commissionAmount, 0)
+    const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * payoutBeforeGateway)
+    const netPayout = Math.max(payoutBeforeGateway - gatewayFees, 0)
+
+    return {
+      commissionRate,
+      productTotal,
+      commissionAmount,
+      payoutBeforeGateway,
+      gatewayFees,
+      netPayout,
+    }
+  }
+
   const canAccept = order && !order.vendorId && (order.status === "pending" || order.status === "confirmed")
   const isAssigned = order && order.vendorId
 
@@ -301,6 +353,7 @@ export default function OrderDetailPage() {
 
   const customer = getCustomerInfo()
   const address = getAddressInfo()
+  const payout = order ? getPayoutBreakdown(order) : null
 
   return (
     <div className="min-h-screen bg-background" style={{ paddingBottom: `calc(5rem + env(safe-area-inset-bottom, 0px))` }}>
@@ -483,10 +536,7 @@ export default function OrderDetailPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{item.name}</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Qty: {item.quantity} × ₹{item.price.toLocaleString("en-IN")}
-                      </p>
-                      <p className="text-sm font-semibold text-foreground mt-1">
-                        ₹{(item.quantity * item.price).toLocaleString("en-IN")}
+                        Qty: {item.quantity}
                       </p>
                     </div>
                   </div>
@@ -498,21 +548,24 @@ export default function OrderDetailPage() {
 
         {/* Order Summary */}
         <Card>
-          <CardContent className="p-4 space-y-2">
-            <h2 className="text-sm font-bold text-foreground mb-3">Order Summary</h2>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="font-medium text-foreground">₹{order.subtotal.toLocaleString("en-IN")}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Shipping</span>
-              <span className="font-medium text-foreground">₹{order.shipping.toLocaleString("en-IN")}</span>
-            </div>
-            <div className="border-t border-border pt-2 mt-2">
-              <div className="flex justify-between">
-                <span className="text-sm font-bold text-foreground">Total</span>
-                <span className="text-base font-bold text-primary">₹{order.total.toLocaleString("en-IN")}</span>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg className="h-5 w-5 text-chart-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <h2 className="text-sm font-bold text-foreground">You Will Receive</h2>
               </div>
+              {payout && (
+                <span className="text-2xl font-bold text-chart-3">
+                  ₹{payout.netPayout.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -47,6 +47,7 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [vendorCommission, setVendorCommission] = useState<number | null>(null)
 
   useEffect(() => {
     if (!selectedCustomerId) {
@@ -54,6 +55,7 @@ export default function CustomerDetailPage() {
       return
     }
     fetchCustomerDetails()
+    fetchVendorProfile()
   }, [selectedCustomerId])
 
   const fetchCustomerDetails = async () => {
@@ -118,6 +120,58 @@ export default function CustomerDetailPage() {
       return `+91 ${mobile.slice(2, 7)} ${mobile.slice(7)}`
     }
     return mobile
+  }
+
+  const fetchVendorProfile = async () => {
+    try {
+      const token = localStorage.getItem("vendorToken")
+      if (!token) return
+
+      const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        const commissionValue = data.data?.vendor?.commission
+        if (typeof commissionValue === "number") {
+          setVendorCommission(commissionValue)
+        } else {
+          setVendorCommission(null)
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching vendor profile:", err)
+    }
+  }
+
+  const getCommissionRate = () => {
+    if (typeof vendorCommission === "number") return vendorCommission
+    return 0
+  }
+
+  const getPayoutBreakdown = (order: RecentOrder) => {
+    const PAYMENT_GATEWAY_RATE = 2
+    const commissionRate = getCommissionRate()
+    // For customer detail orders, we need to estimate subtotal from total
+    // Since we don't have subtotal, we'll use total as an approximation
+    const productTotal = order.total // This is an approximation
+    const commissionAmount = Math.max(0, (commissionRate / 100) * productTotal)
+    const payoutBeforeGateway = Math.max(productTotal - commissionAmount, 0)
+    const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * payoutBeforeGateway)
+    const netPayout = Math.max(payoutBeforeGateway - gatewayFees, 0)
+
+    return {
+      commissionRate,
+      productTotal,
+      commissionAmount,
+      payoutBeforeGateway,
+      gatewayFees,
+      netPayout,
+    }
   }
 
   const handleOrderClick = (orderId: string) => {
@@ -347,36 +401,39 @@ export default function CustomerDetailPage() {
               {customer.recentOrders.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No recent orders</p>
               ) : (
-                customer.recentOrders.map((order) => (
-                  <button
-                    key={order._id}
-                    onClick={() => handleOrderClick(order._id)}
-                    className="w-full text-left"
-                  >
-                    <div className="flex items-center justify-between rounded-lg border border-border/50 bg-secondary p-3 hover:bg-secondary/80 transition-colors cursor-pointer">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{order.orderNumber}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(order.createdAt)}</p>
+                customer.recentOrders.map((order) => {
+                  const payout = getPayoutBreakdown(order)
+                  return (
+                    <button
+                      key={order._id}
+                      onClick={() => handleOrderClick(order._id)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-center justify-between rounded-lg border border-border/50 bg-secondary p-3 hover:bg-secondary/80 transition-colors cursor-pointer">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{order.orderNumber}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(order.createdAt)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-foreground">
+                            ₹{payout.netPayout.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              order.status === "delivered"
+                                ? "bg-green-100 text-green-800"
+                                : order.status === "processing" || order.status === "shipped"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-accent/10 text-accent"
+                            }`}
+                          >
+                            {order.status}
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-foreground">
-                          ₹{order.total.toLocaleString("en-IN")}
-                        </p>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                            order.status === "delivered"
-                              ? "bg-green-100 text-green-800"
-                              : order.status === "processing" || order.status === "shipped"
-                                ? "bg-blue-100 text-blue-800"
-                                : "bg-accent/10 text-accent"
-                          }`}
-                        >
-                          {order.status}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                ))
+                    </button>
+                  )
+                })
               )}
             </div>
           </CardContent>
@@ -432,6 +489,7 @@ export default function CustomerDetailPage() {
     </div>
   )
 }
+
 
 
 

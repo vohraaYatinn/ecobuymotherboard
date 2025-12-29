@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useCart } from "@/lib/cart-context"
-import { MapPin, Plus, Loader2, Check, CheckCircle, Sparkles } from "lucide-react"
+import { MapPin, Plus, Loader2, Check, CheckCircle, Sparkles, Clock } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
@@ -113,6 +113,7 @@ export function CheckoutContent() {
   const [error, setError] = useState("")
   const [fetchingAddresses, setFetchingAddresses] = useState(true)
   const [showSuccessAnimation, setShowSuccessAnimation] = useState(false)
+  const [verifyingPayment, setVerifyingPayment] = useState(false)
   const [shippingCharges, setShippingCharges] = useState<number>(150)
   const [fetchingShippingCharges, setFetchingShippingCharges] = useState(true)
 
@@ -242,9 +243,14 @@ export function CheckoutContent() {
     razorpayPaymentId: string
     razorpaySignature: string
   }) => {
+    // Show verification overlay immediately
+    setVerifyingPayment(true)
+    setError("")
+    
     try {
       const token = localStorage.getItem("customerToken")
       if (!token) {
+        setVerifyingPayment(false)
         setError("Please log in again to verify your payment.")
         return
       }
@@ -261,15 +267,19 @@ export function CheckoutContent() {
       const data = await response.json()
 
       if (data.success) {
+        // Hide verification overlay and show success animation
+        setVerifyingPayment(false)
         setShowSuccessAnimation(true)
         setTimeout(() => {
           router.push(`/order-confirmation/${payload.orderId}?payment=razorpay&txn=${payload.razorpayPaymentId}`)
-        }, 800)
+        }, 1500)
       } else {
+        setVerifyingPayment(false)
         setError(data.message || "Unable to confirm payment. Please contact support.")
       }
     } catch (err) {
       console.error("Error verifying payment:", err)
+      setVerifyingPayment(false)
       setError("Payment verification failed. Please contact support with your payment ID.")
     }
   }
@@ -339,6 +349,7 @@ export function CheckoutContent() {
         })
 
         razorpay.on("payment.failed", (response: any) => {
+          setVerifyingPayment(false)
           setError(response?.error?.description || "Payment failed. Please try again.")
         })
 
@@ -409,6 +420,34 @@ export function CheckoutContent() {
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+      {/* Payment Verification Overlay */}
+      {verifyingPayment && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center animate-in fade-in-0 duration-300 p-4">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 animate-in zoom-in-95 duration-500 shadow-2xl">
+            <div className="flex flex-col items-center">
+              {/* Animated Spinner */}
+              <div className="relative mb-4 sm:mb-6">
+                <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Loader2 className="h-12 w-12 sm:h-16 sm:w-16 text-primary animate-spin" />
+                </div>
+                {/* Pulsing Ring */}
+                <div className="absolute inset-0 rounded-full border-4 border-primary/20 animate-ping" />
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold mb-2 animate-in fade-in-0 slide-in-from-bottom-4 duration-700">
+                Payment Successful!
+              </h2>
+              <p className="text-sm sm:text-base text-muted-foreground mb-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-1000 text-center">
+                Confirming your order...
+              </p>
+              <div className="flex items-center gap-2 text-primary">
+                <Clock className="h-4 w-4 animate-pulse" />
+                <span className="text-xs sm:text-sm">Please wait</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Success Animation Overlay */}
       {showSuccessAnimation && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center animate-in fade-in-0 duration-300 p-4">
@@ -425,13 +464,13 @@ export function CheckoutContent() {
                 <Sparkles className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-400 absolute top-1/2 -left-3 animate-pulse delay-700" />
               </div>
               <h2 className="text-xl sm:text-2xl font-bold mb-2 animate-in fade-in-0 slide-in-from-bottom-4 duration-700">
-                Order Placed!
+                Order Confirmed!
               </h2>
               <p className="text-sm sm:text-base text-muted-foreground mb-4 animate-in fade-in-0 slide-in-from-bottom-4 duration-1000 text-center">
                 Your order has been confirmed. Redirecting to order details...
               </p>
               <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                <div className="bg-primary h-full animate-progress" style={{ animation: "progress 2s linear forwards" }} />
+                <div className="bg-primary h-full animate-progress" style={{ animation: "progress 1.5s linear forwards" }} />
               </div>
             </div>
           </div>

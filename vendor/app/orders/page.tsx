@@ -346,7 +346,6 @@ export default function OrdersPage() {
         "Payment Status",
         "Payment Method",
         "Transaction ID",
-        "Order Total",
         "Product Total",
         "Commission %",
         "Commission Amount",
@@ -366,7 +365,6 @@ export default function OrdersPage() {
           order.paymentStatus || "pending",
           order.paymentMethod || "N/A",
           order.paymentTransactionId || "",
-          formatCurrency(order.total, false),
           formatCurrency(payout.productTotal, false),
           `${payout.commissionRate}%`,
           formatCurrency(payout.commissionAmount, false),
@@ -683,13 +681,13 @@ export default function OrdersPage() {
                       <div className="flex items-center justify-between text-xs font-semibold text-foreground">
                         <span className="flex items-center gap-1">
                           <CreditCard className="h-4 w-4 text-primary" />
-                          Sales & delivery
+                          You Will Receive
                         </span>
                         <span className="text-[11px] uppercase text-muted-foreground">
                           {order.paymentStatus || "pending"}
                         </span>
                       </div>
-                      <p className="text-lg font-bold text-foreground mt-1">{formatCurrency(order.total)}</p>
+                      <p className="text-lg font-bold text-foreground mt-1">{formatCurrency(payout.netPayout)}</p>
                       <p className="text-xs text-muted-foreground">
                         Payment: {order.paymentMethod?.toUpperCase() || "N/A"}{" "}
                         {order.paymentTransactionId ? `• ${order.paymentTransactionId}` : ""}
@@ -699,28 +697,10 @@ export default function OrdersPage() {
                       <div className="flex items-center justify-between text-xs font-semibold text-foreground">
                         <span className="flex items-center gap-1">
                           <Wallet className="h-4 w-4 text-chart-3" />
-                          Net payout
+                          You Will Receive
                         </span>
-                        <span className="text-[11px] text-muted-foreground">Commission {payout.commissionRate}%</span>
                       </div>
-                      <div className="mt-2 space-y-1 text-xs">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Product total</span>
-                          <span className="font-medium text-foreground">{formatCurrency(payout.productTotal)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Commission</span>
-                          <span className="text-destructive">- {formatCurrency(payout.commissionAmount)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Gateway ({PAYMENT_GATEWAY_RATE}%)</span>
-                          <span className="text-orange-600">- {formatCurrency(payout.gatewayFees)}</span>
-                        </div>
-                        <div className="flex justify-between pt-1 border-t border-border/60">
-                          <span className="text-xs font-semibold text-foreground">Net payout</span>
-                          <span className="text-sm font-bold text-chart-3">{formatCurrency(payout.netPayout)}</span>
-                        </div>
-                      </div>
+                      <p className="text-lg font-bold text-chart-3 mt-1">{formatCurrency(payout.netPayout)}</p>
                     </div>
                   </div>
 
@@ -749,7 +729,7 @@ export default function OrdersPage() {
                         {timeAgo}
                       </span>
                     </div>
-                    <p className="text-lg font-bold text-primary">₹{order.total.toLocaleString("en-IN")}</p>
+                    <p className="text-lg font-bold text-primary">{formatCurrency(payout.netPayout)}</p>
                   </div>
                 </CardContent>
               </Card>

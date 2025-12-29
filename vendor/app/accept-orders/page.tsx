@@ -61,9 +61,11 @@ export default function AcceptOrdersPage() {
   const [expandedItems, setExpandedItems] = useState<{ [key: string]: boolean }>({})
   const [previousOrderIds, setPreviousOrderIds] = useState<Set<string>>(new Set())
   const [soundPlaying, setSoundPlaying] = useState(false)
+  const [vendorCommission, setVendorCommission] = useState<number | null>(null)
 
   useEffect(() => {
     fetchUnassignedOrders()
+    fetchVendorProfile()
     // Poll for new orders every 10 seconds
     const interval = setInterval(() => {
       fetchUnassignedOrders()
@@ -149,6 +151,19 @@ export default function AcceptOrdersPage() {
 
   const handleAccept = async (orderId: string) => {
     try {
+      // Find the order to get customer phone number
+      const order = orders.find((o) => o._id === orderId)
+      const customer = order ? getCustomerInfo(order, true) : null
+      
+      // Show confirmation with full phone number
+      const confirmMessage = customer && customer.fullMobile !== "N/A"
+        ? `Accept this order?\n\nCustomer Phone: ${customer.fullMobile}\n\nClick OK to confirm.`
+        : "Accept this order?"
+      
+      if (!confirm(confirmMessage)) {
+        return
+      }
+
       logDebug("Accepting order", { orderId })
       setAcceptingOrderId(orderId)
       const token = localStorage.getItem("vendorToken")
@@ -197,7 +212,12 @@ export default function AcceptOrdersPage() {
         updated.delete(orderId)
         return updated
       })
-      alert("Order accepted successfully!")
+      
+      // Show success message with phone number
+      const successMessage = customer && customer.fullMobile !== "N/A"
+        ? `Order accepted successfully!\n\nCustomer Phone: ${customer.fullMobile}`
+        : "Order accepted successfully!"
+      alert(successMessage)
     } catch (err) {
       console.error("Error accepting order:", err)
       alert("Network error. Please try again.")
@@ -207,14 +227,27 @@ export default function AcceptOrdersPage() {
     }
   }
 
-  const getCustomerInfo = (order: Order) => {
+  const maskPhoneNumber = (phone: string): string => {
+    if (!phone || phone === "N/A") return "N/A"
+    // Remove any non-digit characters (like country codes, spaces, etc.)
+    const digits = phone.replace(/\D/g, "")
+    if (digits.length === 0) return "N/A"
+    // Show first digit, mask the rest
+    const firstDigit = digits[0]
+    const masked = "x".repeat(Math.max(0, digits.length - 1))
+    return `${firstDigit}${masked}`
+  }
+
+  const getCustomerInfo = (order: Order, showFullPhone: boolean = false) => {
     if (typeof order.customerId === "object" && order.customerId !== null) {
+      const mobile = order.customerId.mobile || "N/A"
       return {
         name: order.customerId.name || "N/A",
-        mobile: order.customerId.mobile || "N/A",
+        mobile: showFullPhone ? mobile : maskPhoneNumber(mobile),
+        fullMobile: mobile, // Store full number for when needed
       }
     }
-    return { name: "N/A", mobile: "N/A" }
+    return { name: "N/A", mobile: "N/A", fullMobile: "N/A" }
   }
 
   const getAddressInfo = (order: Order) => {
@@ -223,6 +256,56 @@ export default function AcceptOrdersPage() {
       return `${addr.address1}${addr.address2 ? `, ${addr.address2}` : ""}, ${addr.city}, ${addr.state} ${addr.postcode}`
     }
     return "Address not available"
+  }
+
+  const fetchVendorProfile = async () => {
+    try {
+      const token = localStorage.getItem("vendorToken")
+      if (!token) return
+
+      const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        const commissionValue = data.data?.vendor?.commission
+        if (typeof commissionValue === "number") {
+          setVendorCommission(commissionValue)
+        } else {
+          setVendorCommission(null)
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching vendor profile:", err)
+    }
+  }
+
+  const getCommissionRate = () => {
+    if (typeof vendorCommission === "number") return vendorCommission
+    return 0
+  }
+
+  const getPayoutBreakdown = (order: Order) => {
+    const PAYMENT_GATEWAY_RATE = 2
+    const commissionRate = getCommissionRate()
+    const productTotal = typeof order.subtotal === "number" ? order.subtotal : order.total
+    const commissionAmount = Math.max(0, (commissionRate / 100) * productTotal)
+    const payoutBeforeGateway = Math.max(productTotal - commissionAmount, 0)
+    const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * payoutBeforeGateway)
+    const netPayout = Math.max(payoutBeforeGateway - gatewayFees, 0)
+
+    return {
+      commissionRate,
+      productTotal,
+      commissionAmount,
+      payoutBeforeGateway,
+      gatewayFees,
+      netPayout,
+    }
   }
 
   const formatTimeAgo = (dateString: string) => {
@@ -334,10 +417,11 @@ export default function AcceptOrdersPage() {
         )}
 
         {orders.map((order, index) => {
-          const customer = getCustomerInfo(order)
+          const customer = getCustomerInfo(order, false) // Masked phone number
           const address = getAddressInfo(order)
           const timeAgo = formatTimeAgo(order.createdAt)
           const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)
+          const payout = getPayoutBreakdown(order)
 
           return (
             <Card
@@ -458,9 +542,9 @@ export default function AcceptOrdersPage() {
                           d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
                       </svg>
-                      <span className="text-sm font-medium text-foreground">Order Value</span>
+                      <span className="text-sm font-medium text-foreground">You Will Receive</span>
                     </div>
-                    <span className="text-lg font-bold text-chart-3">₹{order.total.toLocaleString("en-IN")}</span>
+                    <span className="text-lg font-bold text-chart-3">₹{payout.netPayout.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 </div>
 

@@ -56,7 +56,7 @@ const getTransporter = () => {
     port: parseInt(process.env.SMTP_PORT || "587"),
     secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
     auth: {
-      user: process.env.SMTP_USER || process.env.ADMIN_EMAIL || "mahender@ekranfix.com",
+      user: process.env.SMTP_USER || process.env.ADMIN_EMAIL || "SUPPORT@ELECOBUY.COM",
       pass: process.env.SMTP_PASS || process.env.ADMIN_EMAIL_PASSWORD,
     },
   })
@@ -163,7 +163,7 @@ const sendOrderConfirmationEmail = async (order) => {
 
     const customerName = customer.name || `${order.shippingAddress.firstName} ${order.shippingAddress.lastName}`
     const customerEmail = customer.email
-    const adminEmail = process.env.ADMIN_EMAIL || "mahender@ekranfix.com"
+    const adminEmail = process.env.ADMIN_EMAIL || "SUPPORT@ELECOBUY.COM"
 
     const orderItemsHtml = order.items
       .map(

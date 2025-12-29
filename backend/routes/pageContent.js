@@ -42,7 +42,7 @@ const defaultPageContent = {
       },
       {
         heading: "7. Contact Information",
-        content: "For questions about these terms and conditions, please contact us at mahender@ekranfix.com or call 1800 123 9336.",
+        content: "For questions about these terms and conditions, please contact us at SUPPORT@ELECOBUY.COM or call 1800 123 9336.",
         order: 7,
       },
     ],
@@ -393,6 +393,7 @@ router.post("/:slug/reset", verifyAdminToken, async (req, res) => {
 })
 
 export default router
+
 
 
 

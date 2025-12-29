@@ -4,6 +4,7 @@ import { Inter, JetBrains_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { CartProvider } from "@/lib/cart-context"
 import { WishlistProvider } from "@/lib/wishlist-context"
+import { Toaster } from "@/components/ui/toaster"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -46,6 +47,7 @@ export default function RootLayout({
             {children}
           </WishlistProvider>
         </CartProvider>
+        <Toaster />
         <Analytics />
       </body>
     </html>

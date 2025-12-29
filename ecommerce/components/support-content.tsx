@@ -251,7 +251,7 @@ export function SupportContent() {
                 </div>
                 <div>
                   <p className="font-semibold text-sm sm:text-base">Email Support</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-all">mahender@ekranfix.com</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-all">SUPPORT@ELECOBUY.COM</p>
                 </div>
               </div>
 

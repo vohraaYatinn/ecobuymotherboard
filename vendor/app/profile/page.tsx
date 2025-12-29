@@ -669,7 +669,7 @@ export default function ProfilePage() {
         {/* Additional Options */}
         <div className="rounded-3xl bg-gradient-to-br from-card via-card to-card/95 shadow-xl border border-border/30 overflow-hidden">
           <button
-            onClick={() => (window.location.href = "mailto:mahender@ekranfix.com")}
+            onClick={() => (window.location.href = "mailto:SUPPORT@ELECOBUY.COM")}
             className="flex w-full items-center justify-between p-5 hover:bg-gradient-to-r hover:from-primary/5 hover:to-transparent transition-all group"
           >
             <div className="flex items-center gap-4">

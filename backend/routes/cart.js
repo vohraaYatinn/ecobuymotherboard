@@ -29,39 +29,48 @@ router.get("/", async (req, res) => {
 
     if (customerId) {
       // Find cart by customer ID
-      cart = await Cart.findOne({ customerId }).populate("items.productId", "name brand price images status stock")
+      cart = await Cart.findOne({ customerId })
       
       // If customer logged in and has session cart, merge them
       if (sessionId) {
-        const sessionCart = await Cart.findOne({ sessionId }).populate("items.productId", "name brand price images status stock")
+        const sessionCart = await Cart.findOne({ sessionId })
         if (sessionCart && sessionCart.items.length > 0) {
-          // Merge session cart into customer cart
-          if (!cart) {
-            cart = new Cart({ customerId, items: [] })
-          }
-          
-          for (const sessionItem of sessionCart.items) {
-            const existingItemIndex = cart.items.findIndex(
-              (item) => item.productId.toString() === sessionItem.productId._id.toString()
-            )
-            
-            if (existingItemIndex >= 0) {
-              // Update quantity
-              cart.items[existingItemIndex].quantity += sessionItem.quantity
-            } else {
-              // Add new item
-              cart.items.push({
-                productId: sessionItem.productId._id,
-                quantity: sessionItem.quantity,
-                price: sessionItem.price,
-              })
+          // Only merge if session cart doesn't belong to this customer (avoid merging own cart)
+          if (!sessionCart.customerId || sessionCart.customerId.toString() !== customerId.toString()) {
+            needsMerge = true
+            // Merge session cart into customer cart
+            if (!cart) {
+              cart = new Cart({ customerId, items: [] })
             }
+            
+            for (const sessionItem of sessionCart.items) {
+              const existingItemIndex = cart.items.findIndex(
+                (item) => item.productId.toString() === sessionItem.productId.toString()
+              )
+              
+              if (existingItemIndex >= 0) {
+                // Update quantity
+                cart.items[existingItemIndex].quantity += sessionItem.quantity
+              } else {
+                // Add new item
+                cart.items.push({
+                  productId: sessionItem.productId,
+                  quantity: sessionItem.quantity,
+                  price: sessionItem.price,
+                })
+              }
+            }
+            
+            await cart.save()
+            // Delete session cart after successful merge
+            await Cart.deleteOne({ _id: sessionCart._id })
           }
-          
-          await cart.save()
-          // Delete session cart
-          await Cart.deleteOne({ _id: sessionCart._id })
         }
+      }
+      
+      // Repopulate cart after merge (or if no merge was needed)
+      if (cart) {
+        cart = await Cart.findById(cart._id).populate("items.productId", "name brand price images status stock")
       }
     } else if (sessionId) {
       // Find cart by session ID
@@ -141,6 +150,37 @@ router.post("/add", async (req, res) => {
       if (!cart) {
         cart = new Cart({ customerId, items: [] })
       }
+      
+      // If user has a session cart, merge it into customer cart
+      if (sessionId) {
+        const sessionCart = await Cart.findOne({ sessionId })
+        if (sessionCart && sessionCart.items.length > 0) {
+          // Only merge if session cart doesn't belong to this customer
+          if (!sessionCart.customerId || sessionCart.customerId.toString() !== customerId.toString()) {
+            // Merge all session cart items into customer cart
+            for (const sessionItem of sessionCart.items) {
+              const existingItemIndex = cart.items.findIndex(
+                (item) => item.productId.toString() === sessionItem.productId.toString()
+              )
+              
+              if (existingItemIndex >= 0) {
+                // Update quantity
+                cart.items[existingItemIndex].quantity += sessionItem.quantity
+              } else {
+                // Add new item
+                cart.items.push({
+                  productId: sessionItem.productId,
+                  quantity: sessionItem.quantity,
+                  price: sessionItem.price,
+                })
+              }
+            }
+            
+            // Delete session cart after merging
+            await Cart.deleteOne({ _id: sessionCart._id })
+          }
+        }
+      }
     } else {
       // For guest users, always require sessionId
       if (!sessionId) {
@@ -167,10 +207,10 @@ router.post("/add", async (req, res) => {
       })
     }
 
-    // Update customer ID if logged in
+    // Ensure customer ID is set for logged-in users
     if (customerId && !cart.customerId) {
       cart.customerId = customerId
-      // Clear sessionId when customer logs in
+      // Clear sessionId since cart is now associated with customer
       cart.sessionId = undefined
     }
 
