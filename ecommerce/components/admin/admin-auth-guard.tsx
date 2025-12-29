@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export function AdminAuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()

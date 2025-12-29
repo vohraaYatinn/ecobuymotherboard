@@ -25,7 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 // All Indian States and Union Territories
 const INDIAN_STATES = [

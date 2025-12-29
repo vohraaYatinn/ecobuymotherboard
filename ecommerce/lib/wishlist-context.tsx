@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface WishlistItem {
   _id: string

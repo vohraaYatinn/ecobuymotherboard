@@ -4,12 +4,12 @@
 
 export const API_URL = 
   typeof window !== 'undefined' 
-    ? (process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000")
-    : (process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000");
+    ? (process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com")
+    : (process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com");
 
 // For server-side rendering compatibility
 export const getApiUrl = () => {
-  return process.env.NEXT_PUBLIC_API_URL || "http://10.204.150.75:5000";
+  return process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com";
 };
 
 
