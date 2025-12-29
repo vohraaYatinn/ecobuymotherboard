@@ -94,26 +94,30 @@ if (process.env.NODE_ENV !== "production") {
   // Production: only allow specific origins
   app.use(cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl requests)
+      // allow server-to-server, mobile apps, cron, webhooks
       if (!origin) return callback(null, true)
-      
-      // Check if origin is in allowed list
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true)
-      } else if (
+  
+      // allow any subdomain of elecobuy.com
+      if (
+        origin.endsWith(".elecobuy.com") ||
         origin === "https://elecobuy.com" ||
-        origin === "https://www.elecobuy.com" ||
-        origin === "https://api.elecobuy.com"
+        origin === "https://www.elecobuy.com"
       ) {
-        callback(null, true)
-      } else {
-        callback(new Error("Not allowed by CORS"))
+        return callback(null, true)
       }
+  
+      console.error("Blocked by CORS:", origin)
+      return callback(new Error("Not allowed by CORS"))
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-session-id", "Accept"],
-    exposedHeaders: ["Content-Type", "Authorization"]
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "x-session-id",
+      "Accept"
+    ]
   }))
 }
 app.use(express.json())
