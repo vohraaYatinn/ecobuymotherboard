@@ -512,6 +512,10 @@ export default function OrdersPage() {
     }
   }
 
+  const shouldShowPayout = (status: string) => {
+    return ["processing", "shipped", "delivered"].includes(status)
+  }
+
   return (
     <div className="min-h-screen bg-background" style={{ paddingBottom: `calc(5rem + env(safe-area-inset-bottom, 0px))` }}>
       <div className="sticky top-0 z-10 border-b-2 border-border/50 bg-card/98 backdrop-blur-xl shadow-sm safe-top" style={{ paddingTop: `calc(1rem + env(safe-area-inset-top, 0px))` }}>
@@ -676,33 +680,35 @@ export default function OrdersPage() {
                   )}
 
                   {/* Payout & Payment */}
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                      <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                        <span className="flex items-center gap-1">
-                          <CreditCard className="h-4 w-4 text-primary" />
-                          You Will Receive
-                        </span>
-                        <span className="text-[11px] uppercase text-muted-foreground">
-                          {order.paymentStatus || "pending"}
-                        </span>
+                  {shouldShowPayout(order.status) && (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                        <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                          <span className="flex items-center gap-1">
+                            <CreditCard className="h-4 w-4 text-primary" />
+                            You Will Receive
+                          </span>
+                          <span className="text-[11px] uppercase text-muted-foreground">
+                            {order.paymentStatus || "pending"}
+                          </span>
+                        </div>
+                        <p className="text-lg font-bold text-foreground mt-1">{formatCurrency(payout.netPayout)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Payment: {order.paymentMethod?.toUpperCase() || "N/A"}{" "}
+                          {order.paymentTransactionId ? `• ${order.paymentTransactionId}` : ""}
+                        </p>
                       </div>
-                      <p className="text-lg font-bold text-foreground mt-1">{formatCurrency(payout.netPayout)}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Payment: {order.paymentMethod?.toUpperCase() || "N/A"}{" "}
-                        {order.paymentTransactionId ? `• ${order.paymentTransactionId}` : ""}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-                      <div className="flex items-center justify-between text-xs font-semibold text-foreground">
-                        <span className="flex items-center gap-1">
-                          <Wallet className="h-4 w-4 text-chart-3" />
-                          You Will Receive
-                        </span>
+                      <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                        <div className="flex items-center justify-between text-xs font-semibold text-foreground">
+                          <span className="flex items-center gap-1">
+                            <Wallet className="h-4 w-4 text-chart-3" />
+                            You Will Receive
+                          </span>
+                        </div>
+                        <p className="text-lg font-bold text-chart-3 mt-1">{formatCurrency(payout.netPayout)}</p>
                       </div>
-                      <p className="text-lg font-bold text-chart-3 mt-1">{formatCurrency(payout.netPayout)}</p>
                     </div>
-                  </div>
+                  )}
 
                   <div className="flex items-center justify-between pt-3 border-t border-border/50">
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">

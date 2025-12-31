@@ -264,6 +264,8 @@ export function AdminOrdersList() {
       const params = new URLSearchParams({
         page: page.toString(),
         limit: "10",
+        sortBy: "createdAt",
+        sortOrder: "desc",
         ...(search && { search }),
         ...(statusFilter !== "all" && { status: statusFilter }),
         ...(paymentMethodFilter !== "all" && { paymentMethod: paymentMethodFilter }),

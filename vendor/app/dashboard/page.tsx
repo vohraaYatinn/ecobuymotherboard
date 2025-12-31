@@ -16,8 +16,7 @@ interface DashboardStats {
     pending: number
     shipped: number
     delivered: number
-    revenue: number
-    avgOrderValue: number
+    totalEarned: number
     pendingAmount: number
     paidAmount: number
   }
@@ -262,11 +261,25 @@ export default function DashboardPage() {
 
   const dashboardStats = [
     {
+      title: "Total Amount Earned",
+      value: formatCurrency(stats.totals.totalEarned || 0),
+      change: "Delivered orders with closed return period",
+      trend: stats.totals.totalEarned > 0 ? "up" : "down",
+      href: "/orders?status=delivered",
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      ),
+      bgColor: "bg-chart-2/10",
+      iconColor: "text-chart-2",
+    },
+    {
       title: "Pending Amount",
       value: formatCurrency(stats.totals.pendingAmount || 0),
-      change: "Awaiting delivery/return window",
+      change: "Orders to be delivered or waiting for return period to over",
       trend: stats.totals.pendingAmount > 0 ? "up" : "down",
-      href: "/orders?status=processing",
+      href: "/orders?status=shipped",
       icon: (
         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -326,20 +339,6 @@ export default function DashboardPage() {
       ),
       bgColor: "bg-chart-5/10",
       iconColor: "text-chart-5",
-    },
-    {
-      title: "Avg. Value",
-      value: formatCurrency(stats.totals.avgOrderValue),
-      change: "per order",
-      trend: "up",
-      href: "/orders",
-      icon: (
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-        </svg>
-      ),
-      bgColor: "bg-chart-2/10",
-      iconColor: "text-chart-2",
     },
   ]
 

@@ -80,6 +80,7 @@ interface Order {
   shippingAddress: ShippingAddress
   paymentMethod: string
   paymentStatus: string
+  refundStatus?: "pending" | "processing" | "completed" | "failed" | null
   awbNumber?: string
   dtdcTrackingData?: any
   trackingLastUpdated?: string
@@ -98,6 +99,8 @@ interface TrackingStep {
   status: string
   date: string
   completed: boolean
+  isCancelled?: boolean
+  isRejected?: boolean
 }
 
 export function OrderDetailContent({ orderId }: { orderId: string }) {
@@ -196,16 +199,166 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
   const generateTrackingSteps = (order: Order): TrackingStep[] => {
     const steps: TrackingStep[] = []
-    const statusOrder = ["pending", "confirmed", "processing", "shipped", "delivered"]
-    const currentStatusIndex = statusOrder.indexOf(order.status.toLowerCase())
+    const orderStatus = order.status.toLowerCase()
 
-    const statusLabels: Record<string, string> = {
-      pending: "Order Placed",
-      confirmed: "Order Confirmed",
-      processing: "Processing",
-      shipped: "Shipped",
-      delivered: "Delivered",
+    // Handle cancelled orders
+    if (orderStatus === "cancelled") {
+      steps.push({
+        status: "Order Placed",
+        date: new Date(order.createdAt).toLocaleString("en-IN", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        completed: true,
+      })
+      steps.push({
+        status: "Cancelled",
+        date: new Date(order.updatedAt).toLocaleString("en-IN", {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        completed: true,
+        isCancelled: true,
+      })
+      return steps
     }
+
+    // Handle return flow
+    if (order.returnRequest && order.returnRequest.type) {
+      const returnType = order.returnRequest.type
+      const isReturnAccepted = returnType === "accepted" || orderStatus === "return_accepted"
+      const isReturnRejected = returnType === "denied" || orderStatus === "return_rejected"
+      const isReturnPickedUp = orderStatus === "return_picked_up"
+      const isRefunded = order.refundStatus === "completed" || 
+                        order.returnRequest.refundStatus === "completed" ||
+                        order.paymentStatus === "refunded"
+
+      // Show order progression up to delivered
+      const normalStatusOrder = ["pending", "confirmed", "processing", "shipped", "delivered"]
+      const deliveredIndex = normalStatusOrder.indexOf("delivered")
+      
+      normalStatusOrder.forEach((status, index) => {
+        steps.push({
+          status: status === "pending" ? "Order Placed" :
+                  status === "confirmed" ? "Order Confirmed" :
+                  status === "processing" ? "Processing" :
+                  status === "shipped" ? "Shipped" : "Delivered",
+          date: index === 0 
+            ? new Date(order.createdAt).toLocaleString("en-IN", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : index === deliveredIndex && order.deliveredAt
+            ? new Date(order.deliveredAt).toLocaleString("en-IN", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "Completed",
+          completed: true,
+        })
+      })
+
+      // Return Requested
+      steps.push({
+        status: "Return Requested",
+        date: order.returnRequest.requestedAt
+          ? new Date(order.returnRequest.requestedAt).toLocaleString("en-IN", {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "Pending",
+        completed: true,
+      })
+
+      // Return Accepted or Rejected
+      if (isReturnAccepted) {
+        steps.push({
+          status: "Return Accepted",
+          date: order.returnRequest.reviewedAt
+            ? new Date(order.returnRequest.reviewedAt).toLocaleString("en-IN", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "Pending",
+          completed: true,
+        })
+
+        // Return Pickup Pending (only if not picked up yet)
+        if (!isReturnPickedUp) {
+          steps.push({
+            status: "Return Pickup Pending",
+            date: "Pending",
+            completed: false,
+          })
+        } else {
+          // Picked Up
+          steps.push({
+            status: "Picked Up",
+            date: new Date(order.updatedAt).toLocaleString("en-IN", {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            completed: true,
+          })
+
+          // Refunded Successfully (only if refunded)
+          if (isRefunded) {
+            steps.push({
+              status: "Refunded Successfully",
+              date: "Completed",
+              completed: true,
+            })
+          } else {
+            steps.push({
+              status: "Refund Pending",
+              date: "In progress",
+              completed: false,
+            })
+          }
+        }
+      } else if (isReturnRejected) {
+        steps.push({
+          status: "Return Rejected",
+          date: order.returnRequest.reviewedAt
+            ? new Date(order.returnRequest.reviewedAt).toLocaleString("en-IN", {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "Pending",
+          completed: true,
+          isRejected: true,
+        })
+      } else {
+        // Return request is pending
+        steps.push({
+          status: "Return Under Review",
+          date: "Pending",
+          completed: false,
+        })
+      }
+
+      return steps
+    }
+
+    // Normal order flow (no cancellation, no return)
+    const statusOrder = ["pending", "confirmed", "processing", "shipped", "delivered"]
+    const currentStatusIndex = statusOrder.indexOf(orderStatus)
 
     statusOrder.forEach((status, index) => {
       const isCompleted = index <= currentStatusIndex
@@ -220,8 +373,8 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
             hour: "2-digit",
             minute: "2-digit",
           })
-        } else if (status === "delivered" && order.status.toLowerCase() === "delivered") {
-          date = new Date(order.updatedAt).toLocaleString("en-IN", {
+        } else if (status === "delivered" && orderStatus === "delivered" && order.deliveredAt) {
+          date = new Date(order.deliveredAt).toLocaleString("en-IN", {
             month: "short",
             day: "numeric",
             hour: "2-digit",
@@ -237,7 +390,10 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       }
 
       steps.push({
-        status: statusLabels[status] || status,
+        status: status === "pending" ? "Order Placed" :
+                status === "confirmed" ? "Order Confirmed" :
+                status === "processing" ? "Processing" :
+                status === "shipped" ? "Shipped" : "Delivered",
         date,
         completed: isCompleted,
       })
@@ -523,36 +679,60 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
             </CardHeader>
             <CardContent>
               <div className="relative space-y-6 sm:space-y-8">
-                {trackingSteps.map((track, idx) => (
-                  <div key={idx} className="relative flex gap-3 sm:gap-4">
-                    <div className="relative flex flex-col items-center">
-                      <div
-                        className={`flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full ${
-                          track.completed ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {track.completed ? (
-                          <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" />
-                        ) : (
-                          <div className="h-2 w-2 sm:h-3 sm:w-3 rounded-full bg-current" />
+                {trackingSteps.map((track, idx) => {
+                  const isCancelledStep = track.isCancelled
+                  const isRejectedStep = track.isRejected
+                  const iconColorClass = isCancelledStep || isRejectedStep 
+                    ? "bg-red-500 text-white" 
+                    : track.completed 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-muted text-muted-foreground"
+                  
+                  return (
+                    <div key={idx} className="relative flex gap-3 sm:gap-4">
+                      <div className="relative flex flex-col items-center">
+                        <div
+                          className={`flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-full ${iconColorClass}`}
+                        >
+                          {track.completed ? (
+                            isCancelledStep || isRejectedStep ? (
+                              <XCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" />
+                            )
+                          ) : (
+                            <div className="h-2 w-2 sm:h-3 sm:w-3 rounded-full bg-current" />
+                          )}
+                        </div>
+                        {idx < trackingSteps.length - 1 && (
+                          <div
+                            className={`absolute top-10 h-full w-0.5 ${
+                              isCancelledStep || isRejectedStep 
+                                ? "bg-red-500" 
+                                : track.completed 
+                                  ? "bg-primary" 
+                                  : "bg-muted"
+                            }`}
+                          />
                         )}
                       </div>
-                      {idx < trackingSteps.length - 1 && (
-                        <div
-                          className={`absolute top-10 h-full w-0.5 ${track.completed ? "bg-primary" : "bg-muted"}`}
-                        />
-                      )}
+                      <div className="flex-1 pb-6 sm:pb-8">
+                        <p
+                          className={`font-semibold text-sm sm:text-base ${
+                            isCancelledStep || isRejectedStep 
+                              ? "text-red-600 dark:text-red-400" 
+                              : track.completed 
+                                ? "" 
+                                : "text-muted-foreground"
+                          }`}
+                        >
+                          {track.status}
+                        </p>
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-1">{track.date}</p>
+                      </div>
                     </div>
-                    <div className="flex-1 pb-6 sm:pb-8">
-                      <p
-                        className={`font-semibold text-sm sm:text-base ${track.completed ? "" : "text-muted-foreground"}`}
-                      >
-                        {track.status}
-                      </p>
-                      <p className="text-xs sm:text-sm text-muted-foreground mt-1">{track.date}</p>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </CardContent>
           </Card>

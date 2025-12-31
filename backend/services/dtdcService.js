@@ -24,6 +24,9 @@ const DTDC_CONFIG = {
 
   // environment: "production" or "staging"
   environment: process.env.DTDC_ENVIRONMENT || "production",
+  
+  // Shipping Label API endpoint
+  labelDownload: "https://dtdcapi.shipsy.io/api/customer/integration/consignment/shippinglabel/stream",
 }
 
 // Simple auth token cache for tracking API
@@ -615,6 +618,103 @@ export function mapDtdcStatusToEnum(statusText) {
 
   // Default to pending if status is unclear
   return "pending"
+}
+
+/**
+ * Download shipping label for a consignment by AWB number
+ * @param {string} awbNumber - The AWB/reference number
+ * @param {string} labelCode - Label code (default: SHIP_LABEL_4X6)
+ * @returns {Promise<Buffer>} - PDF file buffer
+ */
+export async function downloadShippingLabel(awbNumber, labelCode = "SHIP_LABEL_4X6") {
+  if (!awbNumber || typeof awbNumber !== "string") {
+    throw new Error("AWB number is required")
+  }
+
+  const cleanAWB = awbNumber.trim().toUpperCase()
+  if (!/^[A-Z0-9]{9,12}$/.test(cleanAWB)) {
+    throw new Error(
+      "Invalid AWB number format. Expected 9-12 alphanumeric characters"
+    )
+  }
+
+  console.log(`🔵 [DTDC-LABEL] Downloading label for AWB: ${cleanAWB}`)
+  console.log(`🔵 [DTDC-LABEL] Label Code: ${labelCode}`)
+  console.log(`🔵 [DTDC-LABEL] API Key: ${DTDC_CONFIG.apiKey ? "***" + DTDC_CONFIG.apiKey.slice(-4) : "MISSING"}`)
+
+  const labelUrl = DTDC_CONFIG.labelDownload
+
+  try {
+    // Use GET method with query parameters as per DTDC API documentation
+    const response = await axios.get(labelUrl, {
+      params: {
+        reference_number: cleanAWB,
+        label_code: labelCode,
+        label_format: "pdf", // Request PDF format
+      },
+      headers: {
+        "api-key": DTDC_CONFIG.apiKey,
+        "Accept": "application/pdf",
+      },
+      responseType: "arraybuffer", // For PDF binary data
+      timeout: 30000,
+    })
+
+    if (response.status !== 200) {
+      throw new Error(`DTDC label download failed with status ${response.status}`)
+    }
+
+    const contentType = response.headers["content-type"] || ""
+    const dataLength = response.data?.length || 0
+    
+    console.log(`✅ [DTDC-LABEL] Success! Content-Type: ${contentType}, Size: ${dataLength} bytes`)
+
+    // Check if response is a PDF
+    if (contentType.includes("application/pdf") || dataLength > 100) {
+      return Buffer.from(response.data)
+    } else {
+      // Might be JSON error response (shouldn't happen with pdf format, but check anyway)
+      const textResponse = Buffer.from(response.data).toString("utf-8")
+      try {
+        const jsonResponse = JSON.parse(textResponse)
+        throw new Error(jsonResponse.message || jsonResponse.error || "Invalid response format from DTDC")
+      } catch {
+        throw new Error("Response is not a valid PDF")
+      }
+    }
+  } catch (error) {
+    const status = error?.response?.status
+    const data = error?.response?.data
+    let errorMessage = `DTDC label download failed (status ${status || "unknown"})`
+    
+    console.error(`❌ [DTDC-LABEL] Error:`, error.message)
+    
+    // Try to parse error response
+    if (data) {
+      try {
+        const textResponse = Buffer.from(data).toString("utf-8")
+        const jsonResponse = JSON.parse(textResponse)
+        errorMessage = jsonResponse.message || jsonResponse.error || jsonResponse.errorMessage || errorMessage
+        console.error(`❌ [DTDC-LABEL] Error details:`, jsonResponse)
+      } catch {
+        // If not JSON, might be text error
+        if (typeof data === "string") {
+          errorMessage = data
+        }
+      }
+    }
+    
+    // Handle specific status codes
+    if (status === 400) {
+      errorMessage = "Invalid request parameters. Please check AWB number and label code."
+    } else if (status === 401) {
+      errorMessage = "Authentication failed. Invalid or missing API key."
+    } else if (status === 404) {
+      errorMessage = `Consignment not found. AWB ${cleanAWB} may not exist in DTDC system.`
+    }
+    
+    throw new Error(errorMessage)
+  }
 }
 
 export { DTDC_CONFIG }

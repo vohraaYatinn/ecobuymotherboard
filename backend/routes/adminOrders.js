@@ -846,18 +846,23 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
 
     // Create notification for customer
     try {
+      const customerId = typeof order.customerId === "object" && order.customerId?._id 
+        ? order.customerId._id 
+        : order.customerId
+      
       await Notification.create({
-        userId: order.customerId._id,
+        userId: customerId,
         userType: "customer",
         type: "return_accepted",
         title: "Return Request Accepted",
         message: `Your return request for order ${order.orderNumber} has been accepted. Refund will be processed automatically once the return is picked up.`,
         orderId: order._id,
         orderNumber: order.orderNumber,
-        customerId: order.customerId._id,
+        customerId: customerId,
       })
+      console.log(`✅ [RETURN ACCEPT] Notification created for customer ${customerId}`)
     } catch (notifError) {
-      console.error("Error creating return accepted notification:", notifError)
+      console.error("❌ [RETURN ACCEPT] Error creating return accepted notification:", notifError)
     }
 
     res.status(200).json({
@@ -948,18 +953,23 @@ router.post("/:id/return/deny", verifyAdminToken, async (req, res) => {
 
     // Create notification for customer
     try {
+      const customerId = typeof order.customerId === "object" && order.customerId?._id 
+        ? order.customerId._id 
+        : order.customerId
+      
       await Notification.create({
-        userId: order.customerId._id,
+        userId: customerId,
         userType: "customer",
         type: "return_denied",
         title: "Return Request Denied",
         message: `Your return request for order ${order.orderNumber} has been denied. Reason: ${adminNotes.substring(0, 100)}${adminNotes.length > 100 ? "..." : ""}`,
         orderId: order._id,
         orderNumber: order.orderNumber,
-        customerId: order.customerId._id,
+        customerId: customerId,
       })
+      console.log(`✅ [RETURN DENY] Notification created for customer ${customerId}`)
     } catch (notifError) {
-      console.error("Error creating return denied notification:", notifError)
+      console.error("❌ [RETURN DENY] Error creating return denied notification:", notifError)
     }
 
     res.status(200).json({

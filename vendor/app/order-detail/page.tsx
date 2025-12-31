@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Loader2, AlertCircle, Check } from "lucide-react"
+import { Loader2, AlertCircle, Check, Download } from "lucide-react"
 import { BottomNav } from "@/components/bottom-nav"
 import { API_URL } from "@/lib/api-config"
 import { useNavigation } from "@/contexts/navigation-context"
 import { useNotificationSoundContext } from "@/contexts/notification-sound-context"
+import { Capacitor } from "@capacitor/core"
+import { Filesystem, Directory } from "@capacitor/filesystem"
 
 interface OrderItem {
   name: string
@@ -54,6 +55,7 @@ interface Order {
   status: string
   vendorId?: string | null
   assignmentMode?: string | null
+  awbNumber?: string | null
   createdAt: string
 }
 
@@ -64,8 +66,8 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [updatingStatus, setUpdatingStatus] = useState(false)
   const [accepting, setAccepting] = useState(false)
+  const [downloadingLabel, setDownloadingLabel] = useState(false)
   const [vendorCommission, setVendorCommission] = useState<number | null>(null)
 
   useEffect(() => {
@@ -177,50 +179,6 @@ export default function OrderDetailPage() {
     }
   }
 
-  const handleStatusUpdate = async (newStatus: string) => {
-    if (!order) return
-
-    try {
-      setUpdatingStatus(true)
-      const token = localStorage.getItem("vendorToken")
-      if (!token) {
-        router.push("/login")
-        return
-      }
-
-      const response = await fetch(`${API_URL}/api/vendor/orders/${order._id}/status`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status: newStatus }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok || !data.success) {
-        if (response.status === 401) {
-          localStorage.removeItem("vendorToken")
-          localStorage.removeItem("vendorData")
-          router.push("/login")
-          return
-        }
-        alert(data.message || "Failed to update status")
-        return
-      }
-
-      // Update local state
-      setOrder({ ...order, status: newStatus })
-      alert("Status updated successfully!")
-    } catch (err) {
-      console.error("Error updating status:", err)
-      alert("Network error. Please try again.")
-    } finally {
-      setUpdatingStatus(false)
-    }
-  }
-
   const getCustomerInfo = () => {
     if (!order) return { name: "N/A", mobile: "N/A", email: "N/A" }
     if (typeof order.customerId === "object" && order.customerId !== null) {
@@ -309,8 +267,122 @@ export default function OrderDetailPage() {
     }
   }
 
+  const shouldShowPayout = (status: string) => {
+    return ["processing", "shipped", "delivered"].includes(status)
+  }
+
+  const handleDownloadLabel = async () => {
+    if (!order || !order.awbNumber) {
+      alert("Order does not have an AWB number. Please create a shipment first.")
+      return
+    }
+
+    try {
+      setDownloadingLabel(true)
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendor/orders/${order._id}/label`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        alert(data.message || "Failed to download shipping label")
+        return
+      }
+
+      // Get the PDF blob
+      const blob = await response.blob()
+      const filename = `shipping-label-${order.orderNumber}-${order.awbNumber}.pdf`
+
+      // Check if running in Capacitor native app
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const platform = Capacitor.getPlatform()
+          
+          // Convert blob to base64 for Filesystem API
+          const reader = new FileReader()
+          reader.onloadend = async () => {
+            try {
+              const base64Data = (reader.result as string).split(",")[1] // Remove data:application/pdf;base64, prefix
+              
+              // Use Documents directory - works on both Android and iOS
+              // For PDF files, we write the base64 data directly
+              await Filesystem.writeFile({
+                path: filename,
+                data: base64Data,
+                directory: Directory.Documents,
+              })
+
+              const folderName = platform === "android" 
+                ? "Documents folder (accessible via file manager)" 
+                : "Documents folder (accessible via Files app)"
+              
+              alert(`Shipping label saved successfully!\n\nFile: ${filename}\nLocation: ${folderName}`)
+            } catch (filesystemError) {
+              console.error("Error saving file with Filesystem API:", filesystemError)
+              alert("Error saving file. Please check app permissions or try again.")
+            } finally {
+              setDownloadingLabel(false)
+            }
+          }
+          
+          reader.onerror = () => {
+            console.error("Error reading blob")
+            alert("Error processing file. Please try again.")
+            setDownloadingLabel(false)
+          }
+          
+          reader.readAsDataURL(blob)
+        } catch (error) {
+          console.error("Error in native download:", error)
+          
+          // Fallback: Try browser download method
+          try {
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement("a")
+            a.href = url
+            a.download = filename
+            document.body.appendChild(a)
+            a.click()
+            window.URL.revokeObjectURL(url)
+            document.body.removeChild(a)
+            alert("File download initiated")
+          } catch (fallbackError) {
+            console.error("Error with fallback download:", fallbackError)
+            alert("Unable to save file. Please check app permissions or try again.")
+          } finally {
+            setDownloadingLabel(false)
+          }
+        }
+      } else {
+        // Use browser download for web
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        setDownloadingLabel(false)
+      }
+    } catch (err) {
+      console.error("Error downloading label:", err)
+      alert("Network error. Please try again.")
+      setDownloadingLabel(false)
+    }
+  }
+
   const canAccept = order && !order.vendorId && (order.status === "pending" || order.status === "confirmed")
   const isAssigned = order && order.vendorId
+  const hasAWB = order && order.awbNumber
 
   if (loading) {
     return (
@@ -388,27 +460,6 @@ export default function OrderDetailPage() {
           </div>
         </div>
         <div className="px-4 pb-3 space-y-2">
-          {isAssigned && (
-            <div className="w-full">
-              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
-                Order Status
-              </label>
-              <Select
-                value={order.status}
-                onValueChange={handleStatusUpdate}
-                disabled={updatingStatus}
-              >
-                <SelectTrigger className="w-full h-10 bg-muted/50 border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {order.status === "processing" && <SelectItem value="shipped">Shipped</SelectItem>}
-                  {order.status === "shipped" && <SelectItem value="delivered">Delivered</SelectItem>}
-                  {order.status === "delivered" && <SelectItem value="delivered">Delivered</SelectItem>}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
           {canAccept && (
             <Button
               onClick={handleAccept}
@@ -424,6 +475,26 @@ export default function OrderDetailPage() {
                 <>
                   <Check className="mr-2 h-4 w-4" />
                   Accept Order
+                </>
+              )}
+            </Button>
+          )}
+          {hasAWB && (
+            <Button
+              onClick={handleDownloadLabel}
+              disabled={downloadingLabel}
+              variant="outline"
+              className="w-full h-10"
+            >
+              {downloadingLabel ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Downloading...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Shipping Label
                 </>
               )}
             </Button>
@@ -547,28 +618,30 @@ export default function OrderDetailPage() {
         </Card>
 
         {/* Order Summary */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <svg className="h-5 w-5 text-chart-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <h2 className="text-sm font-bold text-foreground">You Will Receive</h2>
+        {shouldShowPayout(order.status) && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <svg className="h-5 w-5 text-chart-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <h2 className="text-sm font-bold text-foreground">You Will Receive</h2>
+                </div>
+                {payout && (
+                  <span className="text-2xl font-bold text-chart-3">
+                    ₹{payout.netPayout.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                )}
               </div>
-              {payout && (
-                <span className="text-2xl font-bold text-chart-3">
-                  ₹{payout.netPayout.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <BottomNav />

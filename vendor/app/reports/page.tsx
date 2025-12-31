@@ -21,16 +21,30 @@ interface AnalyticsData {
   }
   revenueOverTime: Array<{ date: string; revenue: number }>
   ordersOverTime: Array<{ date: string; orders: number }>
+  ordersByStatusOverTime: Array<{
+    date: string
+    processing: number
+    shipped: number
+    delivered_return_open: number
+    delivered_return_over: number
+    cancelled: number
+    return_accepted: number
+  }>
   ordersByStatus: {
     processing: number
     shipped: number
-    delivered: number
+    delivered_return_open: number
+    delivered_return_over: number
     cancelled: number
+    return_accepted: number
   }
   revenueByStatus: {
     processing: number
     shipped: number
-    delivered: number
+    delivered_return_open: number
+    delivered_return_over: number
+    cancelled: number
+    return_accepted: number
   }
 }
 
@@ -116,10 +130,21 @@ export default function ReportsPage() {
   }
 
   const statusColors = {
-    processing: "#f59e0b", // chart-5 equivalent
-    shipped: "#3b82f6", // primary equivalent
-    delivered: "#10b981", // chart-3 equivalent
-    cancelled: "#ef4444", // destructive equivalent
+    processing: "#f59e0b", // Orange - Processing/Accepted
+    shipped: "#3b82f6", // Blue - Shipped/Packed
+    delivered_return_open: "#fbbf24", // Yellow - Delivered but return period open
+    delivered_return_over: "#10b981", // Green - Delivered return period over
+    cancelled: "#ef4444", // Red - Cancelled
+    return_accepted: "#8b5cf6", // Purple - Return accepted
+  }
+
+  const statusLabels = {
+    processing: "Processing/Accepted",
+    shipped: "Shipped/Packed",
+    delivered_return_open: "Delivered (Return Open)",
+    delivered_return_over: "Delivered (Return Over)",
+    cancelled: "Cancelled",
+    return_accepted: "Return Accepted",
   }
 
   if (loading) {
@@ -186,12 +211,14 @@ export default function ReportsPage() {
 
   if (!analytics) return null
 
-  // Prepare data for pie chart
+  // Prepare data for pie chart with all detailed statuses
   const statusData = [
-    { name: "Processing", value: analytics.ordersByStatus.processing, color: statusColors.processing },
-    { name: "Shipped", value: analytics.ordersByStatus.shipped, color: statusColors.shipped },
-    { name: "Delivered", value: analytics.ordersByStatus.delivered, color: statusColors.delivered },
-    { name: "Cancelled", value: analytics.ordersByStatus.cancelled, color: statusColors.cancelled },
+    { name: statusLabels.processing, value: analytics.ordersByStatus.processing, color: statusColors.processing, key: "processing" },
+    { name: statusLabels.shipped, value: analytics.ordersByStatus.shipped, color: statusColors.shipped, key: "shipped" },
+    { name: statusLabels.delivered_return_open, value: analytics.ordersByStatus.delivered_return_open, color: statusColors.delivered_return_open, key: "delivered_return_open" },
+    { name: statusLabels.delivered_return_over, value: analytics.ordersByStatus.delivered_return_over, color: statusColors.delivered_return_over, key: "delivered_return_over" },
+    { name: statusLabels.cancelled, value: analytics.ordersByStatus.cancelled, color: statusColors.cancelled, key: "cancelled" },
+    { name: statusLabels.return_accepted, value: analytics.ordersByStatus.return_accepted, color: statusColors.return_accepted, key: "return_accepted" },
   ].filter((item) => item.value > 0)
 
   return (
@@ -231,36 +258,68 @@ export default function ReportsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {/* Summary Stats */}
-        <div className="grid grid-cols-3 gap-3">
-          <Card className="border-2 border-border/50 bg-card shadow-md">
-            <CardContent className="p-3 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-chart-3/10 mx-auto mb-2">
-                <DollarSign className="h-5 w-5 text-chart-3" />
-              </div>
-              <p className="text-xs text-muted-foreground">Revenue</p>
-              <p className="mt-1 text-lg font-bold text-foreground">{formatCurrency(analytics.summary.totalRevenue)}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-2 border-border/50 bg-card shadow-md">
-            <CardContent className="p-3 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 mx-auto mb-2">
-                <ShoppingBag className="h-5 w-5 text-primary" />
-              </div>
-              <p className="text-xs text-muted-foreground">Orders</p>
-              <p className="mt-1 text-lg font-bold text-foreground">{analytics.summary.totalOrders}</p>
-            </CardContent>
-          </Card>
-          <Card className="border-2 border-border/50 bg-card shadow-md">
-            <CardContent className="p-3 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-chart-2/10 mx-auto mb-2">
-                <TrendingUp className="h-5 w-5 text-chart-2" />
-              </div>
-              <p className="text-xs text-muted-foreground">Avg. Value</p>
-              <p className="mt-1 text-lg font-bold text-foreground">{formatCurrency(analytics.summary.avgOrderValue)}</p>
-            </CardContent>
-          </Card>
-        </div>
+
+         {/* Revenue by Status - Detailed Cards */}
+         <div>
+           <h2 className="text-base font-bold mb-3 px-1">Revenue by Status</h2>
+           <div className="grid grid-cols-2 gap-3">
+             <Card className="border-2 border-border/50 bg-card shadow-md">
+               <CardContent className="p-4">
+                 <div className="flex items-center gap-2 mb-2">
+                   <div className="h-4 w-4 rounded-full" style={{ backgroundColor: statusColors.processing }} />
+                   <span className="text-xs font-medium text-muted-foreground">{statusLabels.processing}</span>
+                 </div>
+                 <p className="text-lg font-bold text-foreground">{formatCurrency(analytics.revenueByStatus.processing)}</p>
+               </CardContent>
+             </Card>
+             <Card className="border-2 border-border/50 bg-card shadow-md">
+               <CardContent className="p-4">
+                 <div className="flex items-center gap-2 mb-2">
+                   <div className="h-4 w-4 rounded-full" style={{ backgroundColor: statusColors.shipped }} />
+                   <span className="text-xs font-medium text-muted-foreground">{statusLabels.shipped}</span>
+                 </div>
+                 <p className="text-lg font-bold text-foreground">{formatCurrency(analytics.revenueByStatus.shipped)}</p>
+               </CardContent>
+             </Card>
+             <Card className="border-2 border-border/50 bg-card shadow-md">
+               <CardContent className="p-4">
+                 <div className="flex items-center gap-2 mb-2">
+                   <div className="h-4 w-4 rounded-full" style={{ backgroundColor: statusColors.delivered_return_open }} />
+                   <span className="text-xs font-medium text-muted-foreground">{statusLabels.delivered_return_open}</span>
+                 </div>
+                 <p className="text-lg font-bold text-foreground">{formatCurrency(analytics.revenueByStatus.delivered_return_open)}</p>
+               </CardContent>
+             </Card>
+             <Card className="border-2 border-chart-3/50 bg-card shadow-md" style={{ borderColor: statusColors.delivered_return_over }}>
+               <CardContent className="p-4">
+                 <div className="flex items-center gap-2 mb-2">
+                   <div className="h-4 w-4 rounded-full" style={{ backgroundColor: statusColors.delivered_return_over }} />
+                   <span className="text-xs font-medium text-muted-foreground">{statusLabels.delivered_return_over}</span>
+                 </div>
+                 <p className="text-lg font-bold text-chart-3">{formatCurrency(analytics.revenueByStatus.delivered_return_over)}</p>
+               </CardContent>
+             </Card>
+             <Card className="border-2 border-border/50 bg-card shadow-md">
+               <CardContent className="p-4">
+                 <div className="flex items-center gap-2 mb-2">
+                   <div className="h-4 w-4 rounded-full" style={{ backgroundColor: statusColors.cancelled }} />
+                   <span className="text-xs font-medium text-muted-foreground">{statusLabels.cancelled}</span>
+                 </div>
+                 <p className="text-lg font-bold text-foreground">{formatCurrency(analytics.revenueByStatus.cancelled)}</p>
+               </CardContent>
+             </Card>
+             <Card className="border-2 border-border/50 bg-card shadow-md">
+               <CardContent className="p-4">
+                 <div className="flex items-center gap-2 mb-2">
+                   <div className="h-4 w-4 rounded-full" style={{ backgroundColor: statusColors.return_accepted }} />
+                   <span className="text-xs font-medium text-muted-foreground">{statusLabels.return_accepted}</span>
+                 </div>
+                 <p className="text-lg font-bold text-foreground">{formatCurrency(analytics.revenueByStatus.return_accepted)}</p>
+               </CardContent>
+             </Card>
+           </div>
+         </div>
+  
 
         {/* Revenue Over Time */}
         <Card className="border-2 border-border/50 bg-card shadow-md">
@@ -306,38 +365,60 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        {/* Orders Over Time */}
+        {/* Orders Over Time - Stacked by Status */}
         <Card className="border-2 border-border/50 bg-card shadow-md">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-bold">Orders Over Time</CardTitle>
+            <CardTitle className="text-base font-bold">Orders Over Time (By Status)</CardTitle>
           </CardHeader>
           <CardContent>
-            {analytics.ordersOverTime.length === 0 ? (
+            {analytics.ordersByStatusOverTime && analytics.ordersByStatusOverTime.length === 0 ? (
               <div className="flex items-center justify-center h-48 text-muted-foreground">
                 <p className="text-sm">No data available for this period</p>
               </div>
             ) : (
-              <ChartContainer config={ordersConfig} className="h-[250px] w-full">
-                <BarChart data={analytics.ordersOverTime.map((item) => ({ ...item, date: formatDate(item.date) }))}>
+              <ChartContainer config={ordersConfig} className="h-[300px] w-full">
+                <BarChart 
+                  data={analytics.ordersByStatusOverTime?.map((item) => ({ ...item, date: formatDate(item.date) })) || []}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
                     stroke="hsl(var(--border))"
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
                   />
                   <YAxis
                     tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
                     stroke="hsl(var(--border))"
                   />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="orders" fill="oklch(0.7 0.15 250)" radius={[8, 8, 0, 0]} />
+                  <ChartTooltip 
+                    content={<ChartTooltipContent />}
+                    formatter={(value: any, name: string) => {
+                      const label = statusLabels[name as keyof typeof statusLabels] || name
+                      return [value, label]
+                    }}
+                  />
+                  <Legend 
+                    formatter={(value: string) => statusLabels[value as keyof typeof statusLabels] || value}
+                    wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }}
+                    iconType="square"
+                  />
+                  <Bar dataKey="processing" stackId="a" fill={statusColors.processing} />
+                  <Bar dataKey="shipped" stackId="a" fill={statusColors.shipped} />
+                  <Bar dataKey="delivered_return_open" stackId="a" fill={statusColors.delivered_return_open} />
+                  <Bar dataKey="delivered_return_over" stackId="a" fill={statusColors.delivered_return_over} />
+                  <Bar dataKey="cancelled" stackId="a" fill={statusColors.cancelled} />
+                  <Bar dataKey="return_accepted" stackId="a" fill={statusColors.return_accepted} />
                 </BarChart>
               </ChartContainer>
             )}
           </CardContent>
         </Card>
 
-        {/* Orders by Status */}
+        {/* Orders by Status - Detailed Breakdown */}
         <Card className="border-2 border-border/50 bg-card shadow-md">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-bold">Orders by Status</CardTitle>
@@ -356,7 +437,7 @@ export default function ReportsPage() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -365,15 +446,22 @@ export default function ReportsPage() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <ChartTooltip 
+                      content={<ChartTooltipContent />}
+                      formatter={(value: any, name: string) => [value, statusLabels[name as keyof typeof statusLabels] || name]}
+                    />
+                    <Legend 
+                      formatter={(value: string) => statusLabels[value as keyof typeof statusLabels] || value}
+                      wrapperStyle={{ fontSize: "11px" }}
+                    />
                   </PieChart>
                 </ChartContainer>
                 <div className="grid grid-cols-2 gap-2">
                   {statusData.map((item) => (
-                    <div key={item.name} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                    <div key={item.key} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
                       <div className="h-4 w-4 rounded-full" style={{ backgroundColor: item.color }} />
-                      <div className="flex-1">
-                        <p className="text-xs font-medium">{item.name}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{item.name}</p>
                         <p className="text-sm font-bold">{item.value} orders</p>
                       </div>
                     </div>
@@ -384,37 +472,6 @@ export default function ReportsPage() {
           </CardContent>
         </Card>
 
-        {/* Revenue by Status */}
-        <Card className="border-2 border-border/50 bg-card shadow-md">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-bold">Revenue by Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                <div className="flex items-center gap-3">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: statusColors.processing }} />
-                  <span className="text-sm font-medium">Processing</span>
-                </div>
-                <span className="text-sm font-bold">{formatCurrency(analytics.revenueByStatus.processing)}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                <div className="flex items-center gap-3">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: statusColors.shipped }} />
-                  <span className="text-sm font-medium">Shipped</span>
-                </div>
-                <span className="text-sm font-bold">{formatCurrency(analytics.revenueByStatus.shipped)}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                <div className="flex items-center gap-3">
-                  <div className="h-3 w-3 rounded-full" style={{ backgroundColor: statusColors.delivered }} />
-                  <span className="text-sm font-medium">Delivered</span>
-                </div>
-                <span className="text-sm font-bold text-chart-3">{formatCurrency(analytics.revenueByStatus.delivered)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <BottomNav />
