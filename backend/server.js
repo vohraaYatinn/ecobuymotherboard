@@ -97,6 +97,17 @@ if (process.env.NODE_ENV !== "production") {
       // allow server-to-server, mobile apps, cron, webhooks
       if (!origin) return callback(null, true)
   
+      // Allow Capacitor mobile app origins
+      if (
+        origin === "https://localhost" ||
+        origin === "capacitor://localhost" ||
+        origin === "ionic://localhost" ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("https://localhost:")
+      ) {
+        return callback(null, true)
+      }
+  
       // allow any subdomain of elecobuy.com
       if (
         origin.endsWith(".elecobuy.com") ||
