@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[49943,["/_next/static/chunks/b715adbb16e468ff.js","/_next/static/chunks/844f619a9dc4cf4e.js","/_next/static/chunks/fcd93bb410f75e15.js","/_next/static/chunks/99911c8ea1b5023b.js","/_next/static/chunks/bde12702487fa49a.js","/_next/static/chunks/983c145c2b076a19.js","/_next/static/chunks/277b947365bd285e.js","/_next/static/chunks/b1455e05dd94fc76.js"],"PolicyPageContent"]
+3:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/9abdca7b52f64683.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+0:{"buildId":"3a6wxEwQOJD0LSzmRC1lO","rsc":["$","$1","c",{"children":[["$","$L2",null,{"slug":"terms-and-conditions","fallbackTitle":"Terms and Conditions"}],[["$","script","script-0",{"src":"/_next/static/chunks/99911c8ea1b5023b.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/bde12702487fa49a.js","async":true}],["$","script","script-2",{"src":"/_next/static/chunks/983c145c2b076a19.js","async":true}],["$","script","script-3",{"src":"/_next/static/chunks/277b947365bd285e.js","async":true}],["$","script","script-4",{"src":"/_next/static/chunks/b1455e05dd94fc76.js","async":true}]],["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"loading":null,"isPartial":false}
+5:null

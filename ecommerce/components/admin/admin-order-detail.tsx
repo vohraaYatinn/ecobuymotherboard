@@ -232,7 +232,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
       const token = localStorage.getItem("adminToken")
       if (!token) return
 
-      const response = await fetch(`${API_URL}/api/admin/vendors?status=approved`, {
+      const response = await fetch(`${API_URL}/api/vendors?status=approved`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -913,7 +913,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                     </>
                   ) : (
                     <>
-                      <CheckCircle className="h-4 w-4 mr-2" />
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
                       Approve Return
                     </>
                   )}

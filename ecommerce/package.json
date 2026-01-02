@@ -3,10 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "NODE_ENV=production next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "start": "next start"
+    "start": "next start",
+    "cap:sync": "capacitor sync",
+    "cap:build": "next build && capacitor sync",
+    "cap:ios": "capacitor open ios",
+    "cap:android": "capacitor open android",
+    "cap:add": "capacitor add",
+    "android:build": "npm run build && npx cap sync android && cd android && ./gradlew clean assembleDebug",
+    "android:build:release": "npm run build && npx cap sync android && cd android && ./gradlew clean assembleRelease",
+    "android:install": "adb install -r android/app/build/outputs/apk/debug/app-debug.apk",
+    "android:run": "adb shell am start -n com.ecobuymotherboard.customer/.MainActivity",
+    "android:clean": "cd android && ./gradlew clean",
+    "android:logcat": "adb logcat | grep -i ecobuymotherboard\\|capacitor\\|error"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -58,9 +69,15 @@
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
-    "zod": "3.25.76"
+    "zod": "3.25.76",
+    "@capacitor/filesystem": "^7.1.6",
+    "@capacitor/push-notifications": "^7.0.3"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.4.4",
+    "@capacitor/cli": "^7.4.4",
+    "@capacitor/core": "^7.4.4",
+    "@capacitor/ios": "^7.4.4",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/node": "^22",
     "@types/react": "^19",

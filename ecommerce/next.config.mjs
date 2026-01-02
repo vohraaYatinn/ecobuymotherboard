@@ -3,9 +3,6 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  experimental: {
-    turbo: false,
-  },
   images: {
     unoptimized: true,
     remotePatterns: [
@@ -28,6 +25,10 @@ const nextConfig = {
       },
     ],
   },
+  // Only use static export for production builds (mobile app)
+  // Dev server works better without it
+  ...(process.env.NODE_ENV === 'production' ? { output: 'export' } : {}),
+  trailingSlash: true,
 }
 
 export default nextConfig

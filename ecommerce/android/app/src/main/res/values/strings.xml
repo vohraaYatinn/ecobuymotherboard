@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Elecobuy Customer</string>
+    <string name="title_activity_main">Elecobuy Customer</string>
+    <string name="package_name">com.ecobuymotherboard.customer</string>
+    <string name="custom_url_scheme">com.ecobuymotherboard.customer</string>
+</resources>

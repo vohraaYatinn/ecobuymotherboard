@@ -37,7 +37,6 @@ router.get("/", async (req, res) => {
         if (sessionCart && sessionCart.items.length > 0) {
           // Only merge if session cart doesn't belong to this customer (avoid merging own cart)
           if (!sessionCart.customerId || sessionCart.customerId.toString() !== customerId.toString()) {
-            needsMerge = true
             // Merge session cart into customer cart
             if (!cart) {
               cart = new Cart({ customerId, items: [] })
