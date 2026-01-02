@@ -25,9 +25,10 @@ const nextConfig = {
       },
     ],
   },
-  // Only use static export for production builds (mobile app)
-  // Dev server works better without it
-  ...(process.env.NODE_ENV === 'production' ? { output: 'export' } : {}),
+  // Only use static export when explicitly building for mobile app
+  // Use BUILD_FOR_MOBILE=true to enable static export
+  // This allows production server deployment without static export
+  ...(process.env.BUILD_FOR_MOBILE === 'true' ? { output: 'export' } : {}),
   trailingSlash: true,
 }
 
