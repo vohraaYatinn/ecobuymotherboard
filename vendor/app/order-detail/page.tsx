@@ -179,12 +179,24 @@ export default function OrderDetailPage() {
     }
   }
 
+  const maskPhoneNumber = (phone: string): string => {
+    if (!phone || phone === "N/A") return "N/A"
+    // Remove any non-digit characters (like country codes, spaces, etc.)
+    const digits = phone.replace(/\D/g, "")
+    if (digits.length === 0) return "N/A"
+    // Show first digit, mask the rest
+    const firstDigit = digits[0]
+    const masked = "x".repeat(Math.max(0, digits.length - 1))
+    return `${firstDigit}${masked}`
+  }
+
   const getCustomerInfo = () => {
     if (!order) return { name: "N/A", mobile: "N/A", email: "N/A" }
     if (typeof order.customerId === "object" && order.customerId !== null) {
+      const mobile = order.customerId.mobile || "N/A"
       return {
         name: order.customerId.name || "N/A",
-        mobile: order.customerId.mobile || "N/A",
+        mobile: maskPhoneNumber(mobile),
         email: order.customerId.email || "N/A",
       }
     }

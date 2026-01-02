@@ -19,9 +19,14 @@ const OTP_DEVELOPMENT = process.env.OTP_DEVELOPMENT === "true" || process.env.NO
 // Normalize mobile number
 const normalizeMobile = (mobile, countryCode = "91") => {
   let cleaned = mobile.replace(/\D/g, "")
-  if (cleaned.startsWith(countryCode)) {
+  
+  // Only strip country code if the number is longer than 10 digits
+  // This prevents stripping "91" from valid 10-digit numbers that start with 91
+  if (cleaned.length > 10 && cleaned.startsWith(countryCode)) {
     cleaned = cleaned.substring(countryCode.length)
   }
+  
+  // Validate: must be exactly 10 digits after processing
   if (cleaned.length === 10) {
     return `${countryCode}${cleaned}`
   }

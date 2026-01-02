@@ -115,11 +115,19 @@ export default function CustomerDetailPage() {
     })
   }
 
+  const maskPhoneNumber = (phone: string): string => {
+    if (!phone || phone === "N/A") return "N/A"
+    // Remove any non-digit characters (like country codes, spaces, etc.)
+    const digits = phone.replace(/\D/g, "")
+    if (digits.length === 0) return "N/A"
+    // Show first digit, mask the rest
+    const firstDigit = digits[0]
+    const masked = "x".repeat(Math.max(0, digits.length - 1))
+    return `${firstDigit}${masked}`
+  }
+
   const formatPhone = (mobile: string) => {
-    if (mobile.length === 12 && mobile.startsWith("91")) {
-      return `+91 ${mobile.slice(2, 7)} ${mobile.slice(7)}`
-    }
-    return mobile
+    return maskPhoneNumber(mobile)
   }
 
   const fetchVendorProfile = async () => {

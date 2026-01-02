@@ -48,16 +48,132 @@ interface AnalyticsData {
   }
 }
 
+interface Order {
+  subtotal?: number
+  total?: number
+  status?: string
+}
+
 export default function ReportsPage() {
   const router = useRouter()
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [period, setPeriod] = useState("30d")
+  const [vendorCommission, setVendorCommission] = useState<number | null>(null)
+  const [manualReturnAcceptedRevenue, setManualReturnAcceptedRevenue] = useState(0)
 
   useEffect(() => {
     fetchAnalytics()
   }, [period])
+
+  const toNumber = (value: any) => {
+    const num = Number(value)
+    return Number.isFinite(num) ? num : 0
+  }
+
+  const normalizeOrdersByStatus = (raw: any = {}) => ({
+    processing: toNumber(raw.processing ?? raw.processing_count),
+    shipped: toNumber(raw.shipped ?? raw.shipped_count),
+    delivered_return_open: toNumber(raw.delivered_return_open ?? raw.deliveredReturnOpen),
+    delivered_return_over: toNumber(raw.delivered_return_over ?? raw.deliveredReturnOver),
+    cancelled: toNumber(raw.cancelled ?? raw.cancelled_count),
+    return_accepted: toNumber(raw.return_accepted ?? raw.returnAccepted ?? raw.return_accepted_count ?? raw.returnAcceptedCount),
+  })
+
+  const normalizeRevenueByStatus = (raw: any = {}) => ({
+    processing: toNumber(raw.processing ?? raw.processing_amount),
+    shipped: toNumber(raw.shipped ?? raw.shipped_amount),
+    delivered_return_open: toNumber(raw.delivered_return_open ?? raw.deliveredReturnOpen),
+    delivered_return_over: toNumber(raw.delivered_return_over ?? raw.deliveredReturnOver),
+    cancelled: toNumber(raw.cancelled ?? raw.cancelled_amount),
+    return_accepted: toNumber(raw.return_accepted ?? raw.returnAccepted ?? raw.return_accepted_amount ?? raw.returnAcceptedAmount),
+  })
+
+  const normalizeOrdersByStatusOverTime = (list: any[] = []) =>
+    list.map((entry) => ({
+      date: entry.date,
+      processing: toNumber(entry.processing ?? entry.processing_count),
+      shipped: toNumber(entry.shipped ?? entry.shipped_count),
+      delivered_return_open: toNumber(entry.delivered_return_open ?? entry.deliveredReturnOpen),
+      delivered_return_over: toNumber(entry.delivered_return_over ?? entry.deliveredReturnOver),
+      cancelled: toNumber(entry.cancelled ?? entry.cancelled_count),
+      return_accepted: toNumber(entry.return_accepted ?? entry.returnAccepted ?? entry.return_accepted_count ?? entry.returnAcceptedCount),
+    }))
+
+  const normalizeOverTimeSeries = (list: any[] = [], valueKey: string) =>
+    list.map((entry) => ({
+      date: entry.date,
+      [valueKey]: toNumber(entry[valueKey]),
+    }))
+
+  const getCommissionRate = (commissionValue?: number | null) => {
+    if (typeof commissionValue === "number") return commissionValue
+    return 0
+  }
+
+  const calculateNetPayout = (order: Order, commissionValue?: number | null) => {
+    const PAYMENT_GATEWAY_RATE = 2
+    const commissionRate = getCommissionRate(commissionValue)
+    const productTotal = toNumber(typeof order.subtotal === "number" ? order.subtotal : order.total)
+    const commissionAmount = Math.max(0, (commissionRate / 100) * productTotal)
+    const payoutBeforeGateway = Math.max(productTotal - commissionAmount, 0)
+    const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * payoutBeforeGateway)
+    const netPayout = Math.max(payoutBeforeGateway - gatewayFees, 0)
+    return netPayout
+  }
+
+  const fetchVendorProfile = async (token: string) => {
+    try {
+      const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        const commissionValue = data.data?.vendor?.commission
+        if (typeof commissionValue === "number") {
+          setVendorCommission(commissionValue)
+          return commissionValue
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching vendor profile:", err)
+    }
+    setVendorCommission(null)
+    return null
+  }
+
+  const fetchReturnAcceptedRevenue = async (token: string, commissionValue?: number | null) => {
+    try {
+      const params = new URLSearchParams({
+        status: "return_accepted",
+        page: "1",
+        limit: "200",
+      })
+
+      const response = await fetch(`${API_URL}/api/vendor/orders?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        return 0
+      }
+
+      const orders: Order[] = data.data || []
+      const total = orders.reduce((sum, order) => sum + calculateNetPayout(order, commissionValue), 0)
+      return total
+    } catch (err) {
+      console.error("Error fetching return accepted revenue:", err)
+      return 0
+    }
+  }
 
   const fetchAnalytics = async () => {
     try {
@@ -68,6 +184,10 @@ export default function ReportsPage() {
         router.push("/login")
         return
       }
+
+      // Get commission first for accurate payout calculation
+      const commissionValue = await fetchVendorProfile(token)
+      const returnAcceptedRevenue = await fetchReturnAcceptedRevenue(token, commissionValue)
 
       const response = await fetch(`${API_URL}/api/vendor/orders/analytics?period=${period}`, {
         headers: {
@@ -88,7 +208,32 @@ export default function ReportsPage() {
         return
       }
 
-      setAnalytics(data.data)
+      const normalizedRevenueByStatus = normalizeRevenueByStatus(data.data?.revenueByStatus)
+      const normalizedOrdersByStatus = normalizeOrdersByStatus(data.data?.ordersByStatus)
+      const normalizedOrdersByStatusOverTime = normalizeOrdersByStatusOverTime(data.data?.ordersByStatusOverTime)
+      const normalizedRevenueOverTime = normalizeOverTimeSeries(data.data?.revenueOverTime, "revenue")
+      const normalizedOrdersOverTime = normalizeOverTimeSeries(data.data?.ordersOverTime, "orders")
+
+      const mergedRevenueByStatus = {
+        ...normalizedRevenueByStatus,
+        return_accepted: Math.max(normalizedRevenueByStatus.return_accepted, returnAcceptedRevenue),
+      }
+
+      setManualReturnAcceptedRevenue(returnAcceptedRevenue)
+
+      setAnalytics({
+        period: data.data?.period ?? period,
+        summary: {
+          totalRevenue: toNumber(data.data?.summary?.totalRevenue),
+          totalOrders: toNumber(data.data?.summary?.totalOrders),
+          avgOrderValue: toNumber(data.data?.summary?.avgOrderValue),
+        },
+        revenueOverTime: normalizedRevenueOverTime,
+        ordersOverTime: normalizedOrdersOverTime,
+        ordersByStatusOverTime: normalizedOrdersByStatusOverTime,
+        ordersByStatus: normalizedOrdersByStatus,
+        revenueByStatus: mergedRevenueByStatus,
+      })
     } catch (err) {
       console.error("Error fetching analytics:", err)
       setError("Network error. Please try again.")

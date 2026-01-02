@@ -13,6 +13,7 @@ interface OrderItem {
   name: string
   quantity: number
   price: number
+  image?: string
   productId?: {
     _id: string
     name: string
@@ -155,9 +156,9 @@ export default function AcceptOrdersPage() {
       const order = orders.find((o) => o._id === orderId)
       const customer = order ? getCustomerInfo(order, true) : null
       
-      // Show confirmation with full phone number
+      // Show confirmation with masked phone number
       const confirmMessage = customer && customer.fullMobile !== "N/A"
-        ? `Accept this order?\n\nCustomer Phone: ${customer.fullMobile}\n\nClick OK to confirm.`
+        ? `Accept this order?\n\nCustomer Phone: ${maskPhoneNumber(customer.fullMobile)}\n\nClick OK to confirm.`
         : "Accept this order?"
       
       if (!confirm(confirmMessage)) {
@@ -213,9 +214,9 @@ export default function AcceptOrdersPage() {
         return updated
       })
       
-      // Show success message with phone number
+      // Show success message with masked phone number
       const successMessage = customer && customer.fullMobile !== "N/A"
-        ? `Order accepted successfully!\n\nCustomer Phone: ${customer.fullMobile}`
+        ? `Order accepted successfully!\n\nCustomer Phone: ${maskPhoneNumber(customer.fullMobile)}`
         : "Order accepted successfully!"
       alert(successMessage)
     } catch (err) {
@@ -327,6 +328,22 @@ export default function AcceptOrdersPage() {
       ...prev,
       [orderId]: !prev[orderId],
     }))
+  }
+
+  // Prefer item.image, then first product image; build absolute URL when needed
+  const getItemImageUrl = (item: OrderItem) => {
+    let imagePath: string | null = null
+
+    if (item.image) {
+      imagePath = item.image
+    } else if (item.productId?.images && item.productId.images.length > 0) {
+      imagePath = item.productId.images[0] || null
+    }
+
+    if (!imagePath) return null
+    if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) return imagePath
+    if (imagePath.startsWith("/")) return `${API_URL}${imagePath}`
+    return `${API_URL}/uploads/${imagePath}`
   }
 
   if (loading) {
@@ -521,10 +538,46 @@ export default function AcceptOrdersPage() {
                         {order.items.map((item, idx) => (
                           <div
                             key={idx}
-                            className="flex items-center justify-between p-2 rounded-md bg-background/50 border border-border/30"
+                            className="flex items-center gap-3 p-2 rounded-md bg-background/50 border border-border/30"
                           >
-                            <span className="text-xs text-foreground">{item.name}</span>
-                            <span className="text-xs font-semibold text-primary">Qty: {item.quantity}</span>
+                            {(() => {
+                              const imageUrl = getItemImageUrl(item)
+                              return (
+                                <div className="relative h-12 w-12 flex-shrink-0">
+                                  {imageUrl ? (
+                                    <img
+                                      src={imageUrl}
+                                      alt={item.name}
+                                      className="h-12 w-12 rounded-md object-cover bg-muted"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = "none"
+                                        const placeholder = e.currentTarget.nextElementSibling as HTMLElement
+                                        if (placeholder) placeholder.style.display = "flex"
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div className={`h-12 w-12 rounded-md bg-muted flex items-center justify-center absolute inset-0 ${imageUrl ? "hidden" : "flex"}`}>
+                                    <svg
+                                      className="h-6 w-6 text-muted-foreground"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                                      />
+                                    </svg>
+                                  </div>
+                                </div>
+                              )
+                            })()}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-foreground truncate">{item.name}</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">Qty: {item.quantity}</p>
+                            </div>
                           </div>
                         ))}
                       </div>
