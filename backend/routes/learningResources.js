@@ -104,13 +104,25 @@ router.post(
   "/upload",
   verifyAdminToken,
   (req, res, next) => {
+    // Log incoming request details for VPS debugging
+    console.log(`📥 [LEARNING RESOURCES] Incoming upload request:`, {
+      method: req.method,
+      url: req.url,
+      contentType: req.headers['content-type'],
+      contentLength: req.headers['content-length'],
+      userAgent: req.headers['user-agent'],
+      origin: req.headers['origin'],
+      host: req.headers['host'],
+      ip: req.ip || req.connection.remoteAddress,
+    })
+
     // Set a longer timeout for file uploads (5 minutes)
     req.setTimeout(5 * 60 * 1000, () => {
       console.error("❌ [LEARNING RESOURCES] Request timeout")
       if (!res.headersSent) {
         res.status(408).json({
           success: false,
-          message: "Upload timeout. The file may be too large or your connection is slow. Please try again.",
+          message: "Upload timeout. The file may be too large or your connection is slow. If on VPS, check Nginx timeout settings.",
         })
       }
     })
@@ -128,6 +140,8 @@ router.post(
           message: `File size (${sizeMB} MB) exceeds the 500MB limit. Please upload a smaller file.`,
         })
       }
+    } else {
+      console.warn("⚠️ [LEARNING RESOURCES] No content-length header - chunked transfer or missing header")
     }
 
     console.log(`📤 [LEARNING RESOURCES] Starting file upload processing...`)
@@ -171,13 +185,9 @@ router.post(
   },
   async (req, res) => {
     try {
-      // Check if request was too large (before multer processing)
-      if (req.headers['content-length'] && parseInt(req.headers['content-length']) > 500 * 1024 * 1024) {
-        return res.status(413).json({
-          success: false,
-          message: "File size exceeds 500MB limit. Please upload a smaller file.",
-        })
-      }
+      // Note: If we reach here, the request passed Nginx
+      // 413 errors from Nginx won't reach this code - they're blocked at the proxy level
+      // If you see 413, check Nginx client_max_body_size setting
 
       if (!req.file) {
         // Check if it's a size limit issue

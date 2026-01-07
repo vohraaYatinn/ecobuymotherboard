@@ -174,6 +174,23 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", message: "Server is running" })
 })
 
+// Health check endpoint for file upload testing
+app.get("/api/health/upload", (req, res) => {
+  res.json({ 
+    status: "OK", 
+    message: "Upload endpoint is accessible",
+    limits: {
+      maxFileSize: "500MB",
+      allowedTypes: ["PDF", "AVI", "MP4", "MOV", "ZIP", "AVIF"],
+      timeout: "5 minutes"
+    },
+    server: {
+      nodeEnv: process.env.NODE_ENV || "development",
+      timestamp: new Date().toISOString()
+    }
+  })
+})
+
 // Start server - bind to 0.0.0.0 to allow network access
 const HOST = process.env.HOST || "0.0.0.0"
 app.listen(PORT, HOST, () => {

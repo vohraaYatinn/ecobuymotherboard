@@ -194,6 +194,25 @@ export function AdminLearningResources() {
         headers: Object.fromEntries(response.headers.entries()),
       })
 
+      // Handle 413 error specifically (Nginx blocking request)
+      if (response.status === 413) {
+        const errorText = await response.text().catch(() => "")
+        console.error("❌ [LEARNING RESOURCES] 413 Request Entity Too Large")
+        console.error("❌ [LEARNING RESOURCES] This means Nginx is blocking the request before it reaches Node.js")
+        console.error("❌ [LEARNING RESOURCES] Response:", errorText)
+        
+        alert(
+          "413 Error: File size is too large.\n\n" +
+          "This is an Nginx configuration issue on the VPS.\n\n" +
+          "The server administrator needs to:\n" +
+          "1. Edit Nginx config: /etc/nginx/sites-available/api.elecobuy.com\n" +
+          "2. Add: client_max_body_size 500M;\n" +
+          "3. Reload: sudo systemctl reload nginx\n\n" +
+          "See: backend/NGINX_413_FIX.md for complete instructions"
+        )
+        return
+      }
+
       let data
       try {
         const text = await response.text()
@@ -208,9 +227,7 @@ export function AdminLearningResources() {
         console.error("❌ [LEARNING RESOURCES] Response statusText:", response.statusText)
         
         let errorMessage = "Invalid response from server. Please try again."
-        if (response.status === 413) {
-          errorMessage = "File size is too large. Maximum file size is 500MB."
-        } else if (response.status === 401) {
+        if (response.status === 401) {
           errorMessage = "Authentication failed. Please log in again."
           router.push("/admin-login")
         } else if (response.status === 0) {
@@ -249,12 +266,19 @@ export function AdminLearningResources() {
       
       let errorMessage = "Network error. Please check your connection and try again."
       if (err instanceof TypeError && err.message.includes("fetch")) {
-        errorMessage = "Failed to connect to server. Please check your internet connection and try again."
+        // Check if it's a network error or CORS issue
+        if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+          errorMessage = "Failed to connect to server. This might be a CORS issue or server configuration problem. Please contact the administrator."
+        } else {
+          errorMessage = "Failed to connect to server. Please check your internet connection and try again."
+        }
       } else if (err instanceof Error) {
         if (err.message.includes("timeout") || err.message.includes("TIMEOUT")) {
-          errorMessage = "Upload timeout. The file may be too large or your connection is slow. Please try again."
+          errorMessage = "Upload timeout. The file may be too large or your connection is slow. If this happens on VPS, check Nginx timeout settings."
         } else if (err.message.includes("CORS") || err.message.includes("cors")) {
-          errorMessage = "CORS error. Please contact the administrator."
+          errorMessage = "CORS error. Please contact the administrator to check server CORS configuration."
+        } else if (err.message.includes("413") || err.message.includes("Request Entity Too Large")) {
+          errorMessage = "File is too large. If this happens on VPS, the Nginx 'client_max_body_size' setting may need to be increased."
         } else {
           errorMessage = `Error: ${err.message}`
         }
