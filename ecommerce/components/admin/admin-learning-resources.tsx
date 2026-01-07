@@ -170,28 +170,66 @@ export function AdminLearningResources() {
       uploadFormData.append("description", formData.description)
       uploadFormData.append("type", formData.type)
 
+      console.log("📤 [LEARNING RESOURCES] Starting upload:", {
+        title: formData.title,
+        type: formData.type,
+        fileName: formData.file?.name,
+        fileSize: formData.file ? `${(formData.file.size / 1024 / 1024).toFixed(2)} MB` : "N/A",
+        apiUrl: `${API_URL}/api/learning-resources/upload`,
+      })
+
       const response = await fetch(`${API_URL}/api/learning-resources/upload`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
+          // Don't set Content-Type - browser will set it automatically with boundary for FormData
         },
         body: uploadFormData,
       })
 
+      console.log("📥 [LEARNING RESOURCES] Response received:", {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries()),
+      })
+
       let data
       try {
-        data = await response.json()
+        const text = await response.text()
+        console.log("📥 [LEARNING RESOURCES] Response text:", text)
+        if (!text) {
+          throw new Error("Empty response from server")
+        }
+        data = JSON.parse(text)
       } catch (parseError) {
-        console.error("Error parsing response:", parseError)
-        alert("Invalid response from server. Please try again.")
+        console.error("❌ [LEARNING RESOURCES] Error parsing response:", parseError)
+        console.error("❌ [LEARNING RESOURCES] Response status:", response.status)
+        console.error("❌ [LEARNING RESOURCES] Response statusText:", response.statusText)
+        
+        let errorMessage = "Invalid response from server. Please try again."
+        if (response.status === 413) {
+          errorMessage = "File size is too large. Maximum file size is 500MB."
+        } else if (response.status === 401) {
+          errorMessage = "Authentication failed. Please log in again."
+          router.push("/admin-login")
+        } else if (response.status === 0) {
+          errorMessage = "Network error. Please check your connection or CORS settings."
+        } else if (response.status >= 500) {
+          errorMessage = "Server error. Please try again later."
+        }
+        
+        alert(errorMessage)
         return
       }
 
       if (!response.ok || !data.success) {
+        console.error("❌ [LEARNING RESOURCES] Upload failed:", data)
         alert(data.message || "Error uploading resource. Please try again.")
         return
       }
 
+      console.log("✅ [LEARNING RESOURCES] Upload successful:", data)
       alert("Resource uploaded successfully!")
       setIsUploadDialogOpen(false)
       setFormData({
@@ -202,8 +240,27 @@ export function AdminLearningResources() {
       })
       fetchResources()
     } catch (err) {
-      console.error("Error uploading resource:", err)
-      alert("Network error. Please check your connection and try again.")
+      console.error("❌ [LEARNING RESOURCES] Error uploading resource:", err)
+      console.error("❌ [LEARNING RESOURCES] Error details:", {
+        name: err instanceof Error ? err.name : "Unknown",
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      })
+      
+      let errorMessage = "Network error. Please check your connection and try again."
+      if (err instanceof TypeError && err.message.includes("fetch")) {
+        errorMessage = "Failed to connect to server. Please check your internet connection and try again."
+      } else if (err instanceof Error) {
+        if (err.message.includes("timeout") || err.message.includes("TIMEOUT")) {
+          errorMessage = "Upload timeout. The file may be too large or your connection is slow. Please try again."
+        } else if (err.message.includes("CORS") || err.message.includes("cors")) {
+          errorMessage = "CORS error. Please contact the administrator."
+        } else {
+          errorMessage = `Error: ${err.message}`
+        }
+      }
+      
+      alert(errorMessage)
     } finally {
       setUploading(false)
     }

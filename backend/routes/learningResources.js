@@ -104,6 +104,17 @@ router.post(
   "/upload",
   verifyAdminToken,
   (req, res, next) => {
+    // Set a longer timeout for file uploads (5 minutes)
+    req.setTimeout(5 * 60 * 1000, () => {
+      console.error("❌ [LEARNING RESOURCES] Request timeout")
+      if (!res.headersSent) {
+        res.status(408).json({
+          success: false,
+          message: "Upload timeout. The file may be too large or your connection is slow. Please try again.",
+        })
+      }
+    })
+
     // Log request size for debugging
     if (req.headers['content-length']) {
       const contentLength = parseInt(req.headers['content-length'])
@@ -118,6 +129,8 @@ router.post(
         })
       }
     }
+
+    console.log(`📤 [LEARNING RESOURCES] Starting file upload processing...`)
 
     learningUpload.single("file")(req, res, (err) => {
       if (err) {
