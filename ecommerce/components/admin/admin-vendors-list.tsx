@@ -89,9 +89,6 @@ export function AdminVendorsList() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedVendors, setSelectedVendors] = useState<string[]>([])
-  const [isCommissionDialogOpen, setIsCommissionDialogOpen] = useState(false)
-  const [commissionValue, setCommissionValue] = useState("")
-  const [updatingCommission, setUpdatingCommission] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -154,10 +151,6 @@ export function AdminVendorsList() {
     }
   }
 
-  const handleOpenCommissionDialog = () => {
-    setIsCommissionDialogOpen(true)
-  }
-
   const handleOpenDeleteDialog = () => {
     if (selectedVendors.length === 0) {
       toast({
@@ -168,90 +161,6 @@ export function AdminVendorsList() {
       return
     }
     setIsDeleteDialogOpen(true)
-  }
-
-  const handleUpdateCommission = async () => {
-    if (!commissionValue || isNaN(parseFloat(commissionValue))) {
-      toast({
-        title: "Invalid commission",
-        description: "Please enter a valid commission percentage (0-100).",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const commission = parseFloat(commissionValue)
-    if (commission < 0 || commission > 100) {
-      toast({
-        title: "Invalid commission",
-        description: "Commission must be between 0 and 100.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      setUpdatingCommission(true)
-      const token = localStorage.getItem("adminToken")
-      if (!token) {
-        toast({
-          title: "Authentication required",
-          description: "Please log in again.",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const response = await fetch(`${API_URL}/api/vendors/update-commissions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          // Apply commission to all vendors currently in the list (respecting filters)
-          vendorIds: vendors.map((v) => v._id),
-          commission: commission,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        toast({
-          title: "Commission updated",
-          description: `Commission set to ${commission}% for ${data.data.updatedCount} vendor(s).`,
-        })
-        setIsCommissionDialogOpen(false)
-        setCommissionValue("")
-        setSelectedVendors([])
-        // Refresh vendors list
-        const params = new URLSearchParams()
-        if (search) params.append("search", search)
-        if (statusFilter && statusFilter !== "all") params.append("status", statusFilter)
-        params.append("limit", "50")
-        const refreshResponse = await fetch(`${API_URL}/api/vendors?${params.toString()}`)
-        const refreshData = await refreshResponse.json()
-        if (refreshData.success) {
-          setVendors(refreshData.data)
-        }
-      } else {
-        toast({
-          title: "Failed to update commission",
-          description: data.message || "An error occurred.",
-          variant: "destructive",
-        })
-      }
-    } catch (err) {
-      console.error("Error updating commission:", err)
-      toast({
-        title: "Error",
-        description: "Failed to update commission. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setUpdatingCommission(false)
-    }
   }
 
   const handleExportVendors = async () => {
@@ -447,15 +356,6 @@ export function AdminVendorsList() {
           </div>
           <div className="flex gap-2">
             <Button
-              variant="outline"
-              onClick={handleOpenCommissionDialog}
-              disabled={vendors.length === 0}
-              className="gap-2"
-            >
-              <Percent className="h-4 w-4" />
-              Assign Commission
-            </Button>
-            <Button
               variant="destructive"
               onClick={handleOpenDeleteDialog}
               disabled={selectedVendors.length === 0}
@@ -619,59 +519,6 @@ export function AdminVendorsList() {
           )}
         </>
       )}
-
-      {/* Commission Assignment Dialog */}
-      <Dialog open={isCommissionDialogOpen} onOpenChange={setIsCommissionDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Assign Commission</DialogTitle>
-            <DialogDescription>
-              Set a commission percentage that will apply to all vendors in the current list (after filters). Commission
-              must be between 0 and 100.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="commission">Commission Percentage (%)</Label>
-              <Input
-                id="commission"
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                placeholder="Enter commission percentage (0-100)"
-                value={commissionValue}
-                onChange={(e) => setCommissionValue(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Enter a value between 0 and 100. This will be applied to all vendors currently visible in the list.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsCommissionDialogOpen(false)
-                setCommissionValue("")
-              }}
-              disabled={updatingCommission}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleUpdateCommission} disabled={updatingCommission}>
-              {updatingCommission ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                "Update Commission"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

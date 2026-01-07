@@ -19,6 +19,7 @@ interface DashboardStats {
     totalEarned: number
     pendingAmount: number
     paidAmount: number
+    balanceAmount: number
   }
   recentOrders: Array<{
     _id: string
@@ -297,6 +298,20 @@ export default function DashboardPage() {
       ),
       bgColor: "bg-chart-3/10",
       iconColor: "text-chart-3",
+    },
+    {
+      title: "Balance Left",
+      value: formatCurrency(stats.totals.balanceAmount || 0),
+      change: "Remaining to be paid",
+      trend: stats.totals.balanceAmount > 0 ? "up" : "down",
+      href: "/orders",
+      icon: (
+        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+      ),
+      bgColor: "bg-chart-1/10",
+      iconColor: "text-chart-1",
     },
     {
       title: "Total Orders",

@@ -5,7 +5,7 @@ import CustomerAddress from "../models/CustomerAddress.js"
 
 // Company information (can be moved to environment variables or database)
 const COMPANY_INFO = {
-  name: "elecobuy",
+  name: "Elecobuy",
   address: "H N O 3-122/6, Chengicherla Road, Besides Growel Feed Supplements and Mineral Mixtures, Boudha Nagar, Hyderabad, Medchal Malkajgiri, Telangana, 500098",
   city: "Hyderabad",
   state: "Telangana",

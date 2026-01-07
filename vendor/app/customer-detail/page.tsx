@@ -12,6 +12,7 @@ import { useNavigation } from "@/contexts/navigation-context"
 interface RecentOrder {
   _id: string
   orderNumber: string
+  subtotal?: number
   total: number
   status: string
   paymentStatus: string
@@ -164,9 +165,9 @@ export default function CustomerDetailPage() {
   const getPayoutBreakdown = (order: RecentOrder) => {
     const PAYMENT_GATEWAY_RATE = 2
     const commissionRate = getCommissionRate()
-    // For customer detail orders, we need to estimate subtotal from total
-    // Since we don't have subtotal, we'll use total as an approximation
-    const productTotal = order.total // This is an approximation
+    // Use subtotal (product cost) if available, otherwise fall back to total
+    // subtotal is the correct product cost before taxes, shipping, etc.
+    const productTotal = typeof order.subtotal === "number" ? order.subtotal : order.total
     const commissionAmount = Math.max(0, (commissionRate / 100) * productTotal)
     const payoutBeforeGateway = Math.max(productTotal - commissionAmount, 0)
     const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * payoutBeforeGateway)
@@ -446,53 +447,6 @@ export default function CustomerDetailPage() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-3 pt-2">
-          <Button
-            variant="outline"
-            className="w-full bg-transparent"
-            onClick={() => (window.location.href = `tel:${customer.mobile}`)}
-          >
-            <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-              />
-            </svg>
-            Call Customer
-          </Button>
-          {customer.email ? (
-            <Button
-              className="w-full bg-primary hover:bg-primary/90"
-              onClick={() => (window.location.href = `mailto:${customer.email}`)}
-            >
-              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                />
-              </svg>
-              Send Email
-            </Button>
-          ) : (
-            <Button className="w-full bg-primary/50 hover:bg-primary/70" disabled>
-              <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                />
-              </svg>
-              No Email
-            </Button>
-          )}
-        </div>
       </div>
     </div>
   )

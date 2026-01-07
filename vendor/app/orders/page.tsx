@@ -343,14 +343,9 @@ export default function OrdersPage() {
       const headers = [
         "Order Number",
         "Status",
-        "Payment Status",
         "Payment Method",
         "Transaction ID",
-        "Product Total",
-        "Commission %",
-        "Commission Amount",
-        "Gateway Fees",
-        "Net Payout",
+        "Order Amount",
         "Delivered / Updated",
       ]
 
@@ -358,17 +353,11 @@ export default function OrdersPage() {
 
       const rows = ordersToExport.map((order) => {
         const payout = getPayoutBreakdown(order)
-
         return [
           order.orderNumber,
           order.status,
-          order.paymentStatus || "pending",
           order.paymentMethod || "N/A",
           order.paymentTransactionId || "",
-          formatCurrency(payout.productTotal, false),
-          `${payout.commissionRate}%`,
-          formatCurrency(payout.commissionAmount, false),
-          formatCurrency(payout.gatewayFees, false),
           formatCurrency(payout.netPayout, false),
           formatDateLabel(order.deliveredAt || order.updatedAt || order.createdAt),
         ]

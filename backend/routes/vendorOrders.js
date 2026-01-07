@@ -254,6 +254,7 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
             totalEarned: 0,
             pendingAmount: 0,
             paidAmount: 0,
+            balanceAmount: 0,
           },
           recentOrders: [],
           vendorStatus: null,
@@ -275,6 +276,7 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
             totalEarned: 0,
             pendingAmount: 0,
             paidAmount: 0,
+            balanceAmount: 0,
           },
           recentOrders: [],
           vendorStatus: vendor?.status || "pending",
@@ -309,28 +311,48 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
     }
 
     // Total Amount Earned: Only delivered orders with closed return period (no active returns)
-    const eligibleOrders = await Order.find({
+    // Use EXACT same logic as admin ledger (when showReadyOnly = true)
+    const allDeliveredOrders = await Order.find({
       vendorId,
       status: "delivered",
-      $and: [
-        {
-          $or: [
-            { deliveredAt: { $exists: true, $lte: returnWindowCutoff } },
-            { deliveredAt: null, updatedAt: { $lte: returnWindowCutoff } }, // Fallback for old orders without deliveredAt
-          ],
-        },
-        {
-          $or: [
-            { returnRequest: { $exists: false } },
-            { "returnRequest.type": { $in: [null, "denied"] } },
-          ],
-        },
-      ],
-    }).select("subtotal total status deliveredAt updatedAt returnRequest")
+    })
+      .populate("vendorId", "commission")
+      .select("subtotal total status deliveredAt updatedAt returnRequest")
+      .lean()
 
-    const totalEarned = eligibleOrders.reduce((sum, order) => {
-      return sum + calculateNetPayout(order)
-    }, 0)
+    // Filter using EXACT same logic as admin ledger
+    const eligibleOrders = allDeliveredOrders.filter((order) => {
+      // Use deliveredAt if available, otherwise fallback to updatedAt (for older orders)
+      const deliveryDate = order.deliveredAt ? new Date(order.deliveredAt) : new Date(order.updatedAt)
+      const deliveredAt = deliveryDate.getTime()
+      const returnDeadline = deliveredAt + returnWindowMs
+      const isWindowOver = now.getTime() > returnDeadline
+      
+      // Only include if return window is over (showReadyOnly = true in admin)
+      if (!isWindowOver) return false
+      
+      // Exclude if a return is still pending/accepted/completed
+      const rrType = order.returnRequest?.type
+      if (rrType && rrType !== "denied") return false
+      
+      return true
+    })
+
+    // Calculate totalEarned using EXACT same formula as admin ledger
+    let totalEarned = 0
+    for (const order of eligibleOrders) {
+      // Get vendor commission rate from populated order or fallback
+      const orderVendor = typeof order.vendorId === "object" && order.vendorId !== null ? order.vendorId : null
+      const orderCommissionRate = orderVendor?.commission || commissionRate || 0
+      const orderCommissionMultiplier = orderCommissionRate / 100
+      const orderPayoutMultiplier = 1 - orderCommissionMultiplier
+
+      const payoutBeforeGateway = order.subtotal * orderPayoutMultiplier
+      const paymentGatewayCharges = payoutBeforeGateway * GATEWAY_RATE
+      const netPayout = payoutBeforeGateway - paymentGatewayCharges
+
+      totalEarned += netPayout
+    }
 
     // Pending Amount: Shipped orders + Delivered orders where return period is still open
     const shippedOrdersList = await Order.find({
@@ -356,6 +378,10 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
     const vendorLedgerKey = vendorId.toString()
     const ledgerEntry = ledgerPayments?.[vendorLedgerKey]
     const paidAmount = Math.max(Number(ledgerEntry?.paid || 0), 0)
+    
+    // Calculate balance: totalEarned (netPayout) - paidAmount
+    // This matches the admin ledger calculation: balance = netPayout - paid
+    const balanceAmount = Math.max(totalEarned - paidAmount, 0)
 
     // Get recent orders (last 3)
     const recentOrders = await Order.find({ vendorId })
@@ -376,6 +402,7 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
           totalEarned,
           pendingAmount,
           paidAmount,
+          balanceAmount,
         },
         recentOrders,
         vendorStatus: vendor?.status || "approved",
@@ -588,7 +615,9 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
       delivered_return_over: orders
         .filter((o) => isEligibleForRevenue(o))
         .reduce((sum, o) => sum + calculateNetPayout(o), 0),
-      cancelled: 0,
+      cancelled: orders
+        .filter((o) => categorizeOrder(o) === "cancelled")
+        .reduce((sum, o) => sum + calculateNetPayout(o), 0),
       return_accepted: 0,
     }
 
@@ -1146,6 +1175,7 @@ router.get("/customers/:id", verifyVendorToken, async (req, res) => {
     const recentOrders = customerOrders.slice(0, 5).map((order) => ({
       _id: order._id,
       orderNumber: order.orderNumber,
+      subtotal: order.subtotal,
       total: order.total,
       status: order.status,
       paymentStatus: order.paymentStatus,

@@ -149,25 +149,46 @@ export default function ReportsPage() {
 
   const fetchReturnAcceptedRevenue = async (token: string, commissionValue?: number | null) => {
     try {
-      const params = new URLSearchParams({
+      let total = 0
+
+      // Fetch orders with status "return_accepted"
+      const paramsAccepted = new URLSearchParams({
         status: "return_accepted",
         page: "1",
         limit: "200",
       })
 
-      const response = await fetch(`${API_URL}/api/vendor/orders?${params.toString()}`, {
+      const responseAccepted = await fetch(`${API_URL}/api/vendor/orders?${paramsAccepted.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       })
 
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        return 0
+      const dataAccepted = await responseAccepted.json()
+      if (responseAccepted.ok && dataAccepted.success) {
+        const orders: Order[] = dataAccepted.data || []
+        total += orders.reduce((sum, order) => sum + calculateNetPayout(order, commissionValue), 0)
       }
 
-      const orders: Order[] = data.data || []
-      const total = orders.reduce((sum, order) => sum + calculateNetPayout(order, commissionValue), 0)
+      // Fetch orders with status "return_picked_up"
+      const paramsPickedUp = new URLSearchParams({
+        status: "return_picked_up",
+        page: "1",
+        limit: "200",
+      })
+
+      const responsePickedUp = await fetch(`${API_URL}/api/vendor/orders?${paramsPickedUp.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      const dataPickedUp = await responsePickedUp.json()
+      if (responsePickedUp.ok && dataPickedUp.success) {
+        const orders: Order[] = dataPickedUp.data || []
+        total += orders.reduce((sum, order) => sum + calculateNetPayout(order, commissionValue), 0)
+      }
+
       return total
     } catch (err) {
       console.error("Error fetching return accepted revenue:", err)
@@ -243,13 +264,6 @@ export default function ReportsPage() {
   }
 
   const formatCurrency = (amount: number) => {
-    if (amount >= 10000000) {
-      return `₹${(amount / 10000000).toFixed(1)}Cr`
-    } else if (amount >= 100000) {
-      return `₹${(amount / 100000).toFixed(1)}L`
-    } else if (amount >= 1000) {
-      return `₹${(amount / 1000).toFixed(1)}K`
-    }
     return `₹${amount.toLocaleString("en-IN")}`
   }
 
