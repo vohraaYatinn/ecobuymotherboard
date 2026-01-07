@@ -96,13 +96,30 @@ const fileFilter = (req, file, cb) => {
                            file.mimetype === "application/x-compress" ||
                            file.mimetype === "application/x-compressed" ||
                            file.mimetype === "multipart/x-zip" ||
-                           file.mimetype === "application/octet-stream" // Some browsers send this for ZIPs
+                           file.mimetype === "application/octet-stream" || // Some browsers send this for ZIPs
+                           file.mimetype === "" || // Some browsers don't send MIME type
+                           !file.mimetype // Handle undefined/null MIME types
+      
+      console.log("🔍 [LEARNING UPLOAD] Software file check:", {
+        fileType,
+        ext,
+        mimetype: file.mimetype,
+        isZipExtension,
+        isZipMimeType,
+        originalname: file.originalname,
+      })
       
       // Accept if extension OR MIME type matches (prioritize extension)
       if (isZipExtension || isZipMimeType) {
+        console.log("✅ [LEARNING UPLOAD] ZIP file accepted")
         cb(null, true)
       } else {
-        cb(new Error("Only ZIP files are allowed for software downloads. Detected: " + ext + " (" + file.mimetype + ")"), false)
+        console.error("❌ [LEARNING UPLOAD] ZIP file rejected:", {
+          ext,
+          mimetype: file.mimetype,
+          originalname: file.originalname,
+        })
+        cb(new Error("Only ZIP files are allowed for software downloads. Detected: " + ext + " (" + (file.mimetype || "no MIME type") + ")"), false)
       }
     } else {
       cb(new Error("Invalid file type. Must be manual, video, or software"), false)

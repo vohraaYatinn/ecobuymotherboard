@@ -89,27 +89,35 @@ export function EnquiryModal({ open, onOpenChange, productSearched }: EnquiryMod
         body: submitFormData,
       })
 
-      const data = await response.json()
-
-      if (data.success) {
-        setSuccess(true)
-        // Reset form
-        setFormData({
-          name: "",
-          phone: "",
-          email: "",
-          note: "",
-          image: null,
-        })
-        setImagePreview(null)
-        // Close modal after 3 seconds
-        setTimeout(() => {
-          setSuccess(false)
-          onOpenChange(false)
-        }, 3000)
-      } else {
-        setError(data.message || "Failed to submit enquiry. Please try again.")
+      let data
+      try {
+        data = await response.json()
+      } catch (parseError) {
+        console.error("Error parsing response:", parseError)
+        setError("Invalid response from server. Please try again.")
+        return
       }
+
+      if (!response.ok || !data.success) {
+        setError(data.message || "Failed to submit enquiry. Please try again.")
+        return
+      }
+
+      setSuccess(true)
+      // Reset form
+      setFormData({
+        name: "",
+        phone: "",
+        email: "",
+        note: "",
+        image: null,
+      })
+      setImagePreview(null)
+      // Close modal after 3 seconds
+      setTimeout(() => {
+        setSuccess(false)
+        onOpenChange(false)
+      }, 3000)
     } catch (err) {
       console.error("Error submitting enquiry:", err)
       setError("Network error. Please try again.")

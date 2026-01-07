@@ -1199,37 +1199,73 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
           </CardContent>
         </Card>
 
-        {/* Vendor Payout */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              Vendor Payout
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Product Total</span>
-              <span>₹{order.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Platform Commission ({commissionRate}%)</span>
-              <span>- ₹{platformCommission.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between font-medium pt-1">
-              <span>Payout before Gateway</span>
-              <span>₹{payoutBeforeGateway.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Payment Gateway Charges (~2% of payout before gateway)</span>
-              <span>- ₹{paymentGatewayCharges.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between font-bold text-base pt-2 border-t">
-              <span>Net Payout to Vendor</span>
-              <span>₹{netVendorPayout.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Vendor Payout - only show when a vendor is assigned */}
+        {vendor && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Vendor Payout
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Product Total</span>
+                <span>
+                  ₹
+                  {order.subtotal.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">
+                  Platform Commission ({commissionRate}%)
+                </span>
+                <span>
+                  - ₹
+                  {platformCommission.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between font-medium pt-1">
+                <span>Payout before Gateway</span>
+                <span>
+                  ₹
+                  {payoutBeforeGateway.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">
+                  Payment Gateway Charges (~2% of payout before gateway)
+                </span>
+                <span>
+                  - ₹
+                  {paymentGatewayCharges.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between font-bold text-base pt-2 border-t">
+                <span>Net Payout to Vendor</span>
+                <span>
+                  ₹
+                  {netVendorPayout.toLocaleString("en-IN", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Shipping Information */}
         <Card>

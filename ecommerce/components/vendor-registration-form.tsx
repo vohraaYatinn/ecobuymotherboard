@@ -148,7 +148,18 @@ export function VendorRegistrationForm() {
         body: payload,
       })
 
-      const data = await response.json()
+      let data
+      try {
+        data = await response.json()
+      } catch (parseError) {
+        console.error("Error parsing response:", parseError)
+        toast({
+          title: "Error",
+          description: "Invalid response from server. Please try again.",
+          variant: "destructive",
+        })
+        return
+      }
 
       if (response.ok && data.success) {
         setIsSuccess(true)

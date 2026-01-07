@@ -11,7 +11,12 @@ const router = express.Router()
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const vendorDocsDir = path.join(__dirname, "../uploads/vendor-documents")
+
+// Store vendor documents inside the same uploads directory that Express serves
+// so that uploaded files are actually accessible via the /uploads route.
+// server.js uses: app.use("/uploads", express.static(path.join(__dirname, "uploads")))
+// which resolves to `<backend-root>/uploads`. So write to `<backend-root>/uploads/vendor-documents`.
+const vendorDocsDir = path.join(__dirname, "..", "uploads/vendor-documents")
 const fsPromises = fs.promises
 
 if (!fs.existsSync(vendorDocsDir)) {
@@ -97,9 +102,29 @@ const handleVendorDocsUpload = (req, res, next) => {
   if (contentType.includes("multipart/form-data")) {
     return uploadVendorDocs.array("documents", 5)(req, res, (err) => {
       if (err) {
+        // Handle multer errors
+        if (err instanceof multer.MulterError) {
+          if (err.code === "LIMIT_FILE_SIZE") {
+            return res.status(400).json({
+              success: false,
+              message: "One or more files are too large. Maximum size is 10MB per file.",
+            })
+          }
+          if (err.code === "LIMIT_FILE_COUNT") {
+            return res.status(400).json({
+              success: false,
+              message: "Too many files. Maximum 5 files allowed.",
+            })
+          }
+          return res.status(400).json({
+            success: false,
+            message: err.message || "Error uploading documents",
+          })
+        }
+        // Handle other upload errors (file type, etc.)
         return res.status(400).json({
           success: false,
-          message: err.message || "Invalid document upload",
+          message: err.message || "Invalid document upload. Please ensure files are PDF or images and under 10MB each.",
         })
       }
       return next()
@@ -1010,8 +1035,8 @@ router.get("/:vendorId/documents/:documentIndex", verifyAdminToken, async (req, 
     }
 
     const document = vendor.documents[index]
-    
-    // Extract filename from URL (e.g., /uploads/vendor-documents/vendor-123456.pdf)
+
+    // Extract file path from stored URL (e.g. /uploads/vendor-documents/vendor-123456.pdf)
     let filePath
     if (document.url.startsWith("/uploads/")) {
       filePath = path.join(__dirname, "..", document.url)
@@ -1023,12 +1048,17 @@ router.get("/:vendorId/documents/:documentIndex", verifyAdminToken, async (req, 
       filePath = path.join(__dirname, "..", urlPath.startsWith("/") ? urlPath : `/${urlPath}`)
     }
 
-    // Check if file exists
+    // Check if file exists – support legacy path where files were accidentally saved under routes/uploads
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({
-        success: false,
-        message: "Document file not found on server",
-      })
+      const legacyFilePath = path.join(__dirname, "uploads/vendor-documents", path.basename(filePath))
+      if (fs.existsSync(legacyFilePath)) {
+        filePath = legacyFilePath
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: "Document file not found on server",
+        })
+      }
     }
 
     // Determine content type

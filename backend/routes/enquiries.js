@@ -68,7 +68,31 @@ const getTransporter = () => {
 }
 
 // Submit enquiry
-router.post("/submit", upload.single("image"), async (req, res) => {
+router.post("/submit", (req, res, next) => {
+  upload.single("image")(req, res, (err) => {
+    if (err) {
+      // Handle multer errors
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            success: false,
+            message: "Image file is too large. Maximum size is 10MB.",
+          })
+        }
+        return res.status(400).json({
+          success: false,
+          message: err.message || "Error uploading image",
+        })
+      }
+      // Handle other upload errors
+      return res.status(400).json({
+        success: false,
+        message: err.message || "Error uploading image. Please try again.",
+      })
+    }
+    next()
+  })
+}, async (req, res) => {
   try {
     const { name, phone, email, productSearched, note } = req.body
 

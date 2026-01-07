@@ -178,24 +178,32 @@ export function AdminLearningResources() {
         body: uploadFormData,
       })
 
-      const data = await response.json()
-
-      if (data.success) {
-        alert("Resource uploaded successfully!")
-        setIsUploadDialogOpen(false)
-        setFormData({
-          title: "",
-          description: "",
-          type: "manual",
-          file: null,
-        })
-        fetchResources()
-      } else {
-        alert(data.message || "Failed to upload resource")
+      let data
+      try {
+        data = await response.json()
+      } catch (parseError) {
+        console.error("Error parsing response:", parseError)
+        alert("Invalid response from server. Please try again.")
+        return
       }
+
+      if (!response.ok || !data.success) {
+        alert(data.message || "Error uploading resource. Please try again.")
+        return
+      }
+
+      alert("Resource uploaded successfully!")
+      setIsUploadDialogOpen(false)
+      setFormData({
+        title: "",
+        description: "",
+        type: "manual",
+        file: null,
+      })
+      fetchResources()
     } catch (err) {
       console.error("Error uploading resource:", err)
-      alert("Error uploading resource. Please try again.")
+      alert("Network error. Please check your connection and try again.")
     } finally {
       setUploading(false)
     }
