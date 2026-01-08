@@ -5,7 +5,7 @@ import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Vendor from "../models/Vendor.js"
 import { verifyVendorToken } from "../middleware/auth.js"
-import { createShipmentForOrder } from "../services/dtdcService.js"
+import { createShipmentForOrder, downloadShippingLabel } from "../services/dtdcService.js"
 
 const router = express.Router()
 
@@ -906,6 +906,76 @@ router.get("/customers/:id", verifyVendorToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching customer details",
+      error: error.message,
+    })
+  }
+})
+
+// Download shipping label for an order (MUST come before /:id route)
+router.get("/:id/label", verifyVendorToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const vendorId = req.vendorUser.vendorId
+
+    if (!vendorId) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor account not linked. Please contact support.",
+      })
+    }
+
+    // Find the order and verify it's assigned to this vendor
+    const order = await Order.findOne({
+      _id: id,
+      vendorId: vendorId,
+    })
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found or not assigned to you",
+      })
+    }
+
+    // Check if order has an AWB number
+    if (!order.awbNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Order does not have an AWB number. Please create a shipment first.",
+      })
+    }
+
+    // Download the label from DTDC
+    try {
+      const labelBuffer = await downloadShippingLabel(order.awbNumber)
+      
+      // Set appropriate headers for PDF download
+      res.setHeader("Content-Type", "application/pdf")
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="shipping-label-${order.orderNumber}-${order.awbNumber}.pdf"`
+      )
+      
+      // Send the PDF buffer
+      res.send(labelBuffer)
+    } catch (labelError) {
+      console.error("Error downloading shipping label:", labelError)
+      return res.status(500).json({
+        success: false,
+        message: labelError.message || "Failed to download shipping label",
+      })
+    }
+  } catch (error) {
+    console.error("Download label error:", error)
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
+    res.status(500).json({
+      success: false,
+      message: "Error downloading label",
       error: error.message,
     })
   }
