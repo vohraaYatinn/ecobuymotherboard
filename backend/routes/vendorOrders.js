@@ -866,9 +866,11 @@ router.get("/customers/:id", verifyVendorToken, async (req, res) => {
     const recentOrders = customerOrders.slice(0, 5).map((order) => ({
       _id: order._id,
       orderNumber: order.orderNumber,
+      subtotal: order.subtotal,
       total: order.total,
       status: order.status,
       paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
       createdAt: order.createdAt,
     }))
 

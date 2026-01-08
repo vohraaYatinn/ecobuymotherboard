@@ -16,6 +16,7 @@ interface RecentOrder {
   total: number
   status: string
   paymentStatus: string
+  paymentMethod?: string
   createdAt: string
 }
 
@@ -170,7 +171,10 @@ export default function CustomerDetailPage() {
     const productTotal = typeof order.subtotal === "number" ? order.subtotal : order.total
     const commissionAmount = Math.max(0, (commissionRate / 100) * productTotal)
     const payoutBeforeGateway = Math.max(productTotal - commissionAmount, 0)
-    const gatewayFees = Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * payoutBeforeGateway)
+    // Gateway charges only apply to online/wallet orders (matching backend logic)
+    const gatewayFees = (order.paymentMethod === "online" || order.paymentMethod === "wallet")
+      ? Math.max(0, (PAYMENT_GATEWAY_RATE / 100) * payoutBeforeGateway)
+      : 0
     const netPayout = Math.max(payoutBeforeGateway - gatewayFees, 0)
 
     return {
