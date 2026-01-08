@@ -9,6 +9,25 @@ import { createShipmentForOrder } from "../services/dtdcService.js"
 
 const router = express.Router()
 
+// Helper function to calculate vendor net payout amount
+// Formula: subtotal - commission - gateway charges (for online/wallet orders)
+const calculateNetPayout = (order, vendor) => {
+  const GATEWAY_RATE = 0.02 // 2%
+  const subtotal = order.subtotal ?? order.total ?? 0
+  const commissionRate = vendor?.commission || 0
+  const commissionMultiplier = commissionRate / 100
+  const payoutMultiplier = 1 - commissionMultiplier
+  
+  const payoutBeforeGateway = subtotal * payoutMultiplier
+  // Gateway charges only apply to online/wallet orders
+  const paymentGatewayCharges = (order.paymentMethod === "online" || order.paymentMethod === "wallet")
+    ? payoutBeforeGateway * GATEWAY_RATE
+    : 0
+  
+  const netPayout = payoutBeforeGateway - paymentGatewayCharges
+  return Math.round(netPayout)
+}
+
 // Get unassigned orders (orders without a vendor)
 router.get("/unassigned", verifyVendorToken, async (req, res) => {
   try {
@@ -236,25 +255,42 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
       })
     }
 
+    // Get vendor details for commission rate
+    const vendor = await Vendor.findById(vendorId).select("commission").lean()
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found",
+      })
+    }
+
     // Get vendor's order counts
     const totalOrders = await Order.countDocuments({ vendorId })
     const pendingOrders = await Order.countDocuments({ vendorId, status: "processing" })
     const shippedOrders = await Order.countDocuments({ vendorId, status: "shipped" })
     const deliveredOrders = await Order.countDocuments({ vendorId, status: "delivered" })
 
-    // Calculate revenue from all delivered orders (vendors earn revenue when order is delivered)
-    const revenueResult = await Order.aggregate([
-      { $match: { vendorId, status: "delivered" } },
-      { $group: { _id: null, total: { $sum: "$total" } } },
-    ])
-    const totalRevenue = revenueResult.length > 0 ? revenueResult[0].total : 0
+    // Get delivered orders to calculate net payout revenue
+    const deliveredOrdersList = await Order.find({ vendorId, status: "delivered" })
+      .select("subtotal total paymentMethod")
+      .lean()
+    
+    // Calculate revenue using net payout from all delivered orders
+    const totalRevenue = deliveredOrdersList.reduce(
+      (sum, order) => sum + calculateNetPayout(order, vendor),
+      0
+    )
 
-    // Calculate average order value
-    const avgOrderResult = await Order.aggregate([
-      { $match: { vendorId } },
-      { $group: { _id: null, avg: { $avg: "$total" } } },
-    ])
-    const avgOrderValue = avgOrderResult.length > 0 ? avgOrderResult[0].avg : 0
+    // Get all orders to calculate average order value using net payout
+    const allOrders = await Order.find({ vendorId })
+      .select("subtotal total paymentMethod")
+      .lean()
+    
+    const totalNetPayout = allOrders.reduce(
+      (sum, order) => sum + calculateNetPayout(order, vendor),
+      0
+    )
+    const avgOrderValue = totalOrders > 0 ? totalNetPayout / totalOrders : 0
 
     // Get recent orders (last 3)
     const recentOrders = await Order.find({ vendorId })
@@ -323,6 +359,15 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
         startDate.setDate(now.getDate() - 30)
     }
 
+    // Get vendor details for commission rate
+    const vendor = await Vendor.findById(vendorId).select("commission").lean()
+    if (!vendor) {
+      return res.status(404).json({
+        success: false,
+        message: "Vendor not found",
+      })
+    }
+
     // Get orders in the period
     const orders = await Order.find({
       vendorId: vendorId,
@@ -331,7 +376,7 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
       .sort({ createdAt: 1 })
       .lean()
 
-    // Revenue over time (daily breakdown)
+    // Revenue over time (daily breakdown) using net payout
     const revenueByDate = {}
     const ordersByDate = {}
     
@@ -343,9 +388,9 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
         ordersByDate[date] = 0
       }
       
-      // Count revenue for all delivered orders (vendors earn revenue when order is delivered)
+      // Count revenue for all delivered orders using net payout
       if (order.status === "delivered") {
-        revenueByDate[date] += order.total || 0
+        revenueByDate[date] += calculateNetPayout(order, vendor)
       }
       ordersByDate[date]++
     })
@@ -373,23 +418,23 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
       cancelled: orders.filter((o) => o.status === "cancelled").length,
     }
 
-    // Revenue by status (vendors earn revenue when order is delivered)
+    // Revenue by status using net payout
     const revenueByStatus = {
       processing: orders
         .filter((o) => o.status === "processing")
-        .reduce((sum, o) => sum + (o.total || 0), 0),
+        .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
       shipped: orders
         .filter((o) => o.status === "shipped")
-        .reduce((sum, o) => sum + (o.total || 0), 0),
+        .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
       delivered: orders
         .filter((o) => o.status === "delivered")
-        .reduce((sum, o) => sum + (o.total || 0), 0),
+        .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
     }
 
-    // Calculate totals (all delivered orders count as revenue)
+    // Calculate totals using net payout (all delivered orders count as revenue)
     const totalRevenue = orders
       .filter((o) => o.status === "delivered")
-      .reduce((sum, o) => sum + (o.total || 0), 0)
+      .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0)
 
     const totalOrders = orders.length
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0

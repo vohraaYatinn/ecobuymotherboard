@@ -5,6 +5,25 @@ import { verifyAdminToken } from "../middleware/auth.js"
 
 const router = express.Router()
 
+// Helper function to calculate vendor net payout amount
+// Formula: subtotal - commission - gateway charges (for online/wallet orders)
+const calculateNetPayout = (order, vendor) => {
+  const GATEWAY_RATE = 0.02 // 2%
+  const subtotal = order.subtotal ?? order.total ?? 0
+  const commissionRate = vendor?.commission || 0
+  const commissionMultiplier = commissionRate / 100
+  const payoutMultiplier = 1 - commissionMultiplier
+  
+  const payoutBeforeGateway = subtotal * payoutMultiplier
+  // Gateway charges only apply to online/wallet orders
+  const paymentGatewayCharges = (order.paymentMethod === "online" || order.paymentMethod === "wallet")
+    ? payoutBeforeGateway * GATEWAY_RATE
+    : 0
+  
+  const netPayout = payoutBeforeGateway - paymentGatewayCharges
+  return Math.round(netPayout)
+}
+
 // Get full orders report
 router.get("/orders", verifyAdminToken, async (req, res) => {
   try {
@@ -511,35 +530,35 @@ router.get("/vendor/:vendorId", verifyAdminToken, async (req, res) => {
     const deliveredOrders = orders.filter((o) => o.status === "delivered").length
     const cancelledOrders = orders.filter((o) => o.status === "cancelled").length
 
-    // Calculate revenue (from delivered orders)
+    // Calculate revenue using net payout (from delivered orders)
     const totalRevenue = orders
       .filter((o) => o.status === "delivered")
-      .reduce((sum, o) => sum + (o.total || 0), 0)
+      .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0)
 
-    // Calculate total income (all orders regardless of status)
-    const totalIncome = orders.reduce((sum, o) => sum + (o.total || 0), 0)
+    // Calculate total income using net payout (all orders regardless of status)
+    const totalIncome = orders.reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0)
 
     // Calculate average order value
     const avgOrderValue = totalOrders > 0 ? totalIncome / totalOrders : 0
 
-    // Revenue by status
+    // Revenue by status (using net payout)
     const revenueByStatus = {
       pending: orders
         .filter((o) => o.status === "pending")
-        .reduce((sum, o) => sum + (o.total || 0), 0),
+        .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
       processing: orders
         .filter((o) => o.status === "processing")
-        .reduce((sum, o) => sum + (o.total || 0), 0),
+        .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
       shipped: orders
         .filter((o) => o.status === "shipped")
-        .reduce((sum, o) => sum + (o.total || 0), 0),
+        .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
       delivered: totalRevenue,
       cancelled: orders
         .filter((o) => o.status === "cancelled")
-        .reduce((sum, o) => sum + (o.total || 0), 0),
+        .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
     }
 
-    // Revenue over time (daily breakdown)
+    // Revenue over time (daily breakdown) using net payout
     const revenueByDate = {}
     const ordersByDate = {}
 
@@ -552,7 +571,7 @@ router.get("/vendor/:vendorId", verifyAdminToken, async (req, res) => {
       }
 
       if (order.status === "delivered") {
-        revenueByDate[date] += order.total || 0
+        revenueByDate[date] += calculateNetPayout(order, vendor)
       }
       ordersByDate[date]++
     })
@@ -692,62 +711,67 @@ router.get("/vendors/top-10", verifyAdminToken, async (req, res) => {
       dateFilter.createdAt = { $gte: startDate }
     }
 
-    // Aggregate vendor performance
-    const vendorPerformance = await Order.aggregate([
-      {
-        $match: {
-          vendorId: { $exists: true, $ne: null },
-          ...dateFilter,
-        },
-      },
-      {
-        $group: {
-          _id: "$vendorId",
-          totalOrders: { $sum: 1 },
-          totalRevenue: {
-            $sum: {
-              $cond: [{ $eq: ["$status", "delivered"] }, "$total", 0],
-            },
-          },
-          totalIncome: { $sum: "$total" },
-          deliveredOrders: {
-            $sum: { $cond: [{ $eq: ["$status", "delivered"] }, 1, 0] },
-          },
-          pendingOrders: {
-            $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] },
-          },
-          processingOrders: {
-            $sum: { $cond: [{ $eq: ["$status", "processing"] }, 1, 0] },
-          },
-          shippedOrders: {
-            $sum: { $cond: [{ $eq: ["$status", "shipped"] }, 1, 0] },
-          },
-        },
-      },
-      {
-        $sort: { totalRevenue: -1 },
-      },
-      {
-        $limit: 10,
-      },
-    ])
-
-    // Get vendor details
-    const vendorIds = vendorPerformance.map((v) => v._id)
-    const vendors = await Vendor.find({ _id: { $in: vendorIds } })
-      .select("name email phone status createdAt totalProducts")
+    // Get all orders with vendorId
+    const orders = await Order.find({
+      vendorId: { $exists: true, $ne: null },
+      ...dateFilter,
+    })
+      .populate("vendorId", "name email phone status commission totalProducts")
+      .select("vendorId status subtotal total paymentMethod")
       .lean()
 
-    const vendorMap = {}
-    vendors.forEach((v) => {
-      vendorMap[v._id.toString()] = v
+    // Group orders by vendor and calculate net payout
+    const vendorStats = {}
+    
+    orders.forEach((order) => {
+      const vendorId = order.vendorId?._id?.toString() || order.vendorId?.toString()
+      if (!vendorId) return
+
+      if (!vendorStats[vendorId]) {
+        vendorStats[vendorId] = {
+          vendorId: order.vendorId?._id || order.vendorId,
+          vendor: order.vendorId,
+          totalOrders: 0,
+          deliveredOrders: 0,
+          pendingOrders: 0,
+          processingOrders: 0,
+          shippedOrders: 0,
+          totalRevenue: 0, // Net payout for delivered orders
+          totalIncome: 0, // Net payout for all orders
+        }
+      }
+
+      const stats = vendorStats[vendorId]
+      stats.totalOrders++
+
+      if (order.status === "delivered") {
+        stats.deliveredOrders++
+        // Calculate net payout for delivered orders
+        const netPayout = calculateNetPayout(order, order.vendorId)
+        stats.totalRevenue += netPayout
+      } else if (order.status === "pending") {
+        stats.pendingOrders++
+      } else if (order.status === "processing") {
+        stats.processingOrders++
+      } else if (order.status === "shipped") {
+        stats.shippedOrders++
+      }
+
+      // Calculate net payout for all orders (for totalIncome)
+      const netPayout = calculateNetPayout(order, order.vendorId)
+      stats.totalIncome += netPayout
     })
+
+    // Convert to array and sort by totalRevenue (net payout)
+    const vendorPerformance = Object.values(vendorStats)
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
+      .slice(0, 10)
 
     // Combine performance data with vendor details
     const topVendors = vendorPerformance.map((perf) => {
-      const vendor = vendorMap[perf._id.toString()]
+      const vendor = perf.vendor
       return {
-        vendorId: perf._id,
+        vendorId: perf.vendorId,
         vendorName: vendor?.name || "Unknown",
         vendorEmail: vendor?.email || "N/A",
         vendorPhone: vendor?.phone || "N/A",
@@ -758,8 +782,8 @@ router.get("/vendors/top-10", verifyAdminToken, async (req, res) => {
         pendingOrders: perf.pendingOrders,
         processingOrders: perf.processingOrders,
         shippedOrders: perf.shippedOrders,
-        totalRevenue: Math.round(perf.totalRevenue),
-        totalIncome: Math.round(perf.totalIncome),
+        totalRevenue: perf.totalRevenue, // Net payout amount
+        totalIncome: perf.totalIncome, // Net payout for all orders
         avgOrderValue: perf.totalOrders > 0 ? Math.round(perf.totalIncome / perf.totalOrders) : 0,
         deliveryRate:
           perf.totalOrders > 0
