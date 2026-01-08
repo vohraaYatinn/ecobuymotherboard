@@ -33,13 +33,14 @@ router.get("/unassigned", verifyVendorToken, async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query
 
-    // Find orders without vendor assignment
+    // Find orders without vendor assignment and with paid payment status
     const filter = {
       $or: [
         { vendorId: null },
         { vendorId: { $exists: false } }
       ],
-      status: { $in: ["pending", "confirmed"] } // Only show pending or confirmed orders
+      status: { $in: ["pending", "confirmed"] }, // Only show pending or confirmed orders
+      paymentStatus: "paid" // Only show orders with paid payment status
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit)
@@ -111,6 +112,14 @@ router.post("/:id/accept", verifyVendorToken, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Order cannot be accepted in its current status",
+      })
+    }
+
+    // Check if payment status is paid
+    if (order.paymentStatus !== "paid") {
+      return res.status(400).json({
+        success: false,
+        message: "Only orders with paid payment status can be accepted",
       })
     }
 

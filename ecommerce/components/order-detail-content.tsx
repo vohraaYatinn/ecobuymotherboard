@@ -200,11 +200,12 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const generateTrackingSteps = (order: Order): TrackingStep[] => {
     const steps: TrackingStep[] = []
     const orderStatus = order.status.toLowerCase()
+    const isPaymentPending = order.paymentStatus?.toLowerCase() === "pending"
 
     // Handle cancelled orders
     if (orderStatus === "cancelled") {
       steps.push({
-        status: "Order Placed",
+        status: isPaymentPending ? "Awaiting Payment" : "Order Placed",
         date: new Date(order.createdAt).toLocaleString("en-IN", {
           month: "short",
           day: "numeric",
@@ -243,7 +244,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       
       normalStatusOrder.forEach((status, index) => {
         steps.push({
-          status: status === "pending" ? "Order Placed" :
+          status: status === "pending" ? (isPaymentPending ? "Awaiting Payment" : "Order Placed") :
                   status === "confirmed" ? "Order Confirmed" :
                   status === "processing" ? "Processing" :
                   status === "shipped" ? "Shipped" : "Delivered",
@@ -390,7 +391,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       }
 
       steps.push({
-        status: status === "pending" ? "Order Placed" :
+        status: status === "pending" ? (isPaymentPending ? "Awaiting Payment" : "Order Placed") :
                 status === "confirmed" ? "Order Confirmed" :
                 status === "processing" ? "Processing" :
                 status === "shipped" ? "Shipped" : "Delivered",
@@ -429,7 +430,8 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const orderDate = new Date(order.createdAt)
 
   // Check if order can be cancelled
-  const canCancel = ["pending", "confirmed", "processing"].includes(order.status.toLowerCase())
+  const isPaymentPending = order.paymentStatus?.toLowerCase() === "pending"
+  const canCancel = ["pending", "confirmed", "processing"].includes(order.status.toLowerCase()) && !isPaymentPending
   const isShipped = order.status.toLowerCase() === "shipped" || order.status.toLowerCase() === "delivered"
 
   const handleCancelOrder = async () => {

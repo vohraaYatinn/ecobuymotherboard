@@ -50,6 +50,7 @@ interface Order {
   subtotal: number
   shipping: number
   createdAt: string
+  paymentStatus?: string
 }
 
 export default function AcceptOrdersPage() {
@@ -128,7 +129,7 @@ export default function AcceptOrdersPage() {
         return
       }
 
-      const newOrders = data.data || []
+      const newOrders = (data.data || []).filter((order: Order) => order.paymentStatus === "paid")
       setOrders(newOrders)
 
       // Check for orders that were removed (accepted by someone else or cancelled)
@@ -154,6 +155,13 @@ export default function AcceptOrdersPage() {
     try {
       // Find the order to get customer phone number
       const order = orders.find((o) => o._id === orderId)
+      
+      // Validate payment status before accepting
+      if (!order || order.paymentStatus !== "paid") {
+        alert("Only orders with paid payment status can be accepted")
+        return
+      }
+      
       const customer = order ? getCustomerInfo(order, true) : null
       
       // Show confirmation with masked phone number

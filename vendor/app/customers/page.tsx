@@ -298,7 +298,7 @@ export default function CustomersPage() {
                                 <p className="text-xs text-muted-foreground truncate mb-0.5">{customer.email}</p>
                                 <p className="text-xs font-medium text-muted-foreground truncate">{formatPhone(customer.mobile)}</p>
                               </div>
-                              <div className="flex items-center justify-between pt-3 border-t border-border/30">
+                              <div className="flex items-center pt-3 border-t border-border/30">
                                 <div className="flex items-center gap-3 text-xs">
                                   <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary font-semibold">
                                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -313,11 +313,6 @@ export default function CustomersPage() {
                                   </span>
                                   <span className="h-1 w-1 rounded-full bg-muted-foreground/50" />
                                   <span className="text-xs text-muted-foreground font-medium">{formatTimeAgo(customer.lastOrderDate)}</span>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-base font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                                    {formatCurrency(customer.totalSpent)}
-                                  </p>
                                 </div>
                               </div>
                             </div>
