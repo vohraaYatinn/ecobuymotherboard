@@ -202,6 +202,7 @@ export function AdminOrdersList() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all")
   const [vendorFilter, setVendorFilter] = useState("all")
   const [assignmentModeFilter, setAssignmentModeFilter] = useState("all")
+  const [showUncompletedOrders, setShowUncompletedOrders] = useState(false)
   const [page, setPage] = useState(1)
   const [pagination, setPagination] = useState({
     page: 1,
@@ -242,7 +243,7 @@ export function AdminOrdersList() {
 
   useEffect(() => {
     fetchOrders()
-  }, [page, statusFilter, paymentMethodFilter, paymentStatusFilter, vendorFilter, assignmentModeFilter])
+  }, [page, statusFilter, paymentMethodFilter, paymentStatusFilter, vendorFilter, assignmentModeFilter, showUncompletedOrders])
 
   // Clear selected orders when orders change
   useEffect(() => {
@@ -272,6 +273,7 @@ export function AdminOrdersList() {
         ...(paymentStatusFilter !== "all" && { paymentStatus: paymentStatusFilter }),
         ...(vendorFilter !== "all" && { vendorId: vendorFilter }),
         ...(assignmentModeFilter !== "all" && { assignmentMode: assignmentModeFilter }),
+        ...(showUncompletedOrders && { showUncompletedOrders: "true" }),
       })
 
       const response = await fetch(`${API_URL}/api/admin/orders?${params}`, {
@@ -630,6 +632,7 @@ export function AdminOrdersList() {
         ...(paymentStatusFilter !== "all" && { paymentStatus: paymentStatusFilter }),
         ...(vendorFilter !== "all" && { vendorId: vendorFilter }),
         ...(assignmentModeFilter !== "all" && { assignmentMode: assignmentModeFilter }),
+        ...(showUncompletedOrders && { showUncompletedOrders: "true" }),
       })
 
       const response = await fetch(`${API_URL}/api/admin/orders?${params}`, {
@@ -865,6 +868,16 @@ export function AdminOrdersList() {
                 <SelectItem value="accepted-by-vendor">By Vendor</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="mt-4 flex items-center space-x-2">
+            <Checkbox
+              id="show-uncompleted"
+              checked={showUncompletedOrders}
+              onCheckedChange={(checked) => setShowUncompletedOrders(checked === true)}
+            />
+            <Label htmlFor="show-uncompleted" className="text-sm font-medium cursor-pointer">
+              Show uncompleted orders by customer
+            </Label>
           </div>
         </CardContent>
       </Card>

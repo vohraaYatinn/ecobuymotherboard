@@ -408,8 +408,58 @@ const createOrderDraft = async ({ customerId, addressId }) => {
   const randomSuffix = Math.random().toString(36).substr(2, 9).toUpperCase()
   const orderNumber = `ORD-${timestamp}-${randomSuffix}`
 
-  const orderCount = await Order.countDocuments()
-  const invoiceNumber = String(orderCount + 1).padStart(10, "0")
+  // Generate invoice number by finding the highest existing invoice number
+  // This prevents duplicates even after orders are deleted
+  let invoiceNumber
+  try {
+    // Find all orders with invoice numbers and get the highest numeric value
+    const ordersWithInvoice = await Order.find({ 
+      invoiceNumber: { $exists: true, $ne: null, $ne: "" } 
+    })
+      .select("invoiceNumber")
+      .lean()
+
+    let maxInvoiceNum = 0
+    if (ordersWithInvoice.length > 0) {
+      // Parse all invoice numbers and find the maximum
+      for (const order of ordersWithInvoice) {
+        if (order.invoiceNumber) {
+          const num = parseInt(order.invoiceNumber, 10)
+          if (!isNaN(num) && num > maxInvoiceNum) {
+            maxInvoiceNum = num
+          }
+        }
+      }
+    }
+
+    // Generate next invoice number
+    const nextInvoiceNum = maxInvoiceNum + 1
+    invoiceNumber = String(nextInvoiceNum).padStart(10, "0")
+
+    // Double-check for duplicates (safety check)
+    const existingOrder = await Order.findOne({ invoiceNumber })
+    if (existingOrder) {
+      // If duplicate found, find the next available number
+      let nextNum = nextInvoiceNum + 1
+      while (true) {
+        const candidateInvoice = String(nextNum).padStart(10, "0")
+        const exists = await Order.findOne({ invoiceNumber: candidateInvoice })
+        if (!exists) {
+          invoiceNumber = candidateInvoice
+          break
+        }
+        nextNum++
+        // Safety limit to prevent infinite loop
+        if (nextNum > 9999999999) {
+          throw new Error("Invoice number limit reached")
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error generating invoice number:", error)
+    // Fallback: use timestamp-based invoice number
+    invoiceNumber = String(Date.now()).slice(-10).padStart(10, "0")
+  }
 
   const order = new Order({
     orderNumber,

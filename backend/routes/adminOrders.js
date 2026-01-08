@@ -22,6 +22,7 @@ router.get("/", verifyAdminToken, async (req, res) => {
       paymentStatus = "",
       vendorId = "",
       assignmentMode = "",
+      showUncompletedOrders = "",
       sortBy = "createdAt",
       sortOrder = "desc",
     } = req.query
@@ -123,7 +124,28 @@ router.get("/", verifyAdminToken, async (req, res) => {
     }
 
     // Payment status filter - Apply last to ensure proper combination
-    if (paymentStatus && paymentStatus !== "all") {
+    if (showUncompletedOrders === "true") {
+      // When "Show uncompleted orders" is checked, show orders that are:
+      // - Not delivered (status != "delivered") OR
+      // - Unpaid (paymentStatus = "pending" or "failed")
+      const uncompletedConditions = [
+        { status: { $ne: "delivered" } },
+        { paymentStatus: { $in: ["pending", "failed"] } }
+      ]
+      
+      // Combine with existing filters using $and
+      if (filter.$and) {
+        filter.$and.push({ $or: uncompletedConditions })
+      } else if (filter.$or) {
+        filter.$and = [
+          { $or: filter.$or },
+          { $or: uncompletedConditions }
+        ]
+        delete filter.$or
+      } else {
+        filter.$or = uncompletedConditions
+      }
+    } else if (paymentStatus && paymentStatus !== "all") {
       // User explicitly selected a payment status filter
       if (filter.$and) {
         filter.$and.push({ paymentStatus })
