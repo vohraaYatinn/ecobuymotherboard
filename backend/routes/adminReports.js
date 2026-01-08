@@ -862,12 +862,14 @@ router.get("/vendor/:vendorId/export", verifyAdminToken, async (req, res) => {
         "Subtotal",
         "Shipping",
         "Total",
+        "Vendor Net Payout",
         "Items",
       ].join(","))
 
       // Data rows
       orders.forEach((order) => {
         const items = order.items.map((item) => `${item.name} (x${item.quantity})`).join("; ")
+        const netPayout = calculateNetPayout(order, vendor)
         csvRows.push([
           order.orderNumber || "",
           new Date(order.createdAt).toISOString().split("T")[0],
@@ -880,6 +882,7 @@ router.get("/vendor/:vendorId/export", verifyAdminToken, async (req, res) => {
           order.subtotal || 0,
           order.shipping || 0,
           order.total || 0,
+          netPayout,
           `"${items}"`,
         ].join(","))
       })
@@ -923,6 +926,7 @@ router.get("/vendor/:vendorId/export", verifyAdminToken, async (req, res) => {
             subtotal: order.subtotal,
             shipping: order.shipping,
             total: order.total,
+            vendorNetPayout: calculateNetPayout(order, vendor),
             items: order.items.map((item) => ({
               name: item.name,
               brand: item.brand,
