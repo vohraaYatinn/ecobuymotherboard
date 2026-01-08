@@ -4,12 +4,12 @@
 
 export const API_URL = 
   typeof window !== 'undefined' 
-    ? (process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com")
-    : (process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com");
+    ? (process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com")
+    : (process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com");
 
 // For server-side rendering compatibility
 export const getApiUrl = () => {
-  return process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com";
+  return process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com";
 };
 
 

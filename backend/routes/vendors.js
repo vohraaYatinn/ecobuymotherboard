@@ -105,8 +105,8 @@ const handleVendorDocsUpload = (req, res, next) => {
         // Handle multer errors
         if (err instanceof multer.MulterError) {
           if (err.code === "LIMIT_FILE_SIZE") {
-            return res.status(400).json({
-              success: false,
+        return res.status(400).json({
+          success: false,
               message: "One or more files are too large. Maximum size is 10MB per file.",
             })
           }

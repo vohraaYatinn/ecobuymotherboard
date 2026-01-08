@@ -102,7 +102,7 @@ server {
 
 Test with a large file:
 ```bash
-curl -X POST https://api.elecobuy.com/api/learning-resources/upload \
+curl -X POST https://api.safartax.com/api/learning-resources/upload \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -F "file=@large-file.pdf" \
   -F "title=Test" \
@@ -119,4 +119,6 @@ Look for errors like:
 - `client intended to send too large body`
 - `upstream timed out`
 - `connection reset by peer`
+
+
 

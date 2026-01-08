@@ -76,11 +76,6 @@ router.get("/", verifyAdminToken, async (req, res) => {
       filter.paymentMethod = paymentMethod
     }
 
-    // Payment status filter
-    if (paymentStatus && paymentStatus !== "all") {
-      filter.paymentStatus = paymentStatus
-    }
-
     // Vendor filter
     if (vendorId && vendorId !== "all") {
       if (vendorId === "unassigned") {
@@ -124,6 +119,39 @@ router.get("/", verifyAdminToken, async (req, res) => {
         delete filter.$or
       } else {
         filter.assignmentMode = assignmentMode
+      }
+    }
+
+    // Payment status filter - Apply last to ensure proper combination
+    if (paymentStatus && paymentStatus !== "all") {
+      // User explicitly selected a payment status filter
+      if (filter.$and) {
+        filter.$and.push({ paymentStatus })
+      } else if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, { paymentStatus }]
+        delete filter.$or
+      } else {
+        filter.paymentStatus = paymentStatus
+      }
+    } else {
+      // Default filter: Only show orders where payment is completed (paid, refunded) or order is cancelled
+      // Exclude orders with pending/failed payment status (when customer opens Razorpay but doesn't complete)
+      const paymentStatusConditions = [
+        { paymentStatus: { $in: ["paid", "refunded"] } },
+        { status: "cancelled" }
+      ]
+      
+      // Combine with existing filters using $and
+      if (filter.$and) {
+        filter.$and.push({ $or: paymentStatusConditions })
+      } else if (filter.$or) {
+        filter.$and = [
+          { $or: filter.$or },
+          { $or: paymentStatusConditions }
+        ]
+        delete filter.$or
+      } else {
+        filter.$or = paymentStatusConditions
       }
     }
 

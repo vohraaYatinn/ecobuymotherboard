@@ -157,18 +157,18 @@ router.post(
         })
         // Handle multer errors
         if (err instanceof multer.MulterError) {
-          if (err.code === "LIMIT_FILE_SIZE") {
+        if (err.code === "LIMIT_FILE_SIZE") {
             return res.status(413).json({
               success: false,
               message: "File size exceeds the 500MB limit. Please upload a smaller file.",
             })
           }
           if (err.code === "LIMIT_UNEXPECTED_FILE") {
-            return res.status(400).json({
-              success: false,
+          return res.status(400).json({
+            success: false,
               message: "Unexpected file field. Please use 'file' as the field name.",
-            })
-          }
+          })
+        }
           return res.status(400).json({
             success: false,
             message: err.message || "File upload error",
@@ -274,7 +274,7 @@ router.post(
         const filePath = path.join(__dirname, "../uploads/learning-resources", req.file.filename)
         if (fs.existsSync(filePath)) {
           try {
-            fs.unlinkSync(filePath)
+          fs.unlinkSync(filePath)
           } catch (unlinkError) {
             console.error("⚠️ [LEARNING RESOURCES] Error deleting file:", unlinkError)
           }

@@ -18,7 +18,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
 
 interface SupportRequest {
   _id: string
@@ -511,6 +511,8 @@ export function AdminSupportRequests() {
     </div>
   )
 }
+
+
 
 
 

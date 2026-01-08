@@ -149,21 +149,6 @@ export default function CustomersPage() {
       ),
       color: "chart-3",
     },
-    {
-      label: "Total Revenue",
-      value: formatCurrency(customers.reduce((sum, c) => sum + c.totalSpent, 0)),
-      icon: (
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      ),
-      color: "chart-2",
-    },
   ]
 
   return (
@@ -221,7 +206,7 @@ export default function CustomersPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 gap-3">
               {stats.map((stat, index) => {
                 const colorMap: Record<string, { bg: string; icon: string; gradient: string }> = {
                   primary: { bg: "bg-primary/10", icon: "text-primary", gradient: "from-primary/20 to-primary/10" },

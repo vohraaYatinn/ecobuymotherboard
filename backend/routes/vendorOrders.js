@@ -25,13 +25,14 @@ router.get("/unassigned", verifyVendorToken, async (req, res) => {
   try {
     const { page = 1, limit = 20 } = req.query
 
-    // Find orders without vendor assignment
+    // Find orders without vendor assignment and only paid orders
     const filter = {
       $or: [
         { vendorId: null },
         { vendorId: { $exists: false } }
       ],
-      status: { $in: ["pending", "confirmed"] } // Only show pending or confirmed orders
+      status: { $in: ["pending", "confirmed"] }, // Only show pending or confirmed orders
+      paymentStatus: "paid" // Only show orders that are paid, not pending
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit)
