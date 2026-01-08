@@ -4,6 +4,7 @@ import Customer from "../models/Customer.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Vendor from "../models/Vendor.js"
+import Settings from "../models/Settings.js"
 import { verifyVendorToken } from "../middleware/auth.js"
 import { createShipmentForOrder, downloadShippingLabel } from "../services/dtdcService.js"
 
@@ -309,6 +310,76 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
       .select("orderNumber customerId total status createdAt")
       .lean()
 
+    // Calculate ledger amounts (totalEarned, paidAmount, pendingAmount, balanceAmount)
+    const RETURN_WINDOW_DAYS = 3
+    const returnWindowMs = RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    const now = Date.now()
+    const returnWindowCutoff = now - returnWindowMs
+
+    // Get all delivered orders with return request info
+    const deliveredOrdersWithReturns = await Order.find({
+      vendorId,
+      status: "delivered",
+    })
+      .select("subtotal total paymentMethod deliveredAt updatedAt returnRequest")
+      .lean()
+
+    // Calculate totalEarned: delivered orders with closed return window and no pending returns
+    let totalEarned = 0
+    let pendingAmount = 0
+
+    for (const order of deliveredOrdersWithReturns) {
+      const deliveryDate = order.deliveredAt ? new Date(order.deliveredAt) : new Date(order.updatedAt)
+      const deliveredAt = deliveryDate.getTime()
+      const returnDeadline = deliveredAt + returnWindowMs
+      const isWindowOver = now > returnDeadline
+      
+      const netPayout = calculateNetPayout(order, vendor)
+      
+      // Check if return is pending/accepted/completed (exclude denied)
+      const rrType = order.returnRequest?.type
+      const hasPendingReturn = rrType && rrType !== "denied"
+      
+      if (isWindowOver && !hasPendingReturn) {
+        // Eligible for payment - count as totalEarned
+        totalEarned += netPayout
+      } else {
+        // Not yet eligible - count as pendingAmount
+        pendingAmount += netPayout
+      }
+    }
+
+    // Get pending/shipped orders and add to pendingAmount
+    const pendingAndShippedOrders = await Order.find({
+      vendorId,
+      status: { $in: ["processing", "shipped"] },
+    })
+      .select("subtotal total paymentMethod")
+      .lean()
+
+    for (const order of pendingAndShippedOrders) {
+      pendingAmount += calculateNetPayout(order, vendor)
+    }
+
+    // Get paid amount from ledger
+    const LEDGER_SETTINGS_KEY = "vendor_ledger_payments"
+    let paidAmount = 0
+    try {
+      const setting = await Settings.findOne({ key: LEDGER_SETTINGS_KEY })
+      if (setting && typeof setting.value === "object" && setting.value !== null) {
+        const payments = setting.value
+        const vendorIdStr = vendorId.toString()
+        const ledgerEntry = payments[vendorIdStr]
+        paidAmount = Math.max(Number(ledgerEntry?.paid || 0), 0)
+      }
+    } catch (ledgerError) {
+      console.error("Error fetching ledger payments:", ledgerError)
+      // Continue with paidAmount = 0 if ledger fetch fails
+    }
+
+    // Calculate balance: totalEarned - paidAmount
+    const balanceAmount = totalEarned - paidAmount
+
     res.status(200).json({
       success: true,
       data: {
@@ -319,6 +390,10 @@ router.get("/dashboard/stats", verifyVendorToken, async (req, res) => {
           delivered: deliveredOrders,
           revenue: totalRevenue,
           avgOrderValue,
+          totalEarned,
+          paidAmount,
+          pendingAmount,
+          balanceAmount,
         },
         recentOrders,
       },
@@ -348,24 +423,24 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
     const { period = "30d" } = req.query // 7d, 30d, 90d, 1y
 
     // Calculate date range
-    const now = new Date()
+    const periodStartDate = new Date()
     let startDate = new Date()
     
     switch (period) {
       case "7d":
-        startDate.setDate(now.getDate() - 7)
+        startDate.setDate(periodStartDate.getDate() - 7)
         break
       case "30d":
-        startDate.setDate(now.getDate() - 30)
+        startDate.setDate(periodStartDate.getDate() - 30)
         break
       case "90d":
-        startDate.setDate(now.getDate() - 90)
+        startDate.setDate(periodStartDate.getDate() - 90)
         break
       case "1y":
-        startDate.setFullYear(now.getFullYear() - 1)
+        startDate.setFullYear(periodStartDate.getFullYear() - 1)
         break
       default:
-        startDate.setDate(now.getDate() - 30)
+        startDate.setDate(periodStartDate.getDate() - 30)
     }
 
     // Get vendor details for commission rate
@@ -377,11 +452,12 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
       })
     }
 
-    // Get orders in the period
+    // Get orders in the period with return request and delivery info
     const orders = await Order.find({
       vendorId: vendorId,
       createdAt: { $gte: startDate },
     })
+      .select("subtotal total paymentMethod status createdAt updatedAt deliveredAt returnRequest")
       .sort({ createdAt: 1 })
       .lean()
 
@@ -419,12 +495,58 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
 
+    // Calculate return window cutoff
+    const RETURN_WINDOW_DAYS = 3
+    const returnWindowMs = RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    const now = Date.now()
+
+    // Separate delivered orders by return window status
+    const deliveredOrders = orders.filter((o) => o.status === "delivered")
+    let deliveredReturnOpen = 0
+    let deliveredReturnOver = 0
+    let deliveredReturnOpenCount = 0
+    let deliveredReturnOverCount = 0
+
+    deliveredOrders.forEach((order) => {
+      const deliveryDate = order.deliveredAt ? new Date(order.deliveredAt) : new Date(order.updatedAt)
+      const deliveredAt = deliveryDate.getTime()
+      const returnDeadline = deliveredAt + returnWindowMs
+      const isWindowOver = now > returnDeadline
+      
+      // Check if return is pending/accepted/completed (exclude denied)
+      const rrType = order.returnRequest?.type
+      const hasPendingReturn = rrType && rrType !== "denied"
+      
+      const netPayout = calculateNetPayout(order, vendor)
+      
+      if (isWindowOver && !hasPendingReturn) {
+        deliveredReturnOver += netPayout
+        deliveredReturnOverCount++
+      } else {
+        deliveredReturnOpen += netPayout
+        deliveredReturnOpenCount++
+      }
+    })
+
+    // Get cancelled orders
+    const cancelledOrders = orders.filter((o) => o.status === "cancelled")
+    const cancelledRevenue = cancelledOrders.reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0)
+
+    // Get return accepted orders
+    const returnAcceptedOrders = orders.filter((o) => 
+      o.status === "return_accepted" || o.status === "return_picked_up"
+    )
+    const returnAcceptedRevenue = returnAcceptedOrders.reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0)
+    const returnAcceptedCount = returnAcceptedOrders.length
+
     // Orders by status
     const ordersByStatus = {
       processing: orders.filter((o) => o.status === "processing").length,
       shipped: orders.filter((o) => o.status === "shipped").length,
-      delivered: orders.filter((o) => o.status === "delivered").length,
-      cancelled: orders.filter((o) => o.status === "cancelled").length,
+      delivered_return_open: deliveredReturnOpenCount,
+      delivered_return_over: deliveredReturnOverCount,
+      cancelled: cancelledOrders.length,
+      return_accepted: returnAcceptedCount,
     }
 
     // Revenue by status using net payout
@@ -435,10 +557,74 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
       shipped: orders
         .filter((o) => o.status === "shipped")
         .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
-      delivered: orders
-        .filter((o) => o.status === "delivered")
-        .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
+      delivered_return_open: deliveredReturnOpen,
+      delivered_return_over: deliveredReturnOver,
+      cancelled: cancelledRevenue,
+      return_accepted: returnAcceptedRevenue,
     }
+
+    // Orders by status over time
+    const ordersByStatusOverTime = {}
+    const revenueByStatusOverTime = {}
+    
+    orders.forEach((order) => {
+      const date = new Date(order.createdAt).toISOString().split("T")[0]
+      
+      if (!ordersByStatusOverTime[date]) {
+        ordersByStatusOverTime[date] = {
+          date,
+          processing: 0,
+          shipped: 0,
+          delivered_return_open: 0,
+          delivered_return_over: 0,
+          cancelled: 0,
+          return_accepted: 0,
+        }
+        revenueByStatusOverTime[date] = {
+          date,
+          processing: 0,
+          shipped: 0,
+          delivered_return_open: 0,
+          delivered_return_over: 0,
+          cancelled: 0,
+          return_accepted: 0,
+        }
+      }
+
+      const netPayout = calculateNetPayout(order, vendor)
+      
+      if (order.status === "processing") {
+        ordersByStatusOverTime[date].processing++
+        revenueByStatusOverTime[date].processing += netPayout
+      } else if (order.status === "shipped") {
+        ordersByStatusOverTime[date].shipped++
+        revenueByStatusOverTime[date].shipped += netPayout
+      } else if (order.status === "delivered") {
+        const deliveryDate = order.deliveredAt ? new Date(order.deliveredAt) : new Date(order.updatedAt)
+        const deliveredAt = deliveryDate.getTime()
+        const returnDeadline = deliveredAt + returnWindowMs
+        const isWindowOver = now > returnDeadline
+        const rrType = order.returnRequest?.type
+        const hasPendingReturn = rrType && rrType !== "denied"
+        
+        if (isWindowOver && !hasPendingReturn) {
+          ordersByStatusOverTime[date].delivered_return_over++
+          revenueByStatusOverTime[date].delivered_return_over += netPayout
+        } else {
+          ordersByStatusOverTime[date].delivered_return_open++
+          revenueByStatusOverTime[date].delivered_return_open += netPayout
+        }
+      } else if (order.status === "cancelled") {
+        ordersByStatusOverTime[date].cancelled++
+        revenueByStatusOverTime[date].cancelled += netPayout
+      } else if (order.status === "return_accepted" || order.status === "return_picked_up") {
+        ordersByStatusOverTime[date].return_accepted++
+        revenueByStatusOverTime[date].return_accepted += netPayout
+      }
+    })
+
+    const ordersByStatusOverTimeArray = Object.values(ordersByStatusOverTime)
+      .sort((a, b) => a.date.localeCompare(b.date))
 
     // Calculate totals using net payout (all delivered orders count as revenue)
     const totalRevenue = orders
@@ -459,11 +645,15 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
         },
         revenueOverTime: revenueData,
         ordersOverTime: ordersData,
+        ordersByStatusOverTime: ordersByStatusOverTimeArray,
         ordersByStatus,
         revenueByStatus: {
           processing: Math.round(revenueByStatus.processing),
           shipped: Math.round(revenueByStatus.shipped),
-          delivered: Math.round(revenueByStatus.delivered),
+          delivered_return_open: Math.round(revenueByStatus.delivered_return_open),
+          delivered_return_over: Math.round(revenueByStatus.delivered_return_over),
+          cancelled: Math.round(revenueByStatus.cancelled),
+          return_accepted: Math.round(revenueByStatus.return_accepted),
         },
       },
     })
