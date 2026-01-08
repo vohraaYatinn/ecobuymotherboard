@@ -160,6 +160,12 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
     }, 0)
 
     // Commission + seller payout liability
+    // Use same calculation as admin ledger: subtotal - commission - gateway charges (NOT GST)
+    const RETURN_WINDOW_DAYS = 3
+    const GATEWAY_RATE = 0.02 // 2%
+    const now = Date.now()
+    const returnWindowMs = RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000
+
     let commissionEarned = 0
     const vendorPayouts = {}
     settledOrders.forEach((order) => {
@@ -168,37 +174,57 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
 
       const vendor = vendorMap.get(vendorId)
       const commissionRate = vendor?.commission || 0
-      const commissionBase = order.subtotal ?? order.total ?? 0
-      const commissionForOrder = Math.round((commissionBase * commissionRate) / 100)
+      const commissionMultiplier = commissionRate / 100
+      const payoutMultiplier = 1 - commissionMultiplier
+      const subtotal = order.subtotal ?? order.total ?? 0
+      const commissionForOrder = Math.round(subtotal * commissionMultiplier)
       const gstForOrder = (order.cgst || 0) + (order.sgst || 0) + (order.igst || 0)
-      const isDelivered = order.status === "delivered" && order.paymentStatus !== "refunded"
+      
+      // Check if order is eligible (delivered, paid, return window over, no active return)
+      const isDelivered = order.status === "delivered" && order.paymentStatus === "paid"
+      
+      // Check return window
+      const deliveryDate = order.deliveredAt ? new Date(order.deliveredAt) : new Date(order.createdAt)
+      const deliveredAt = deliveryDate.getTime()
+      const returnDeadline = deliveredAt + returnWindowMs
+      const isReturnWindowOver = now > returnDeadline
+      
+      // Check for active returns
+      const returnRequestType = order.returnRequest?.type
+      const hasActiveReturn = returnRequestType && returnRequestType !== "denied"
+      
+      const isEligible = isDelivered && isReturnWindowOver && !hasActiveReturn
 
-      if (isDelivered) {
+      if (isEligible) {
         commissionEarned += commissionForOrder
-      }
+        
+        // Calculate net payout using same formula as admin ledger
+        const payoutBeforeGateway = subtotal * payoutMultiplier
+        // Gateway charges only apply to online/wallet orders
+        const paymentGatewayCharges = (order.paymentMethod === "online" || order.paymentMethod === "wallet")
+          ? payoutBeforeGateway * GATEWAY_RATE
+          : 0
+        const netPayout = payoutBeforeGateway - paymentGatewayCharges
 
-      if (!vendorPayouts[vendorId]) {
-        vendorPayouts[vendorId] = {
-          vendorId,
-          name: vendor?.name || "Unknown Vendor",
-          email: vendor?.email || "",
-          phone: vendor?.phone || "",
-          orderCount: 0,
-          gross: 0,
-          commission: 0,
-          gstCollected: 0,
-          pendingPayout: 0,
+        if (!vendorPayouts[vendorId]) {
+          vendorPayouts[vendorId] = {
+            vendorId,
+            name: vendor?.name || "Unknown Vendor",
+            email: vendor?.email || "",
+            phone: vendor?.phone || "",
+            orderCount: 0,
+            gross: 0,
+            commission: 0,
+            gstCollected: 0,
+            pendingPayout: 0,
+          }
         }
-      }
 
-      vendorPayouts[vendorId].orderCount += 1
-      vendorPayouts[vendorId].gross += order.total || 0
-      vendorPayouts[vendorId].commission += commissionForOrder
-      vendorPayouts[vendorId].gstCollected += gstForOrder
-
-      if (isDelivered) {
-        // Net payable is gross minus commission and GST collected
-        vendorPayouts[vendorId].pendingPayout += (order.total || 0) - commissionForOrder - gstForOrder
+        vendorPayouts[vendorId].orderCount += 1
+        vendorPayouts[vendorId].gross += order.total || 0
+        vendorPayouts[vendorId].commission += commissionForOrder
+        vendorPayouts[vendorId].gstCollected += gstForOrder
+        vendorPayouts[vendorId].pendingPayout += Math.round(netPayout)
       }
     })
 
