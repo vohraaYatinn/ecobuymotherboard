@@ -18,7 +18,7 @@ import {
 import { Search, Eye, Loader2, AlertCircle, ChevronLeft, ChevronRight, FileDown, Trash2 } from "lucide-react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface Customer {
   _id: string

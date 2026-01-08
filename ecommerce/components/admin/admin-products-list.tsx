@@ -21,7 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Search, Eye, Plus, Edit, Loader2, Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Trash2, CheckSquare, Square } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface Product {
   _id: string

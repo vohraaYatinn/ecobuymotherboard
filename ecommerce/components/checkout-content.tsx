@@ -19,7 +19,7 @@ import {
 import { useCart } from "@/lib/cart-context"
 import { MapPin, Plus, Loader2, Check, CheckCircle, Sparkles, Clock } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 // All Indian States and Union Territories
 const INDIAN_STATES = [

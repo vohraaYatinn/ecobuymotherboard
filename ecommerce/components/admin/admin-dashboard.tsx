@@ -20,7 +20,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.safartax.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 type PaymentBreakdown = {
   amount: number
