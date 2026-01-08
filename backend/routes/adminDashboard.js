@@ -163,8 +163,8 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
     // Use same calculation as admin ledger: subtotal - commission - gateway charges (NOT GST)
     const RETURN_WINDOW_DAYS = 3
     const GATEWAY_RATE = 0.02 // 2%
-    const now = Date.now()
     const returnWindowMs = RETURN_WINDOW_DAYS * 24 * 60 * 60 * 1000
+    const currentTime = Date.now()
 
     let commissionEarned = 0
     const vendorPayouts = {}
@@ -187,7 +187,7 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
       const deliveryDate = order.deliveredAt ? new Date(order.deliveredAt) : new Date(order.createdAt)
       const deliveredAt = deliveryDate.getTime()
       const returnDeadline = deliveredAt + returnWindowMs
-      const isReturnWindowOver = now > returnDeadline
+      const isReturnWindowOver = currentTime > returnDeadline
       
       // Check for active returns
       const returnRequestType = order.returnRequest?.type
