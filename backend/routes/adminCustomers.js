@@ -196,14 +196,39 @@ router.get("/:id", verifyAdminToken, async (req, res) => {
     }
 
     // Get order statistics
-    const orders = await Order.find({ customerId: customer._id })
-    const totalOrders = orders.length
-    const totalSpent = orders.reduce((sum, order) => {
+    const allOrders = await Order.find({ customerId: customer._id })
+      .select("status paymentStatus total")
+      .lean()
+    
+    const totalOrders = allOrders.length
+    const totalSpent = allOrders.reduce((sum, order) => {
       if (order.status === "delivered" && order.paymentStatus === "paid") {
         return sum + order.total
       }
       return sum
     }, 0)
+
+    // Get recent orders for display
+    const recentOrdersData = await Order.find({ customerId: customer._id })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .select("orderNumber status paymentStatus createdAt total")
+      .lean()
+
+    // Get customer addresses
+    const addresses = await CustomerAddress.find({ customerId: customer._id })
+      .sort({ isDefault: -1, createdAt: -1 })
+      .lean()
+
+    // Format recent orders for frontend
+    const recentOrders = recentOrdersData.map((order) => ({
+      _id: order._id,
+      orderNumber: order.orderNumber,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      createdAt: order.createdAt,
+      total: order.total,
+    }))
 
     res.status(200).json({
       success: true,
@@ -211,6 +236,8 @@ router.get("/:id", verifyAdminToken, async (req, res) => {
         ...customer,
         totalOrders,
         totalSpent,
+        addresses,
+        recentOrders,
       },
     })
   } catch (error) {

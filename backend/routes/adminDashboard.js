@@ -146,7 +146,7 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
       bucket.amount += order.total || 0
       bucket.count += 1
     })
-    const gatewayRate = 0.018 // 1.8% applied on payout-before-gateway for online + wallet
+    const gatewayRate = 0.02 // 2% applied on payout-before-gateway for online + wallet
     const estimatedGatewayCharges = settledOrders.reduce((sum, order) => {
       if (order.paymentMethod !== "online" && order.paymentMethod !== "wallet") return sum
 
