@@ -63,12 +63,12 @@ router.put("/order/:orderId/awb", verifyAdminToken, async (req, res) => {
       })
     }
 
-    // Validate AWB format
+    // Validate AWB format (DTDC can return 9–12 alphanumeric, e.g. V01197967 or 7X109986044)
     const cleanAWB = awbNumber.trim().toUpperCase()
-    if (!/^[A-Z]\d{8}$/.test(cleanAWB)) {
+    if (!/^[A-Z0-9]{9,12}$/.test(cleanAWB)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid AWB number format. Expected format: 1 alphabet followed by 8 digits (e.g., V01197967)",
+        message: "Invalid AWB number format. Expected 9-12 alphanumeric characters (e.g., V01197967 or 7X109986044)",
       })
     }
 

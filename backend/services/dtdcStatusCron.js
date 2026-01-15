@@ -1,6 +1,8 @@
 import cron from "node-cron"
 import Order from "../models/Order.js"
 import { trackConsignmentJson, mapDtdcStatusToEnum } from "./dtdcService.js"
+import { sendCustomerOrderStageEmail } from "./orderCustomerEmailNotifications.js"
+import { notifyVendorsForOrderStage } from "./vendorOrderStageNotifications.js"
 
 /**
  * Main function to update DTDC status for shipped orders
@@ -13,11 +15,17 @@ export async function updateDtdcStatusForShippedOrders() {
     console.log(`🔄 [DtdcStatusCron] Starting DTDC status update check...`)
     console.log(`🔄 [DtdcStatusCron] Timestamp: ${new Date().toISOString()}`)
 
-    // Find all orders with status "shipped" or "return_accepted" that have an AWB number
+    // Find all orders that have either:
+    // - forward shipment to track (status shipped with awbNumber)
+    // - return shipment to track (status return_accepted with returnAwbNumber)
     const shippedOrders = await Order.find({
-      status: { $in: ["shipped", "return_accepted"] },
-      awbNumber: { $ne: null, $exists: true },
-    }).select("_id orderNumber awbNumber dtdcStatus dtdcTrackingData trackingLastUpdated status")
+      $or: [
+        { status: "shipped", awbNumber: { $ne: null, $exists: true } },
+        { status: "return_accepted", returnAwbNumber: { $ne: null, $exists: true } },
+      ],
+    }).select(
+      "_id orderNumber status awbNumber dtdcStatus dtdcTrackingData trackingLastUpdated returnAwbNumber returnDtdcStatus returnDtdcTrackingData returnTrackingLastUpdated deliveredAt updatedAt"
+    )
 
     console.log(`🔍 [DtdcStatusCron] Query executed - found ${shippedOrders.length} order(s)`)
 
@@ -34,7 +42,7 @@ export async function updateDtdcStatusForShippedOrders() {
     }
 
     console.log(
-      `📦 [DtdcStatusCron] Found ${shippedOrders.length} order(s) (shipped/return_accepted) with AWB numbers to check`
+      `📦 [DtdcStatusCron] Found ${shippedOrders.length} order(s) (forward shipped / return accepted) with AWB numbers to check`
     )
     console.log(`📦 [DtdcStatusCron] Order IDs: ${shippedOrders.map((o) => o.orderNumber).join(", ")}`)
 
@@ -51,22 +59,29 @@ export async function updateDtdcStatusForShippedOrders() {
         console.log(`📋 [DtdcStatusCron] Order ID: ${order._id}`)
         console.log(`📋 [DtdcStatusCron] Order Status: ${order.status}`)
 
-        if (!order.awbNumber) {
+        const isReturnLeg = order.status === "return_accepted"
+        const awbToTrack = isReturnLeg ? order.returnAwbNumber : order.awbNumber
+
+        if (!awbToTrack) {
           console.warn(
-            `⚠️ [DtdcStatusCron] Order ${order.orderNumber} has no AWB number, skipping`
+            `⚠️ [DtdcStatusCron] Order ${order.orderNumber} has no ${isReturnLeg ? "return" : "forward"} AWB number, skipping`
           )
           continue
         }
 
         console.log(
-          `🔍 [DtdcStatusCron] Checking DTDC status for order ${order.orderNumber} (AWB: ${order.awbNumber})`
+          `🔍 [DtdcStatusCron] Checking DTDC status for order ${order.orderNumber} (${isReturnLeg ? "RETURN" : "FORWARD"} AWB: ${awbToTrack})`
         )
-        console.log(`🔍 [DtdcStatusCron] Current DTDC Status: ${order.dtdcStatus || "null"}`)
-        console.log(`🔍 [DtdcStatusCron] Last Updated: ${order.trackingLastUpdated || "Never"}`)
+        console.log(
+          `🔍 [DtdcStatusCron] Current DTDC Status: ${isReturnLeg ? order.returnDtdcStatus || "null" : order.dtdcStatus || "null"}`
+        )
+        console.log(
+          `🔍 [DtdcStatusCron] Last Updated: ${isReturnLeg ? order.returnTrackingLastUpdated || "Never" : order.trackingLastUpdated || "Never"}`
+        )
 
         // Track the consignment
-        console.log(`🌐 [DtdcStatusCron] Calling DTDC API for AWB: ${order.awbNumber}...`)
-        const trackingData = await trackConsignmentJson(order.awbNumber, true)
+        console.log(`🌐 [DtdcStatusCron] Calling DTDC API for AWB: ${awbToTrack}...`)
+        const trackingData = await trackConsignmentJson(awbToTrack, true)
 
         if (!trackingData || !trackingData.success) {
           console.error(
@@ -90,7 +105,7 @@ export async function updateDtdcStatusForShippedOrders() {
         console.log(`🔄 [DtdcStatusCron] Mapped Status: "${statusText}" → "${newDtdcStatus}"`)
 
         // Store old status for logging
-        const oldDtdcStatus = order.dtdcStatus
+        const oldDtdcStatus = isReturnLeg ? order.returnDtdcStatus : order.dtdcStatus
 
         // Check if status has changed
         const statusChanged = oldDtdcStatus !== newDtdcStatus
@@ -101,19 +116,22 @@ export async function updateDtdcStatusForShippedOrders() {
         }
 
         // Update order with new tracking data
-        order.dtdcTrackingData = trackingData.rawData || trackingData
-        order.trackingLastUpdated = new Date()
-
-        if (newDtdcStatus) {
-          order.dtdcStatus = newDtdcStatus
+        if (isReturnLeg) {
+          order.returnDtdcTrackingData = trackingData.rawData || trackingData
+          order.returnTrackingLastUpdated = new Date()
+          if (newDtdcStatus) order.returnDtdcStatus = newDtdcStatus
+        } else {
+          order.dtdcTrackingData = trackingData.rawData || trackingData
+          order.trackingLastUpdated = new Date()
+          if (newDtdcStatus) order.dtdcStatus = newDtdcStatus
         }
 
         // Auto-update order status based on DTDC status changes
         let orderStatusUpdated = false
         const oldOrderStatus = order.status
 
-        // Rule 1: When order is "shipped" and DTDC status becomes "delivered", update order status to "delivered"
-        if (order.status === "shipped" && newDtdcStatus === "delivered") {
+        // Rule 1 (Forward): When order is "shipped" and DTDC status becomes "delivered", update order status to "delivered"
+        if (!isReturnLeg && order.status === "shipped" && newDtdcStatus === "delivered") {
           order.status = "delivered"
           if (!order.deliveredAt) {
             order.deliveredAt = new Date()
@@ -125,9 +143,9 @@ export async function updateDtdcStatusForShippedOrders() {
           )
         }
 
-        // Rule 2: When order is "return_accepted" and DTDC status indicates "picked up", 
+        // Rule 2 (Return): When order is "return_accepted" and DTDC status indicates "picked up",
         // update order status to "return_picked_up"
-        if (order.status === "return_accepted" && newDtdcStatus === "booked") {
+        if (isReturnLeg && order.status === "return_accepted" && newDtdcStatus === "booked") {
           // Check if the status text indicates pickup
           const statusTextLower = (statusText || "").toLowerCase()
           if (
@@ -146,6 +164,37 @@ export async function updateDtdcStatusForShippedOrders() {
         console.log(`💾 [DtdcStatusCron] Saving order to database...`)
         await order.save()
         console.log(`✅ [DtdcStatusCron] Order saved successfully`)
+
+        // Notify vendor when cron auto-updates the order stage (deduped)
+        try {
+          if (orderStatusUpdated && oldOrderStatus !== order.status) {
+            await notifyVendorsForOrderStage({ orderId: order._id, stageKey: `status:${order.status}` })
+          }
+        } catch (vendorErr) {
+          console.error("❌ [DtdcStatusCron] Error notifying vendor:", vendorErr?.message || vendorErr)
+        }
+
+        // Email buyer on relevant shipping/return tracking updates (deduped)
+        try {
+          if (statusChanged && newDtdcStatus) {
+            if (isReturnLeg) {
+              await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: `return_dtdc:${newDtdcStatus}` })
+            } else {
+              await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: `dtdc:${newDtdcStatus}` })
+            }
+          }
+        } catch (emailErr) {
+          console.error("❌ [DtdcStatusCron] Error sending DTDC status email:", emailErr?.message || emailErr)
+        }
+
+        // Email buyer on auto-updated order status (deduped)
+        try {
+          if (orderStatusUpdated && oldOrderStatus !== order.status) {
+            await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: `status:${order.status}` })
+          }
+        } catch (emailErr) {
+          console.error("❌ [DtdcStatusCron] Error sending order status email:", emailErr?.message || emailErr)
+        }
 
         if (orderStatusUpdated) {
           orderStatusUpdatedCount++

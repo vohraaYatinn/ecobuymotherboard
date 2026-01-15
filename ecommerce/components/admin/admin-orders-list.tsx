@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
 
 interface OrderItem {
   productId?: {
@@ -120,6 +120,8 @@ const getStatusColor = (status: string) => {
       return "bg-green-100 text-green-800 border-green-200"
     case "cancelled":
       return "bg-red-100 text-red-800 border-red-200"
+    case "admin_review_required":
+      return "bg-red-100 text-red-800 border-red-200"
     case "return_requested":
       return "bg-orange-100 text-orange-800 border-orange-200"
     case "return_accepted":
@@ -134,8 +136,10 @@ const getStatusColor = (status: string) => {
 }
 
 const formatStatus = (status: string) => {
-  return status
-    .split("-")
+  const normalized = status === "admin_review_required" ? "Needs Reassign" : status
+  if (normalized === "Needs Reassign") return normalized
+  return normalized
+    .split(/[-_]/g)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ")
 }
@@ -191,6 +195,30 @@ const getRefundStatusColor = (status: string | null | undefined) => {
 const formatRefundStatus = (status: string | null | undefined) => {
   if (!status) return "N/A"
   return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+const getReturnPickupInfo = (order: Order): { label: string; className: string } | null => {
+  const orderStatus = (order.status || "").toLowerCase()
+  const returnType = order.returnRequest?.type
+
+  const isReturnAccepted = returnType === "accepted" || orderStatus === "return_accepted"
+  const isReturnPickedUp = orderStatus === "return_picked_up"
+
+  if (isReturnPickedUp) {
+    return {
+      label: "Picked Up",
+      className: "bg-blue-100 text-blue-800 border-blue-200",
+    }
+  }
+
+  if (isReturnAccepted) {
+    return {
+      label: "Return Pickup Pending",
+      className: "bg-orange-100 text-orange-800 border-orange-200",
+    }
+  }
+
+  return null
 }
 
 export function AdminOrdersList() {
@@ -671,6 +699,7 @@ export function AdminOrdersList() {
         "Payment Method",
         "Payment Status",
         "Order Status",
+        "Return Pickup Status",
         "AWB Number",
         "DTDC Status",
         "Refund Status",
@@ -686,6 +715,7 @@ export function AdminOrdersList() {
         const customer = getCustomerInfo(order)
         const vendor = getVendorInfo(order)
         const address = getAddressInfo(order)
+        const returnPickupInfo = getReturnPickupInfo(order)
         const itemsList = order.items.map((item) => `${item.name} (${item.brand})`).join("; ")
         const itemDetails = order.items
           .map((item) => `${item.name} (${item.brand}) - Qty: ${item.quantity} - ₹${item.price}`)
@@ -714,6 +744,7 @@ export function AdminOrdersList() {
           order.paymentMethod.toUpperCase(),
           formatStatus(order.paymentStatus),
           formatStatus(order.status),
+          returnPickupInfo?.label || "",
           order.awbNumber || "",
           formatDtdcStatus(order.dtdcStatus),
           formatRefundStatus(order.refundStatus),
@@ -955,6 +986,7 @@ export function AdminOrdersList() {
                       <TableHead className="font-semibold">Items</TableHead>
                       <TableHead className="font-semibold">Payment</TableHead>
                       <TableHead className="font-semibold">Status</TableHead>
+                      <TableHead className="font-semibold">Return Pickup</TableHead>
                       <TableHead className="font-semibold">DTDC Status</TableHead>
                       <TableHead className="font-semibold">Refund Status</TableHead>
                       <TableHead className="font-semibold">Total</TableHead>
@@ -967,6 +999,7 @@ export function AdminOrdersList() {
                       const customer = getCustomerInfo(order)
                       const vendor = getVendorInfo(order)
                       const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)
+                      const returnPickupInfo = getReturnPickupInfo(order)
                       return (
                         <TableRow key={order._id} className="hover:bg-muted/30 transition-colors">
                           <TableCell>
@@ -1079,6 +1112,13 @@ export function AdminOrdersList() {
                             </div>
                           </TableCell>
                           <TableCell>
+                            {returnPickupInfo ? (
+                              <Badge className={returnPickupInfo.className}>{returnPickupInfo.label}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
                             {order.awbNumber ? (
                               <div className="space-y-1">
                                 <Badge className={getDtdcStatusColor(order.dtdcStatus)}>
@@ -1168,6 +1208,7 @@ export function AdminOrdersList() {
                   const customer = getCustomerInfo(order)
                   const vendor = getVendorInfo(order)
                   const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)
+                  const returnPickupInfo = getReturnPickupInfo(order)
                   return (
                     <div key={order._id} className="p-4 hover:bg-muted/30 transition-colors">
                       <div className="space-y-3">
@@ -1292,6 +1333,16 @@ export function AdminOrdersList() {
                               )}
                             </div>
                           </div>
+                          <div>
+                            <span className="text-muted-foreground">Return Pickup:</span>
+                            <div className="mt-1">
+                              {returnPickupInfo ? (
+                                <Badge className={returnPickupInfo.className}>{returnPickupInfo.label}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">-</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                         <div className="flex justify-end gap-2 pt-2 border-t">
                           <Link href={`/admin/orders/${order._id}`}>
@@ -1395,7 +1446,10 @@ export function AdminOrdersList() {
                   <SelectContent>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="processing">Processing</SelectItem>
+                <SelectItem value="admin_review_required">Needs Reassign</SelectItem>
                     <SelectItem value="processing">Processing</SelectItem>
+                    <SelectItem value="admin_review_required">Needs Reassign</SelectItem>
                     <SelectItem value="shipped">Shipped</SelectItem>
                     <SelectItem value="delivered">Delivered</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>

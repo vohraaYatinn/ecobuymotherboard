@@ -22,7 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
 
 interface OrderItem {
   productId: {
@@ -82,6 +82,7 @@ interface Order {
   paymentStatus: string
   refundStatus?: "pending" | "processing" | "completed" | "failed" | null
   awbNumber?: string
+  returnAwbNumber?: string
   dtdcTrackingData?: any
   trackingLastUpdated?: string
   invoiceNumber?: string
@@ -159,6 +160,9 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
     switch (status.toLowerCase()) {
       case "delivered":
         return "bg-green-500"
+      case "picked_up":
+      case "picked up":
+        return "bg-violet-500"
       case "shipped":
         return "bg-blue-500"
       case "processing":
@@ -174,9 +178,50 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
   const formatStatus = (status: string) => {
     return status
-      .split("-")
+      .split(/[-_]/)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ")
+  }
+
+  /**
+   * Infer a more granular forward-shipment stage from DTDC tracking text.
+   * This lets us show Processing -> Picked Up -> Shipped progression even if
+   * the backend order.status is only "shipped".
+   */
+  const inferForwardStageFromDtdc = (order: Order): "picked_up" | "shipped" | "delivered" | null => {
+    const statusText = String(order.dtdcTrackingData?.statusText || "").toLowerCase()
+    if (!statusText) return null
+
+    if (statusText.includes("delivered") || statusText.includes("delivery completed")) {
+      return "delivered"
+    }
+    if (
+      statusText.includes("out for delivery") ||
+      statusText.includes("in transit") ||
+      statusText.includes("dispatched") ||
+      statusText.includes("arrived at")
+    ) {
+      return "shipped"
+    }
+    if (
+      statusText.includes("picked up") ||
+      statusText.includes("pickup completed") ||
+      statusText.includes("pickup done")
+    ) {
+      return "picked_up"
+    }
+
+    return null
+  }
+
+  const getEffectiveOrderStatus = (order: Order): string => {
+    const s = (order.status || "").toLowerCase()
+    // Keep special flows as-is
+    if (s === "cancelled" || s.startsWith("return_") || s === "admin_review_required") return s
+
+    const inferred = inferForwardStageFromDtdc(order)
+    if (inferred) return inferred
+    return s
   }
 
   const handleReturnFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -200,6 +245,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const generateTrackingSteps = (order: Order): TrackingStep[] => {
     const steps: TrackingStep[] = []
     const orderStatus = order.status.toLowerCase()
+    const effectiveStatus = getEffectiveOrderStatus(order)
     const isPaymentPending = order.paymentStatus?.toLowerCase() === "pending"
 
     // Handle cancelled orders
@@ -358,8 +404,8 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
     }
 
     // Normal order flow (no cancellation, no return)
-    const statusOrder = ["pending", "confirmed", "processing", "shipped", "delivered"]
-    const currentStatusIndex = statusOrder.indexOf(orderStatus)
+    const statusOrder = ["pending", "confirmed", "processing", "picked_up", "shipped", "delivered"]
+    const currentStatusIndex = Math.max(statusOrder.indexOf(effectiveStatus), statusOrder.indexOf(orderStatus))
 
     statusOrder.forEach((status, index) => {
       const isCompleted = index <= currentStatusIndex
@@ -394,6 +440,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
         status: status === "pending" ? (isPaymentPending ? "Awaiting Payment" : "Order Placed") :
                 status === "confirmed" ? "Order Confirmed" :
                 status === "processing" ? "Processing" :
+                status === "picked_up" ? "Picked Up" :
                 status === "shipped" ? "Shipped" : "Delivered",
         date,
         completed: isCompleted,
@@ -428,6 +475,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
   const trackingSteps = generateTrackingSteps(order)
   const orderDate = new Date(order.createdAt)
+  const effectiveStatusForBadge = getEffectiveOrderStatus(order)
 
   // Check if order can be cancelled
   const isPaymentPending = order.paymentStatus?.toLowerCase() === "pending"
@@ -654,8 +702,8 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
           <p className="text-sm sm:text-base text-muted-foreground">
             Order Number: <span className="font-semibold text-foreground">{order.orderNumber}</span>
           </p>
-          <Badge className={`${getStatusColor(order.status)} w-fit text-xs`}>
-            {formatStatus(order.status)}
+          <Badge className={`${getStatusColor(effectiveStatusForBadge)} w-fit text-xs`}>
+            {formatStatus(effectiveStatusForBadge)}
           </Badge>
         </div>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
@@ -763,6 +811,37 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
                     <Button variant="outline" className="w-full">
                       <ExternalLink className="h-4 w-4 mr-2" />
                       Track on DTDC Website
+                    </Button>
+                  </a>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* DTDC Return (Reverse Pickup) Tracking Information */}
+          {order.returnAwbNumber && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+                  <RotateCcw className="h-5 w-5" />
+                  Return Pickup Tracking (DTDC)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Return AWB Number</Label>
+                    <p className="text-sm font-medium mt-1">{order.returnAwbNumber}</p>
+                  </div>
+                  <a
+                    href={getDTDCTrackingUrl(order.returnAwbNumber)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full"
+                  >
+                    <Button variant="outline" className="w-full">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Track Return on DTDC Website
                     </Button>
                   </a>
                 </div>

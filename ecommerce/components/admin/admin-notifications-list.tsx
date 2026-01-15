@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Loader2, AlertCircle, Bell } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
 
 interface Notification {
   _id: string
@@ -60,6 +60,23 @@ const getNotificationIcon = (type: string) => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       )
+    case "admin_review_required":
+      return (
+        <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 9v2m0 4h.01M12 3a9 9 0 110 18 9 9 0 010-18z"
+          />
+        </svg>
+      )
+    case "order_cancelled":
+      return (
+        <svg className={iconClass} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      )
     default:
       return <Bell className={iconClass} />
   }
@@ -76,6 +93,10 @@ const getNotificationColor = (type: string) => {
       return "chart-2"
     case "order_delivered":
       return "chart-4"
+    case "admin_review_required":
+      return "destructive"
+    case "order_cancelled":
+      return "destructive"
     default:
       return "primary"
   }

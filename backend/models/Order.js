@@ -104,6 +104,12 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Customer email notification dedupe (stores stage keys we've already emailed)
+    // Examples: "status:processing", "status:shipped", "dtdc:out_for_delivery", "refund:completed"
+    emailNotifiedStages: {
+      type: [String],
+      default: [],
+    },
     vendorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Vendor",
@@ -120,7 +126,17 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // DTDC Return (Reverse Pickup) Tracking fields
+    returnAwbNumber: {
+      type: String,
+      default: null,
+    },
     dtdcStatus: {
+      type: String,
+      enum: ["pending", "booked", "in_transit", "out_for_delivery", "delivered", "rto", "failed", "cancelled"],
+      default: null,
+    },
+    returnDtdcStatus: {
       type: String,
       enum: ["pending", "booked", "in_transit", "out_for_delivery", "delivered", "rto", "failed", "cancelled"],
       default: null,
@@ -129,7 +145,15 @@ const orderSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+    returnDtdcTrackingData: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
     trackingLastUpdated: {
+      type: Date,
+      default: null,
+    },
+    returnTrackingLastUpdated: {
       type: Date,
       default: null,
     },
@@ -210,6 +234,18 @@ const orderSchema = new mongoose.Schema(
       type: Date,
       default: null,
       index: true,
+    },
+    // Vendor packing video captured when marking order as packed/shipped.
+    // Used later for return verification.
+    packingVideo: {
+      type: {
+        url: { type: String, default: null },
+        originalName: { type: String, default: null },
+        mimeType: { type: String, default: null },
+        size: { type: Number, default: null },
+        uploadedAt: { type: Date, default: null },
+      },
+      default: null,
     },
   },
   {

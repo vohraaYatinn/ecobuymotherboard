@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Loader2, AlertCircle, Check, Download } from "lucide-react"
+import { Loader2, AlertCircle, Check, Download, X } from "lucide-react"
 import { BottomNav } from "@/components/bottom-nav"
 import { API_URL } from "@/lib/api-config"
 import { useNavigation } from "@/contexts/navigation-context"
@@ -67,6 +67,7 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [accepting, setAccepting] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [downloadingLabel, setDownloadingLabel] = useState(false)
   const [vendorCommission, setVendorCommission] = useState<number | null>(null)
 
@@ -176,6 +177,53 @@ export default function OrderDetailPage() {
       alert("Network error. Please try again.")
     } finally {
       setAccepting(false)
+    }
+  }
+
+  const handleCancel = async () => {
+    if (!order) return
+
+    try {
+      const confirmCancel = confirm("Cancel this accepted order? Admin will be notified for reassignment.")
+      if (!confirmCancel) return
+
+      const reason = prompt("Reason for cancelling (optional):") || ""
+
+      setCancelling(true)
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendor/orders/${order._id}/cancel`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        if (response.status === 401) {
+          localStorage.removeItem("vendorToken")
+          localStorage.removeItem("vendorData")
+          router.push("/login")
+          return
+        }
+        alert(data.message || "Failed to cancel order")
+        return
+      }
+
+      alert("Order cancelled. Admin has been notified for reassignment.")
+      router.push("/orders")
+    } catch (err) {
+      console.error("Error cancelling order:", err)
+      alert("Network error. Please try again.")
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -332,6 +380,18 @@ export default function OrderDetailPage() {
                 directory: Directory.Documents,
               })
 
+              // Open the saved PDF (Android: should hand off to browser/PDF viewer)
+              try {
+                const { uri } = await Filesystem.getUri({
+                  path: filename,
+                  directory: Directory.Documents,
+                })
+                const fileUrl = Capacitor.convertFileSrc(uri)
+                window.open(fileUrl, "_blank", "noopener,noreferrer")
+              } catch (openError) {
+                console.error("Error opening saved label:", openError)
+              }
+
               const folderName = platform === "android" 
                 ? "Documents folder (accessible via file manager)" 
                 : "Documents folder (accessible via Files app)"
@@ -374,8 +434,14 @@ export default function OrderDetailPage() {
           }
         }
       } else {
-        // Use browser download for web
+        // Web: open + download
         const url = window.URL.createObjectURL(blob)
+        // Try to open in a new tab (may be blocked by popup blockers in some browsers)
+        try {
+          window.open(url, "_blank", "noopener,noreferrer")
+        } catch (openError) {
+          console.error("Error opening label in new tab:", openError)
+        }
         const a = document.createElement("a")
         a.href = url
         a.download = filename
@@ -395,6 +461,7 @@ export default function OrderDetailPage() {
   const canAccept = order && !order.vendorId && (order.status === "pending" || order.status === "confirmed")
   const isAssigned = order && order.vendorId
   const hasAWB = order && order.awbNumber
+  const canCancel = Boolean(order && isAssigned && order.status === "processing" && !hasAWB)
 
   if (loading) {
     return (
@@ -487,6 +554,26 @@ export default function OrderDetailPage() {
                 <>
                   <Check className="mr-2 h-4 w-4" />
                   Accept Order
+                </>
+              )}
+            </Button>
+          )}
+          {canCancel && (
+            <Button
+              onClick={handleCancel}
+              disabled={cancelling}
+              variant="destructive"
+              className="w-full h-10"
+            >
+              {cancelling ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Cancelling...
+                </>
+              ) : (
+                <>
+                  <X className="mr-2 h-4 w-4" />
+                  Cancel Order
                 </>
               )}
             </Button>

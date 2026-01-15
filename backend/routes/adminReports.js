@@ -145,6 +145,52 @@ router.get("/yesterday-summary", verifyAdminToken, async (req, res) => {
       },
     })
 
+    // Product quantities cancelled/refunded in date range (based on updatedAt)
+    const [cancelledAgg] = await Order.aggregate([
+      {
+        $match: {
+          status: "cancelled",
+          updatedAt: { $gte: dateStart, $lte: dateEnd },
+        },
+      },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: null,
+          qty: { $sum: "$items.quantity" },
+        },
+      },
+    ])
+
+    const [refundedAgg] = await Order.aggregate([
+      {
+        $match: {
+          paymentStatus: "refunded",
+          updatedAt: { $gte: dateStart, $lte: dateEnd },
+        },
+      },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: null,
+          qty: { $sum: "$items.quantity" },
+        },
+      },
+    ])
+
+    // Overall product quantities cancelled/refunded (current totals)
+    const [cancelledTotalAgg] = await Order.aggregate([
+      { $match: { status: "cancelled" } },
+      { $unwind: "$items" },
+      { $group: { _id: null, qty: { $sum: "$items.quantity" } } },
+    ])
+
+    const [refundedTotalAgg] = await Order.aggregate([
+      { $match: { paymentStatus: "refunded" } },
+      { $unwind: "$items" },
+      { $group: { _id: null, qty: { $sum: "$items.quantity" } } },
+    ])
+
     res.status(200).json({
       success: true,
       data: {
@@ -153,6 +199,10 @@ router.get("/yesterday-summary", verifyAdminToken, async (req, res) => {
         ordersPending,
         ordersDelivered,
         ordersDeliveredYesterday,
+        cancelledProductsInRange: cancelledAgg?.qty ?? 0,
+        refundedProductsInRange: refundedAgg?.qty ?? 0,
+        cancelledProducts: cancelledTotalAgg?.qty ?? 0,
+        refundedProducts: refundedTotalAgg?.qty ?? 0,
         date: dateLabel,
         isDateRange: !!(startDate && endDate),
         startDate: startDate || null,

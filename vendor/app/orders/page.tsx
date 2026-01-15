@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { BottomNav } from "@/components/bottom-nav"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Loader2, AlertCircle, FileDown, CreditCard, Wallet } from "lucide-react"
+import { Loader2, AlertCircle, FileDown, CreditCard, Wallet, X } from "lucide-react"
 import { API_URL } from "@/lib/api-config"
 import { useNavigation } from "@/contexts/navigation-context"
 import { Capacitor } from "@capacitor/core"
@@ -66,8 +66,10 @@ export default function OrdersPage() {
   const [activeTab, setActiveTab] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null)
   const [vendorCommission, setVendorCommission] = useState<number | null>(null)
   const [downloadingStatement, setDownloadingStatement] = useState(false)
+  const [packingVideoFiles, setPackingVideoFiles] = useState<Record<string, File | null>>({})
 
   useEffect(() => {
     fetchOrders()
@@ -193,7 +195,7 @@ export default function OrdersPage() {
     }
   }
 
-  const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+  const handleStatusUpdate = async (orderId: string, newStatus: string, packingVideoFile?: File | null) => {
     try {
       setUpdatingStatus(orderId)
       const token = localStorage.getItem("vendorToken")
@@ -202,14 +204,30 @@ export default function OrdersPage() {
         return
       }
 
-      const response = await fetch(`${API_URL}/api/vendor/orders/${orderId}/status`, {
-        method: "PUT",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status: newStatus }),
-      })
+      const url = `${API_URL}/api/vendor/orders/${orderId}/status`
+      const isPackingWithVideo = newStatus === "shipped" && packingVideoFile instanceof File
+
+      const response = await fetch(url, isPackingWithVideo
+        ? {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: (() => {
+              const form = new FormData()
+              form.append("status", newStatus)
+              form.append("packingVideo", packingVideoFile)
+              return form
+            })(),
+          }
+        : {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ status: newStatus }),
+          })
 
       const data = await response.json()
 
@@ -232,11 +250,61 @@ export default function OrdersPage() {
       setAllOrders((prev) =>
         prev.map((order) => (order._id === orderId ? { ...order, status: newStatus } : order))
       )
+      // Clear selected packing video file (if any)
+      setPackingVideoFiles((prev) => ({ ...prev, [orderId]: null }))
     } catch (err) {
       console.error("Error updating status:", err)
       alert("Network error. Please try again.")
     } finally {
       setUpdatingStatus(null)
+    }
+  }
+
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      const confirmCancel = confirm("Cancel this accepted order? Admin will be notified for reassignment.")
+      if (!confirmCancel) return
+
+      const reason = prompt("Reason for cancelling (optional):") || ""
+
+      setCancellingOrderId(orderId)
+      const token = localStorage.getItem("vendorToken")
+      if (!token) {
+        router.push("/login")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/vendor/orders/${orderId}/cancel`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason }),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        if (response.status === 401) {
+          localStorage.removeItem("vendorToken")
+          localStorage.removeItem("vendorData")
+          router.push("/login")
+          return
+        }
+        alert(data.message || "Failed to cancel order")
+        return
+      }
+
+      // Remove from current tab list + counts (it becomes unassigned + admin_review_required)
+      setOrders((prev) => prev.filter((o) => o._id !== orderId))
+      setAllOrders((prev) => prev.filter((o) => o._id !== orderId))
+
+      alert("Order cancelled. Admin has been notified for reassignment.")
+    } catch (err) {
+      console.error("Error cancelling order:", err)
+      alert("Network error. Please try again.")
+    } finally {
+      setCancellingOrderId(null)
     }
   }
 
@@ -618,6 +686,7 @@ export default function OrdersPage() {
             const items = itemCount(order)
             const canUpdateStatus = order.status === "processing"
             const payout = getPayoutBreakdown(order)
+            const selectedPackingVideo = packingVideoFiles[order._id] || null
 
             return (
               <Card
@@ -657,14 +726,54 @@ export default function OrdersPage() {
                   {canUpdateStatus && (
                     <div className="mb-3 p-3 rounded-lg bg-muted/30 border border-border/50">
                       <label className="text-xs font-semibold text-foreground mb-2 block">Update Status:</label>
-                      <Button
-                        className="w-full"
-                        variant="outline"
-                        disabled={updatingStatus === order._id}
-                        onClick={() => handleStatusUpdate(order._id, "shipped")}
-                      >
-                        {updatingStatus === order._id ? "Updating..." : "Mark as Packed"}
-                      </Button>
+                      <div className="space-y-2">
+                        <div className="space-y-1">
+                          <p className="text-[11px] text-muted-foreground">
+                            Packing video (optional) — helps verify returns later.
+                          </p>
+                          <input
+                            type="file"
+                            accept="video/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              setPackingVideoFiles((prev) => ({ ...prev, [order._id]: file }))
+                            }}
+                            className="block w-full text-xs file:mr-3 file:rounded-md file:border file:border-border file:bg-background file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-foreground"
+                          />
+                          {selectedPackingVideo && (
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              Selected: {selectedPackingVideo.name}
+                            </p>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2">
+                          <Button
+                            className="w-full"
+                            variant="outline"
+                            disabled={updatingStatus === order._id || !selectedPackingVideo}
+                            onClick={() => handleStatusUpdate(order._id, "shipped", selectedPackingVideo)}
+                          >
+                            {updatingStatus === order._id ? "Updating..." : "Upload Video & Mark as Packed"}
+                          </Button>
+                          <Button
+                            className="w-full"
+                            variant="outline"
+                            disabled={updatingStatus === order._id}
+                            onClick={() => handleStatusUpdate(order._id, "shipped")}
+                          >
+                            {updatingStatus === order._id ? "Updating..." : "Skip Video & Mark as Packed"}
+                          </Button>
+                          <Button
+                            className="w-full"
+                            variant="destructive"
+                            disabled={updatingStatus === order._id || cancellingOrderId === order._id}
+                            onClick={() => handleCancelOrder(order._id)}
+                          >
+                            <X className="mr-2 h-4 w-4" />
+                            {cancellingOrderId === order._id ? "Cancelling..." : "Cancel Order"}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   )}
 

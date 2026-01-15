@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, AlertCircle, FileText, Calendar, TrendingUp, Package, Truck, CheckCircle, Clock, Download } from "lucide-react"
+import { Loader2, AlertCircle, FileText, Calendar, TrendingUp, Package, Truck, CheckCircle, Clock, Download, XCircle, RotateCcw } from "lucide-react"
 import { AdminVendorAnalytics } from "./admin-vendor-analytics"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,7 +21,7 @@ import {
   ResponsiveContainer,
 } from "recharts"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
 
 interface YesterdaySummary {
   ordersReceived: number
@@ -29,7 +29,14 @@ interface YesterdaySummary {
   ordersPending: number
   ordersDelivered: number
   ordersDeliveredYesterday: number
+  cancelledProductsInRange: number
+  refundedProductsInRange: number
+  cancelledProducts: number
+  refundedProducts: number
   date: string
+  isDateRange?: boolean
+  startDate?: string | null
+  endDate?: string | null
 }
 
 interface DailyOrder {
@@ -64,6 +71,12 @@ interface Order {
     mobile: string
     email?: string
   }
+  vendorId?: {
+    _id: string
+    name?: string
+    phone?: string
+    email?: string
+  } | null
   subtotal?: number
   shipping?: number
   total: number
@@ -258,6 +271,13 @@ export function AdminReports() {
       const orders = data.data
 
       if (format === "csv") {
+        const toCsvValue = (value: unknown) => {
+          const str = value === null || value === undefined ? "" : String(value)
+          // Escape quotes by doubling; wrap in quotes if it contains comma/newline/quote
+          if (/[",\n\r]/.test(str)) return `"${str.replaceAll('"', '""')}"`
+          return str
+        }
+
         // Generate CSV
         const csvRows = []
         
@@ -268,6 +288,9 @@ export function AdminReports() {
           "Customer Name",
           "Customer Email",
           "Customer Mobile",
+          "Vendor Name",
+          "Vendor Email",
+          "Vendor Phone",
           "Status",
           "Payment Status",
           "Payment Method",
@@ -275,11 +298,12 @@ export function AdminReports() {
           "Shipping",
           "Total",
           "Items",
-        ].join(","))
+        ].map(toCsvValue).join(","))
 
         // Data rows
         orders.forEach((order: Order) => {
           const customer = typeof order.customerId === "object" ? order.customerId : null
+          const vendor = typeof order.vendorId === "object" ? order.vendorId : null
           const items = order.items?.map((item) => `${item.name} (x${item.quantity})`).join("; ") || ""
           csvRows.push([
             order.orderNumber || "",
@@ -287,14 +311,17 @@ export function AdminReports() {
             customer?.name || "",
             customer?.email || "",
             customer?.mobile || "",
+            vendor?.name || "",
+            vendor?.email || "",
+            vendor?.phone || "",
             order.status || "",
             order.paymentStatus || "",
             order.paymentMethod || "N/A",
             order.subtotal || 0,
             order.shipping || 0,
             order.total || 0,
-            `"${items}"`,
-          ].join(","))
+            items,
+          ].map(toCsvValue).join(","))
         })
 
         const csv = csvRows.join("\n")
@@ -469,7 +496,7 @@ export function AdminReports() {
 
       {/* Summary Cards */}
       {yesterdaySummary && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Orders Received</CardTitle>
@@ -522,6 +549,35 @@ export function AdminReports() {
                 {dateRangeApplied && yesterdaySummary.isDateRange
                   ? `${yesterdaySummary.ordersDeliveredYesterday} delivered in date range`
                   : `${yesterdaySummary.ordersDeliveredYesterday} delivered yesterday`}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Cancelled &amp; Refunded</CardTitle>
+              <div className="flex items-center gap-2">
+                <XCircle className="h-4 w-4 text-muted-foreground" />
+                <RotateCcw className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-xs text-muted-foreground">Cancelled products</span>
+                  <span className="text-xl font-bold tabular-nums">
+                    {yesterdaySummary.cancelledProductsInRange}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-xs text-muted-foreground">Refunded products</span>
+                  <span className="text-xl font-bold tabular-nums">
+                    {yesterdaySummary.refundedProductsInRange}
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {dateRangeApplied && yesterdaySummary.isDateRange ? "In date range" : "Yesterday"}
               </p>
             </CardContent>
           </Card>
@@ -765,6 +821,7 @@ export function AdminReports() {
                     <tr className="border-b border-border">
                       <th className="text-left p-2 text-sm font-medium">Order #</th>
                       <th className="text-left p-2 text-sm font-medium">Customer</th>
+                      <th className="text-left p-2 text-sm font-medium">Vendor</th>
                       <th className="text-left p-2 text-sm font-medium">Date</th>
                       <th className="text-left p-2 text-sm font-medium">Total</th>
                       <th className="text-left p-2 text-sm font-medium">Status</th>
@@ -774,6 +831,7 @@ export function AdminReports() {
                   <tbody>
                     {allOrders.map((order) => {
                       const customer = typeof order.customerId === "object" ? order.customerId : null
+                      const vendor = typeof order.vendorId === "object" ? order.vendorId : null
                       return (
                         <tr key={order._id} className="border-b border-border hover:bg-muted/50">
                           <td className="p-2 text-sm font-medium">{order.orderNumber}</td>
@@ -781,6 +839,11 @@ export function AdminReports() {
                             {customer?.name || "N/A"}
                             <br />
                             <span className="text-xs text-muted-foreground">{customer?.mobile || "N/A"}</span>
+                          </td>
+                          <td className="p-2 text-sm">
+                            {vendor?.name || "N/A"}
+                            <br />
+                            <span className="text-xs text-muted-foreground">{vendor?.phone || "—"}</span>
                           </td>
                           <td className="p-2 text-sm">{formatDate(order.createdAt)}</td>
                           <td className="p-2 text-sm font-medium">{formatCurrency(order.total)}</td>

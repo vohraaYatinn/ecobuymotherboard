@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
 
 interface OrderItem {
   name: string
@@ -96,8 +96,17 @@ interface Order {
   refundStatus?: "pending" | "processing" | "completed" | "failed" | null
   refundTransactionId?: string | null
   awbNumber?: string
+  returnAwbNumber?: string
   dtdcStatus?: string | null
+  returnDtdcStatus?: string | null
   returnRequest?: ReturnRequest
+  packingVideo?: {
+    url: string | null
+    originalName?: string | null
+    mimeType?: string | null
+    size?: number | null
+    uploadedAt?: string | null
+  } | null
   deliveredAt?: string
   createdAt: string
   updatedAt: string
@@ -116,6 +125,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [saving, setSaving] = useState(false)
+  const [pushingToVendors, setPushingToVendors] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState("")
   const [selectedVendor, setSelectedVendor] = useState("")
   const [vendors, setVendors] = useState<Vendor[]>([])
@@ -301,16 +311,54 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
     }
   }
 
+  const handlePushToVendors = async () => {
+    if (!order) return
+    try {
+      const confirmPush = confirm("Push this order to vendors for acceptance?")
+      if (!confirmPush) return
+
+      setPushingToVendors(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Not authenticated. Please login again.")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/orders/${orderId}/push-to-vendors`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        alert(data.message || "Failed to push order to vendors")
+        return
+      }
+
+      alert("Order pushed to vendors for acceptance")
+      await fetchOrder()
+    } catch (err) {
+      console.error("Error pushing order to vendors:", err)
+      alert("Network error. Please try again.")
+    } finally {
+      setPushingToVendors(false)
+    }
+  }
+
   const handleSaveAWB = async () => {
     if (!order || !awbNumber.trim()) {
       alert("Please enter a valid AWB number")
       return
     }
 
-    // Validate AWB format (1 alphabet + 8 digits)
+    // Validate AWB format (DTDC can return 9–12 alphanumeric, e.g. V01197967 or 7X109986044)
     const cleanAWB = awbNumber.trim().toUpperCase()
-    if (!/^[A-Z]\d{8}$/.test(cleanAWB)) {
-      alert("Invalid AWB number format. Expected format: 1 alphabet followed by 8 digits (e.g., V01197967)")
+    if (!/^[A-Z0-9]{9,12}$/.test(cleanAWB)) {
+      alert("Invalid AWB number format. Expected 9-12 alphanumeric characters (e.g., V01197967 or 7X109986044)")
       return
     }
 
@@ -470,9 +518,50 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
     })
   }
 
+  /**
+   * Infer a more granular forward-shipment stage from DTDC tracking text.
+   * Used to show Processing -> Picked Up -> Shipped progression in timelines/badges.
+   */
+  const inferForwardStageFromDtdc = (order: Order): "picked_up" | "shipped" | "delivered" | null => {
+    const statusText = String(order.dtdcTrackingData?.statusText || "").toLowerCase()
+    if (!statusText) return null
+
+    if (statusText.includes("delivered") || statusText.includes("delivery completed")) {
+      return "delivered"
+    }
+    if (
+      statusText.includes("out for delivery") ||
+      statusText.includes("in transit") ||
+      statusText.includes("dispatched") ||
+      statusText.includes("arrived at")
+    ) {
+      return "shipped"
+    }
+    if (
+      statusText.includes("picked up") ||
+      statusText.includes("pickup completed") ||
+      statusText.includes("pickup done")
+    ) {
+      return "picked_up"
+    }
+
+    return null
+  }
+
+  const getEffectiveOrderStatus = (order: Order): string => {
+    const s = (order.status || "").toLowerCase()
+    // Keep special flows as-is
+    if (s === "cancelled" || s.startsWith("return_") || s === "admin_review_required") return s
+
+    const inferred = inferForwardStageFromDtdc(order)
+    if (inferred) return inferred
+    return s
+  }
+
   const generateTrackingSteps = (order: Order): TrackingStep[] => {
     const steps: TrackingStep[] = []
     const orderStatus = order.status.toLowerCase()
+    const effectiveStatus = getEffectiveOrderStatus(order)
 
     // Handle cancelled orders
     if (orderStatus === "cancelled") {
@@ -593,8 +682,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
     }
 
     // Normal order flow (no cancellation, no return)
-    const statusOrder = ["pending", "confirmed", "processing", "shipped", "delivered"]
-    const currentStatusIndex = statusOrder.indexOf(orderStatus)
+    const statusOrder = ["pending", "confirmed", "processing", "picked_up", "shipped", "delivered"]
+    const currentStatusIndex = Math.max(statusOrder.indexOf(effectiveStatus), statusOrder.indexOf(orderStatus))
 
     statusOrder.forEach((status, index) => {
       const isCompleted = index <= currentStatusIndex
@@ -619,6 +708,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
         status: status === "pending" ? "Order Placed" :
                 status === "confirmed" ? "Order Confirmed" :
                 status === "processing" ? "Processing" :
+                status === "picked_up" ? "Picked Up" :
                 status === "shipped" ? "Shipped" : "Delivered",
         date,
         completed: isCompleted,
@@ -689,6 +779,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
         return "bg-blue-100 text-blue-800"
       case "processing":
         return "bg-purple-100 text-purple-800"
+      case "picked_up":
+        return "bg-violet-100 text-violet-800"
       case "shipped":
         return "bg-indigo-100 text-indigo-800"
       case "delivered":
@@ -844,6 +936,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const netVendorPayout = payoutBeforeGateway - paymentGatewayCharges
 
   const isReturnRequested = order.status === "return_requested" && order.returnRequest && order.returnRequest.type === "pending"
+  const hasPackingVideo = !!order.packingVideo?.url
 
   return (
     <div className="space-y-6">
@@ -883,6 +976,27 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                           </li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+                  {hasPackingVideo && (
+                    <div className="mt-4">
+                      <Label className="text-xs font-medium text-muted-foreground">Vendor Packing Video:</Label>
+                      <div className="mt-2 space-y-2">
+                        <video
+                          controls
+                          preload="metadata"
+                          src={getFileUrl(order.packingVideo?.url || "")}
+                          className="w-full max-h-[360px] rounded-md border bg-black"
+                        />
+                        <a
+                          href={getFileUrl(order.packingVideo?.url || "")}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline text-sm"
+                        >
+                          Open video in new tab
+                        </a>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -957,6 +1071,29 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
               <h3 className="font-semibold mb-2">
                 Return {order.returnRequest.type === "accepted" ? "Accepted" : "Rejected"}
               </h3>
+              {order.returnRequest.type === "accepted" && order.returnAwbNumber && (
+                <div className="mb-2">
+                  <span className="font-medium text-sm">Return AWB (DTDC):</span>
+                  <div className="mt-1 flex items-center gap-2 flex-wrap">
+                    <span className="text-sm">{order.returnAwbNumber}</span>
+                    {order.returnDtdcStatus && (
+                      <Badge className={getDtdcStatusColor(order.returnDtdcStatus)}>
+                        {formatDtdcStatus(order.returnDtdcStatus)}
+                      </Badge>
+                    )}
+                    <a
+                      href={getDTDCTrackingUrl(order.returnAwbNumber)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm">
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Track Return
+                      </Button>
+                    </a>
+                  </div>
+                </div>
+              )}
               {order.returnRequest.reason && (
                 <div className="mb-2">
                   <span className="font-medium text-sm">Customer Reason:</span>
@@ -1028,8 +1165,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge className={`${getStatusColor(order.status)} w-fit capitalize`}>
-            {order.status.replace(/_/g, " ")}
+          <Badge className={`${getStatusColor(getEffectiveOrderStatus(order))} w-fit capitalize`}>
+            {getEffectiveOrderStatus(order).replace(/_/g, " ")}
           </Badge>
           {order.awbNumber && order.dtdcStatus && (
             <Badge className={getDtdcStatusColor(order.dtdcStatus)}>
@@ -1041,6 +1178,62 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
 
       {/* Order Information */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Packing Video */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Packing Verification
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {hasPackingVideo ? (
+              <>
+                <video
+                  controls
+                  preload="metadata"
+                  src={getFileUrl(order.packingVideo?.url || "")}
+                  className="w-full max-h-[360px] rounded-md border bg-black"
+                />
+                <div className="text-xs text-muted-foreground space-y-1">
+                  <p>
+                    <span className="font-medium text-foreground">File:</span>{" "}
+                    {order.packingVideo?.originalName || (order.packingVideo?.url || "").split("/").pop()}
+                  </p>
+                  {order.packingVideo?.mimeType && (
+                    <p>
+                      <span className="font-medium text-foreground">Type:</span> {order.packingVideo.mimeType}
+                    </p>
+                  )}
+                  {typeof order.packingVideo?.size === "number" && (
+                    <p>
+                      <span className="font-medium text-foreground">Size:</span> {formatFileSize(order.packingVideo.size)}
+                    </p>
+                  )}
+                  {order.packingVideo?.uploadedAt && (
+                    <p>
+                      <span className="font-medium text-foreground">Uploaded:</span>{" "}
+                      {new Date(order.packingVideo.uploadedAt).toLocaleString("en-IN")}
+                    </p>
+                  )}
+                  <a
+                    href={getFileUrl(order.packingVideo?.url || "")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    Open video in new tab
+                  </a>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No packing video uploaded by vendor yet.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Customer Information */}
         <Card>
           <CardHeader>
@@ -1296,6 +1489,31 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   {vendor.address && ` (${vendor.address.city}, ${vendor.address.state})`}
                 </p>
               )}
+              <div className="mt-2">
+                <Button
+                  variant="outline"
+                  onClick={handlePushToVendors}
+                  disabled={pushingToVendors || Boolean(order.awbNumber) || order.paymentStatus !== "paid"}
+                  className="w-full"
+                >
+                  {pushingToVendors ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Pushing...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      Push to Vendors for Acceptance
+                    </>
+                  )}
+                </Button>
+                {(order.paymentStatus !== "paid" || Boolean(order.awbNumber)) && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Push is available only for paid, unshipped orders.
+                  </p>
+                )}
+              </div>
             </div>
             <div>
               <Label htmlFor="orderStatus">Order Status</Label>
@@ -1325,7 +1543,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   placeholder="e.g., V01197967"
                   value={awbNumber}
                   onChange={(e) => setAwbNumber(e.target.value.toUpperCase())}
-                  maxLength={9}
+                  maxLength={12}
                   className="flex-1"
                 />
                 <Button

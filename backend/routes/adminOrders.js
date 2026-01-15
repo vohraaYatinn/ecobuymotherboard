@@ -7,6 +7,9 @@ import Admin from "../models/Admin.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 import { createShipmentForOrder } from "../services/dtdcService.js"
 import Vendor from "../models/Vendor.js"
+import VendorUser from "../models/VendorUser.js"
+import { sendCustomerOrderStageEmail } from "../services/orderCustomerEmailNotifications.js"
+import { notifyVendorsForOrderStage } from "../services/vendorOrderStageNotifications.js"
 
 const router = express.Router()
 
@@ -273,7 +276,7 @@ router.put("/:id/status", verifyAdminToken, async (req, res) => {
       })
     }
 
-    const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "return_requested", "return_accepted", "return_rejected", "return_picked_up"]
+    const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "admin_review_required", "return_requested", "return_accepted", "return_rejected", "return_picked_up"]
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
@@ -290,6 +293,8 @@ router.put("/:id/status", verifyAdminToken, async (req, res) => {
       })
     }
 
+    const oldStatus = order.status
+
     // Set deliveredAt when order is marked delivered for the first time
     if (status === "delivered" && order.status !== "delivered" && !order.deliveredAt) {
       order.deliveredAt = new Date()
@@ -297,6 +302,24 @@ router.put("/:id/status", verifyAdminToken, async (req, res) => {
 
     order.status = status
     await order.save()
+
+    // Email buyer on status change (deduped)
+    try {
+      if (oldStatus !== status) {
+        await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: `status:${status}` })
+      }
+    } catch (emailErr) {
+      console.error("Error sending buyer status email (admin update):", emailErr)
+    }
+
+    // Notify vendor (push + email) on status change (deduped)
+    try {
+      if (oldStatus !== status) {
+        await notifyVendorsForOrderStage({ orderId: order._id, stageKey: `status:${status}` })
+      }
+    } catch (vendorErr) {
+      console.error("Error sending vendor status notifications (admin update):", vendorErr)
+    }
 
     res.status(200).json({
       success: true,
@@ -386,8 +409,10 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
       })
     }
 
+    const oldStatus = order.status
+
     if (status) {
-      const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "return_requested", "return_accepted", "return_rejected", "return_picked_up"]
+      const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "admin_review_required", "return_requested", "return_accepted", "return_rejected", "return_picked_up"]
       if (validStatuses.includes(status)) {
         order.status = status
       }
@@ -431,6 +456,24 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
 
     // Save other changes first (status, paymentStatus, etc.)
     await order.save()
+
+    // Email buyer on status change (deduped)
+    try {
+      if (status && oldStatus !== order.status) {
+        await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: `status:${order.status}` })
+      }
+    } catch (emailErr) {
+      console.error("Error sending buyer status email (admin full update):", emailErr)
+    }
+
+    // Notify vendor (push + email) on status change (deduped)
+    try {
+      if (status && oldStatus !== order.status) {
+        await notifyVendorsForOrderStage({ orderId: order._id, stageKey: `status:${order.status}` })
+      }
+    } catch (vendorErr) {
+      console.error("Error sending vendor status notifications (admin full update):", vendorErr)
+    }
 
     // Update createdAt separately AFTER saving other changes
     // Use direct MongoDB update to bypass Mongoose timestamps
@@ -592,6 +635,155 @@ router.put("/:id/assign-vendor", verifyAdminToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error assigning vendor",
+      error: error.message,
+    })
+  }
+})
+
+// Push/broadcast an order to vendors for acceptance (Admin only)
+// This is intended for unassigned orders that should be accepted by a vendor (like "new order available").
+router.post("/:id/push-to-vendors", verifyAdminToken, async (req, res) => {
+  try {
+    const { excludeVendorId } = req.body || {}
+
+    const order = await Order.findById(req.params.id)
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      })
+    }
+
+    if (["shipped", "delivered", "cancelled"].includes(order.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot push order in status: ${order.status}`,
+      })
+    }
+
+    if (order.paymentStatus !== "paid") {
+      return res.status(400).json({
+        success: false,
+        message: "Only paid orders can be pushed to vendors for acceptance",
+      })
+    }
+
+    if (order.awbNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Shipment already created for this order. Cannot push to vendors.",
+      })
+    }
+
+    // Make the order "accept-able": must be unassigned and status pending/confirmed (vendor accept endpoint requires this)
+    order.vendorId = null
+    order.assignmentMode = null
+    if (!["pending", "confirmed"].includes(order.status)) {
+      order.status = "confirmed"
+    }
+
+    const meta = typeof order.paymentMeta === "object" && order.paymentMeta ? order.paymentMeta : {}
+    order.paymentMeta = {
+      ...meta,
+      adminPushToVendors: {
+        pushedAt: new Date().toISOString(),
+        pushedByAdminId: req.admin?.id,
+      },
+    }
+
+    await order.save()
+
+    // Exclude a specific vendor (optional). If not provided, try to exclude the vendor who cancelled (if present).
+    const cancelledVendorId =
+      typeof order.paymentMeta === "object" && order.paymentMeta?.vendorCancellation?.vendorId
+        ? order.paymentMeta.vendorCancellation.vendorId.toString()
+        : null
+    const excludeVendorIds = []
+    if (excludeVendorId) excludeVendorIds.push(excludeVendorId.toString())
+    else if (cancelledVendorId) excludeVendorIds.push(cancelledVendorId)
+
+    // Create/update vendor in-app notifications (best-effort)
+    try {
+      const vendorUsers = await VendorUser.find({
+        isActive: true,
+        ...(excludeVendorIds.length > 0 ? { vendorId: { $nin: excludeVendorIds } } : {}),
+      })
+        .select("_id")
+        .lean()
+
+      await Promise.all(
+        (vendorUsers || []).map((vu) =>
+          Notification.updateOne(
+            {
+              userId: vu._id,
+              userType: "vendor",
+              orderId: order._id,
+              type: "new_order_available",
+              "metadata.source": "admin_push",
+            },
+            {
+              $set: {
+                title: "New Order Available",
+                message: `New order ${order.orderNumber} is available to accept. Total: ₹${order.total.toLocaleString("en-IN")}`,
+                isRead: false,
+                orderNumber: order.orderNumber,
+                customerId: order.customerId,
+                metadata: {
+                  source: "admin_push",
+                  pushedAt: new Date().toISOString(),
+                },
+              },
+              $setOnInsert: {
+                vendorId: null,
+              },
+            },
+            { upsert: true }
+          )
+        )
+      )
+    } catch (notifErr) {
+      console.error("Error creating vendor notifications for admin push:", notifErr)
+    }
+
+    // Push notifications (FCM) to vendor devices (best-effort)
+    let pushResult = null
+    try {
+      const { sendPushNotificationToAllVendors } = await import("./pushNotifications.js")
+      pushResult = await sendPushNotificationToAllVendors(
+        "New Order Available",
+        `New order ${order.orderNumber} is available to accept. Total: ₹${order.total.toLocaleString("en-IN")}`,
+        {
+          type: "new_order_available",
+          orderId: order._id.toString(),
+          orderNumber: order.orderNumber,
+        },
+        { excludeVendorIds }
+      )
+    } catch (pushError) {
+      console.error("Error sending push-to-vendors for admin:", pushError)
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Order pushed to vendors for acceptance",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        excludedVendorIds: excludeVendorIds,
+        push: pushResult,
+      },
+    })
+  } catch (error) {
+    console.error("Push-to-vendors error:", error)
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
+    return res.status(500).json({
+      success: false,
+      message: "Error pushing order to vendors",
       error: error.message,
     })
   }
@@ -882,8 +1074,10 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
         referenceNumber: `${order.orderNumber}-RET`,
       })
       if (shipmentResult?.awbNumber) {
-        order.awbNumber = shipmentResult.awbNumber
-        order.dtdcTrackingData = shipmentResult.trackingData || null
+        // IMPORTANT: Return shipments must have a separate AWB and must NOT overwrite the forward AWB.
+        order.returnAwbNumber = shipmentResult.awbNumber
+        order.returnDtdcTrackingData = shipmentResult.trackingData || null
+        order.returnTrackingLastUpdated = new Date()
         console.log("✅ [RETURN ACCEPT][DTDC] Reverse pickup created. AWB:", shipmentResult.awbNumber)
       }
     } catch (shipErr) {
@@ -893,6 +1087,13 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
 
     // Persist changes (statuses + shipment info if any)
     await order.save()
+
+    // Notify vendor (push + email) (deduped)
+    try {
+      await notifyVendorsForOrderStage({ orderId: order._id, stageKey: "status:return_accepted" })
+    } catch (vendorErr) {
+      console.error("❌ [RETURN ACCEPT] Error notifying vendor:", vendorErr)
+    }
 
     // Create notification for customer
     try {
@@ -915,6 +1116,13 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
       console.error("❌ [RETURN ACCEPT] Error creating return accepted notification:", notifError)
     }
 
+    // Email buyer (deduped)
+    try {
+      await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:return_accepted" })
+    } catch (emailErr) {
+      console.error("❌ [RETURN ACCEPT] Error sending buyer email:", emailErr)
+    }
+
     res.status(200).json({
       success: true,
       message: shipmentError
@@ -926,7 +1134,7 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
         returnRequest: order.returnRequest,
         dtdc: shipmentResult
           ? {
-              awbNumber: shipmentResult.awbNumber,
+              returnAwbNumber: shipmentResult.awbNumber,
             }
           : null,
         shipmentError: shipmentError ? shipmentError.message : null,
@@ -1001,6 +1209,13 @@ router.post("/:id/return/deny", verifyAdminToken, async (req, res) => {
 
     await order.save()
 
+    // Notify vendor (push + email) (deduped)
+    try {
+      await notifyVendorsForOrderStage({ orderId: order._id, stageKey: "status:return_rejected" })
+    } catch (vendorErr) {
+      console.error("❌ [RETURN DENY] Error notifying vendor:", vendorErr)
+    }
+
     // Create notification for customer
     try {
       const customerId = typeof order.customerId === "object" && order.customerId?._id 
@@ -1020,6 +1235,13 @@ router.post("/:id/return/deny", verifyAdminToken, async (req, res) => {
       console.log(`✅ [RETURN DENY] Notification created for customer ${customerId}`)
     } catch (notifError) {
       console.error("❌ [RETURN DENY] Error creating return denied notification:", notifError)
+    }
+
+    // Email buyer (deduped)
+    try {
+      await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:return_rejected" })
+    } catch (emailErr) {
+      console.error("❌ [RETURN DENY] Error sending buyer email:", emailErr)
     }
 
     res.status(200).json({

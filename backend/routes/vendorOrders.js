@@ -7,6 +7,10 @@ import Vendor from "../models/Vendor.js"
 import Settings from "../models/Settings.js"
 import { verifyVendorToken } from "../middleware/auth.js"
 import { createShipmentForOrder, downloadShippingLabel } from "../services/dtdcService.js"
+import { sendCustomerOrderStageEmail } from "../services/orderCustomerEmailNotifications.js"
+import { notifyVendorsForOrderStage } from "../services/vendorOrderStageNotifications.js"
+import { sendEmail } from "../services/mailer.js"
+import packingVideoUpload from "../middleware/packingVideoUpload.js"
 
 const router = express.Router()
 
@@ -175,6 +179,20 @@ router.post("/:id/accept", verifyVendorToken, async (req, res) => {
       // Don't fail the order acceptance if notifications fail
     }
 
+    // Email buyer (deduped)
+    try {
+      await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:processing" })
+    } catch (emailErr) {
+      console.error("Error sending order processing email:", emailErr)
+    }
+
+    // Notify vendor (push + email), useful for multi-device and recordkeeping (deduped)
+    try {
+      await notifyVendorsForOrderStage({ orderId: order._id, stageKey: "status:processing" })
+    } catch (vendorNotifErr) {
+      console.error("Error sending vendor processing notifications:", vendorNotifErr)
+    }
+
     res.status(200).json({
       success: true,
       message: "Order accepted successfully",
@@ -191,6 +209,141 @@ router.post("/:id/accept", verifyVendorToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error accepting order",
+      error: error.message,
+    })
+  }
+})
+
+// Vendor cancel an already accepted/assigned order (requires admin reassignment)
+router.post("/:id/cancel", verifyVendorToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const vendorId = req.vendorUser.vendorId
+    const { reason } = req.body || {}
+
+    if (!vendorId) {
+      return res.status(400).json({
+        success: false,
+        message: "Vendor account not linked. Please contact support.",
+      })
+    }
+
+    const order = await Order.findById(id)
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      })
+    }
+
+    // Must be assigned to this vendor
+    if (!order.vendorId || order.vendorId.toString() !== vendorId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not assigned to this order",
+      })
+    }
+
+    // Only allow cancellation while in "processing" (Accepted) before shipment is created
+    if (["shipped", "delivered", "cancelled"].includes(order.status)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot cancel order in status: ${order.status}`,
+      })
+    }
+
+    if (order.awbNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "Shipment already created for this order. Please contact admin to cancel/handle shipment.",
+      })
+    }
+
+    const oldVendorId = order.vendorId
+
+    // Unassign + flag for admin action
+    order.vendorId = null
+    order.assignmentMode = null
+    order.status = "admin_review_required"
+
+    const prevMeta = typeof order.paymentMeta === "object" && order.paymentMeta ? order.paymentMeta : {}
+    order.paymentMeta = {
+      ...prevMeta,
+      vendorCancellation: {
+        cancelledAt: new Date().toISOString(),
+        cancelledBy: "vendor",
+        vendorId: vendorId,
+        reason: typeof reason === "string" ? reason.trim() : "",
+      },
+    }
+
+    await order.save()
+
+    // Notify admins (in-app)
+    let adminEmails = []
+    try {
+      const vendor = await Vendor.findById(vendorId).select("name email phone").lean()
+      const admins = await Admin.find({ isActive: true }).select("email").lean()
+      adminEmails = (admins || []).map((a) => a.email).filter(Boolean)
+
+      const notifTitle = "Vendor Cancelled Accepted Order"
+      const notifMessage = `Order ${order.orderNumber} was cancelled by ${vendor?.name || "a vendor"} and needs reassignment.${reason ? ` Reason: ${reason}` : ""}`
+
+      await Promise.all(
+        (admins || []).map((admin) =>
+          Notification.create({
+            userId: admin._id,
+            userType: "admin",
+            type: "admin_review_required",
+            title: notifTitle,
+            message: notifMessage,
+            orderId: order._id,
+            orderNumber: order.orderNumber,
+            vendorId: oldVendorId,
+            customerId: order.customerId,
+            metadata: {
+              cancelledBy: "vendor",
+              reason: typeof reason === "string" ? reason.trim() : "",
+            },
+          })
+        )
+      )
+
+      // Email admins (best-effort)
+      if (adminEmails.length > 0) {
+        const subject = `Vendor cancelled order ${order.orderNumber} - reassignment required`
+        const safeReason = typeof reason === "string" ? reason.trim() : ""
+        const html = `
+          <div style="font-family: Arial, sans-serif; line-height: 1.5">
+            <h2 style="margin: 0 0 8px">Vendor Cancelled Accepted Order</h2>
+            <p style="margin: 0 0 6px"><strong>Order:</strong> ${order.orderNumber}</p>
+            <p style="margin: 0 0 6px"><strong>Vendor:</strong> ${vendor?.name || "N/A"}</p>
+            ${safeReason ? `<p style="margin: 0 0 6px"><strong>Reason:</strong> ${safeReason}</p>` : ""}
+            <p style="margin: 12px 0 0">This order has been unassigned and marked for admin review. Please reassign it to another vendor.</p>
+          </div>
+        `
+        await sendEmail({ to: adminEmails, subject, html })
+      }
+    } catch (notifErr) {
+      console.error("Error notifying admins for vendor cancellation:", notifErr)
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Order cancelled and sent for admin reassignment",
+      data: order,
+    })
+  } catch (error) {
+    console.error("Vendor cancel order error:", error)
+    if (error.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      })
+    }
+    res.status(500).json({
+      success: false,
+      message: "Error cancelling order",
       error: error.message,
     })
   }
@@ -668,7 +821,7 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
 })
 
 // Update order status (vendor can only update to shipped or delivered)
-router.put("/:id/status", verifyVendorToken, async (req, res) => {
+router.put("/:id/status", verifyVendorToken, packingVideoUpload.single("packingVideo"), async (req, res) => {
   try {
     const { id } = req.params
     const { status } = req.body
@@ -718,6 +871,17 @@ router.put("/:id/status", verifyVendorToken, async (req, res) => {
       })
     }
 
+    // If vendor is marking as shipped (packed) and provided a packing video, persist it for later return verification.
+    if (status === "shipped" && req.file) {
+      order.packingVideo = {
+        url: `/uploads/packing-videos/${req.file.filename}`,
+        originalName: req.file.originalname || null,
+        mimeType: req.file.mimetype || null,
+        size: typeof req.file.size === "number" ? req.file.size : null,
+        uploadedAt: new Date(),
+      }
+    }
+
     // Update status and set deliveredAt once when delivered
     if (status === "delivered" && order.status !== "delivered" && !order.deliveredAt) {
       order.deliveredAt = new Date()
@@ -725,6 +889,13 @@ router.put("/:id/status", verifyVendorToken, async (req, res) => {
 
     order.status = status
     await order.save()
+
+    // Notify vendor (push + email), useful for multi-device and recordkeeping (deduped)
+    try {
+      await notifyVendorsForOrderStage({ orderId: order._id, stageKey: `status:${status}` })
+    } catch (vendorNotifErr) {
+      console.error("Error sending vendor status notifications:", vendorNotifErr)
+    }
 
     // Auto-create DTDC shipment when vendor marks order as shipped (packed)
     if (status === "shipped" && !order.awbNumber) {
@@ -859,6 +1030,17 @@ router.put("/:id/status", verifyVendorToken, async (req, res) => {
     } catch (notifError) {
       console.error("Error creating notifications:", notifError)
       // Don't fail the status update if notifications fail
+    }
+
+    // Email buyer (deduped)
+    try {
+      if (status === "shipped") {
+        await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:shipped" })
+      } else if (status === "delivered") {
+        await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:delivered" })
+      }
+    } catch (emailErr) {
+      console.error("Error sending buyer status email:", emailErr)
     }
 
     // Prepare response with DTDC status info

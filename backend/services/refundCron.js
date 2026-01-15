@@ -1,6 +1,8 @@
 import cron from "node-cron"
 import Order from "../models/Order.js"
 import { createRazorpayRefund } from "./razorpayService.js"
+import { sendCustomerOrderStageEmail } from "./orderCustomerEmailNotifications.js"
+import { notifyVendorsForOrderStage } from "./vendorOrderStageNotifications.js"
 
 /**
  * Main function to process refunds for return_picked_up orders
@@ -22,7 +24,7 @@ export async function processRefundsForReturnPickedUpOrders() {
         { refundStatus: { $exists: false } },
       ],
     }).select(
-      "_id orderNumber customerId paymentMethod paymentStatus paymentTransactionId paymentMeta total refundStatus refundTransactionId"
+      "_id orderNumber vendorId customerId paymentMethod paymentStatus paymentTransactionId paymentMeta total refundStatus refundTransactionId"
     )
 
     console.log(`🔍 [RefundCron] Query executed - found ${returnPickedUpOrders.length} order(s)`)
@@ -82,6 +84,21 @@ export async function processRefundsForReturnPickedUpOrders() {
           }
           await order.save()
           console.log(`✅ [RefundCron] COD order ${order.orderNumber} marked as refunded`)
+
+          // Email buyer (deduped)
+          try {
+            await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "refund:completed" })
+          } catch (emailErr) {
+            console.error("❌ [RefundCron] Error sending refund email (COD):", emailErr?.message || emailErr)
+          }
+
+          // Notify vendor (push + email) (deduped)
+          try {
+            await notifyVendorsForOrderStage({ orderId: order._id, stageKey: "refund:completed" })
+          } catch (vendorErr) {
+            console.error("❌ [RefundCron] Error notifying vendor (COD completed):", vendorErr?.message || vendorErr)
+          }
+
           successCount++
           processedCount++
           continue
@@ -130,6 +147,20 @@ export async function processRefundsForReturnPickedUpOrders() {
             order.refundStatus = "processing"
             await order.save()
 
+            // Email buyer (deduped)
+            try {
+              await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "refund:processing" })
+            } catch (emailErr) {
+              console.error("❌ [RefundCron] Error sending refund processing email:", emailErr?.message || emailErr)
+            }
+
+            // Notify vendor (push + email) (deduped)
+            try {
+              await notifyVendorsForOrderStage({ orderId: order._id, stageKey: "refund:processing" })
+            } catch (vendorErr) {
+              console.error("❌ [RefundCron] Error notifying vendor (processing):", vendorErr?.message || vendorErr)
+            }
+
             // Initiate refund
             const refundResult = await createRazorpayRefund({
               paymentId,
@@ -167,6 +198,20 @@ export async function processRefundsForReturnPickedUpOrders() {
             await order.save()
             console.log(`✅ [RefundCron] Order ${order.orderNumber} updated successfully`)
 
+            // Email buyer (deduped)
+            try {
+              await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "refund:completed" })
+            } catch (emailErr) {
+              console.error("❌ [RefundCron] Error sending refund completed email:", emailErr?.message || emailErr)
+            }
+
+            // Notify vendor (push + email) (deduped)
+            try {
+              await notifyVendorsForOrderStage({ orderId: order._id, stageKey: "refund:completed" })
+            } catch (vendorErr) {
+              console.error("❌ [RefundCron] Error notifying vendor (completed):", vendorErr?.message || vendorErr)
+            }
+
             successCount++
             processedCount++
           } catch (refundError) {
@@ -188,6 +233,20 @@ export async function processRefundsForReturnPickedUpOrders() {
 
             await order.save()
             console.log(`❌ [RefundCron] Order ${order.orderNumber} marked as refund failed`)
+
+            // Email buyer (deduped)
+            try {
+              await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "refund:failed" })
+            } catch (emailErr) {
+              console.error("❌ [RefundCron] Error sending refund failed email:", emailErr?.message || emailErr)
+            }
+
+            // Notify vendor (push + email) (deduped)
+            try {
+              await notifyVendorsForOrderStage({ orderId: order._id, stageKey: "refund:failed" })
+            } catch (vendorErr) {
+              console.error("❌ [RefundCron] Error notifying vendor (failed):", vendorErr?.message || vendorErr)
+            }
 
             failedCount++
             processedCount++

@@ -4,6 +4,7 @@ import Admin from "../models/Admin.js"
 import Notification from "../models/Notification.js"
 import Customer from "../models/Customer.js"
 import nodemailer from "nodemailer"
+import { sendCustomerOrderStageEmail } from "./orderCustomerEmailNotifications.js"
 
 /**
  * Email transporter helper
@@ -76,6 +77,16 @@ export function startAdminReviewCron() {
 
           // Get customer details for notification
           const customer = await Customer.findById(order.customerId).select("name mobile email")
+
+          // Email buyer (deduped)
+          try {
+            await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:admin_review_required" })
+          } catch (emailErr) {
+            console.error(
+              `❌ [AdminReviewCron] Error sending buyer email for order ${order.orderNumber}:`,
+              emailErr?.message || emailErr
+            )
+          }
 
           // Get admin for notification
           const admin = await Admin.findOne({ isActive: true })

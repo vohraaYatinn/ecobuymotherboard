@@ -8,11 +8,13 @@ import CustomerAddress from "../models/CustomerAddress.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Vendor from "../models/Vendor.js"
+import { notifyVendorsForOrderStage } from "../services/vendorOrderStageNotifications.js"
 import Settings from "../models/Settings.js"
 import returnUpload from "../middleware/returnUpload.js"
 import { createRazorpayOrder, razorpayConfig, verifyRazorpaySignature, createRazorpayRefund } from "../services/razorpayService.js"
 import jwt from "jsonwebtoken"
 import nodemailer from "nodemailer"
+import { sendCustomerOrderStageEmail } from "../services/orderCustomerEmailNotifications.js"
 
 const router = express.Router()
 
@@ -925,6 +927,17 @@ router.post("/:id/cancel", authenticate, async (req, res) => {
       console.error("Error creating cancellation notification:", notifError)
     }
 
+    // Email buyer (deduped)
+    try {
+      await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:cancelled" })
+      // If refund is being processed as part of cancellation, notify refund status too
+      if (order.refundStatus) {
+        await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: `refund:${order.refundStatus}` })
+      }
+    } catch (emailErr) {
+      console.error("Error sending cancellation/refund email:", emailErr)
+    }
+
     // Notify admin about cancellation
     try {
       const admin = await Admin.findOne({ isActive: true })
@@ -1075,6 +1088,13 @@ router.post("/:id/return", authenticate, returnUpload.array("attachments", 5), a
       console.error("Error creating return request notification:", notifError)
     }
 
+    // Email buyer (deduped)
+    try {
+      await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:return_requested" })
+    } catch (emailErr) {
+      console.error("Error sending return requested email:", emailErr)
+    }
+
     // Notify admin about return request
     try {
       const admin = await Admin.findOne({ isActive: true })
@@ -1092,6 +1112,13 @@ router.post("/:id/return", authenticate, returnUpload.array("attachments", 5), a
       }
     } catch (notifError) {
       console.error("Error creating admin notification:", notifError)
+    }
+
+    // Notify the assigned vendor (push + email) (deduped)
+    try {
+      await notifyVendorsForOrderStage({ orderId: order._id, stageKey: "status:return_requested" })
+    } catch (vendorErr) {
+      console.error("Error notifying vendor for return request:", vendorErr)
     }
 
     res.json({

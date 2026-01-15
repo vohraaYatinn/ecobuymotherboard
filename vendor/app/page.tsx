@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
 
 export default function SplashScreen() {
   const router = useRouter()
@@ -12,6 +12,18 @@ export default function SplashScreen() {
   useEffect(() => {
     const checkAuthAndRedirect = async () => {
       const token = localStorage.getItem("vendorToken")
+
+      // If the app was opened via an in-app deep link (e.g., from a native notification),
+      // don't override it by forcing a redirect to /dashboard.
+      // This is especially important on cold starts where the native layer may trigger
+      // navigation slightly after initial render.
+      if (typeof window !== "undefined") {
+        const path = window.location?.pathname || "/"
+        if (path !== "/" && path !== "/index.html") {
+          setIsCheckingAuth(false)
+          return
+        }
+      }
       
       // Wait a bit for splash screen animation
       await new Promise(resolve => setTimeout(resolve, 1500))

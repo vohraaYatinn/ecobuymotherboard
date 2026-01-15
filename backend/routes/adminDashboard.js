@@ -30,13 +30,25 @@ const buildStatusCounts = (statusAgg) => {
   return defaultCounts
 }
 
+const isCompletedOrderForFinancials = (order) => {
+  // "Completed" for dashboard financials means delivered + paid and not under/after return processing.
+  if (order?.status !== "delivered") return false
+  if (order?.paymentStatus !== "paid") return false
+
+  // If a return request exists and isn't explicitly denied, exclude it from completed financials.
+  const returnType = order?.returnRequest?.type
+  if (returnType && returnType !== "denied") return false
+
+  return true
+}
+
 const buildFinancialReport = (orders, vendorMap, gatewayRate, startDate) => {
   const filtered = orders.filter((order) => {
     const createdAt = new Date(order.createdAt || order.deliveredAt || Date.now())
     return createdAt >= startDate
   })
 
-  const deliveredOrders = filtered.filter((order) => order.status === "delivered")
+  const completed = filtered.filter(isCompletedOrderForFinancials)
 
   let grossCollections = 0
   let gstCollected = 0
@@ -44,7 +56,7 @@ const buildFinancialReport = (orders, vendorMap, gatewayRate, startDate) => {
   let gatewayCharges = 0
   let returnsCount = 0
 
-  filtered.forEach((order) => {
+  completed.forEach((order) => {
     const total = order.total || 0
     const gst = (order.cgst || 0) + (order.sgst || 0) + (order.igst || 0)
     const vendor = order.vendorId ? vendorMap.get(order.vendorId.toString()) : null
@@ -60,15 +72,16 @@ const buildFinancialReport = (orders, vendorMap, gatewayRate, startDate) => {
     if (order.paymentMethod === "online" || order.paymentMethod === "wallet") {
       gatewayCharges += Math.round(payoutBeforeGateway * gatewayRate)
     }
+  })
 
-    if (order.returnRequest && order.returnRequest.type) {
-      returnsCount += 1
-    }
+  // Returns are a separate metric; count them on all orders in the period (not only completed).
+  filtered.forEach((order) => {
+    if (order.returnRequest && order.returnRequest.type) returnsCount += 1
   })
 
   return {
     orders: filtered.length,
-    deliveredOrders: deliveredOrders.length,
+    deliveredOrders: completed.length,
     grossCollections,
     gstCollected,
     commissionEarned,
@@ -121,8 +134,9 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
     const vendorMap = new Map(activeVendors.map((v) => [v._id.toString(), v]))
 
     // Financial aggregates
-    const grossCollections = settledOrders.reduce((sum, order) => sum + (order.total || 0), 0)
-    const gstTotals = settledOrders.reduce(
+    const completedOrders = settledOrders.filter(isCompletedOrderForFinancials)
+    const grossCollections = completedOrders.reduce((sum, order) => sum + (order.total || 0), 0)
+    const gstTotals = completedOrders.reduce(
       (acc, order) => {
         acc.cgst += order.cgst || 0
         acc.sgst += order.sgst || 0
@@ -140,14 +154,14 @@ router.get("/stats", verifyAdminToken, async (_req, res) => {
       wallet: { amount: 0, count: 0 },
       other: { amount: 0, count: 0 },
     }
-    settledOrders.forEach((order) => {
+    completedOrders.forEach((order) => {
       const method = order.paymentMethod || "other"
       const bucket = paymentMethodBreakdown[method] || paymentMethodBreakdown.other
       bucket.amount += order.total || 0
       bucket.count += 1
     })
     const gatewayRate = 0.02 // 2% applied on payout-before-gateway for online + wallet
-    const estimatedGatewayCharges = settledOrders.reduce((sum, order) => {
+    const estimatedGatewayCharges = completedOrders.reduce((sum, order) => {
       if (order.paymentMethod !== "online" && order.paymentMethod !== "wallet") return sum
 
       const vendor = order.vendorId ? vendorMap.get(order.vendorId.toString()) : null

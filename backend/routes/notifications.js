@@ -142,7 +142,7 @@ router.get("/admin", verifyAdminToken, async (req, res) => {
     const { page = 1, limit = 20, unreadOnly = false } = req.query
 
     // Only show return-related and cancelled order notifications to admin
-    const allowedTypes = ["order_cancelled", "return_requested", "return_accepted", "return_denied"]
+    const allowedTypes = ["order_cancelled", "admin_review_required", "return_requested", "return_accepted", "return_denied"]
 
     const filter = {
       userId: req.admin.id,

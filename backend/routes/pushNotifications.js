@@ -393,17 +393,20 @@ router.get("/admin/vendors", verifyAdminToken, async (req, res) => {
 });
 
 // Helper function to send push notification to all vendors
-export async function sendPushNotificationToAllVendors(title, body, data = {}) {
+// options:
+// - excludeVendorIds: array of Vendor _id strings to exclude (best-effort; requires vendorUser.vendorId)
+export async function sendPushNotificationToAllVendors(title, body, data = {}, options = {}) {
   try {
     if (!messaging) {
       console.warn('⚠️ [PushNotification] Firebase Admin SDK not initialized, skipping push notification');
       return { success: false, message: 'Firebase not initialized' };
     }
+    const excludeVendorIds = Array.isArray(options?.excludeVendorIds) ? options.excludeVendorIds.map(String) : [];
 
     // Get all active vendor users with push tokens
     const vendorUsers = await VendorUser.find({ isActive: true })
       .populate('vendorId', 'name status')
-      .select('pushTokens');
+      .select('pushTokens vendorId');
 
     if (!vendorUsers || vendorUsers.length === 0) {
       console.log('📭 [PushNotification] No active vendor users found');
@@ -417,6 +420,15 @@ export async function sendPushNotificationToAllVendors(title, body, data = {}) {
     const tokenToPlatformMap = new Map();
     
     for (const vendorUser of vendorUsers) {
+      // Best-effort exclusion by vendorId
+      const vendorIdValue =
+        typeof vendorUser?.vendorId === "object" && vendorUser.vendorId
+          ? (vendorUser.vendorId._id || vendorUser.vendorId).toString()
+          : (vendorUser?.vendorId ? vendorUser.vendorId.toString() : "")
+      if (vendorIdValue && excludeVendorIds.includes(vendorIdValue)) {
+        continue
+      }
+
       if (vendorUser.pushTokens && vendorUser.pushTokens.length > 0) {
         for (const tokenData of vendorUser.pushTokens) {
           if (tokenData.token && tokenData.token.trim()) {
