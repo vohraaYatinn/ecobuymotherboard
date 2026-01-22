@@ -5,6 +5,7 @@ import { useState, useRef, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { API_URL } from "@/lib/api-config"
+import { setVendorAuth } from "@/lib/vendor-auth-storage"
 import { Capacitor } from "@capacitor/core"
 import { PushNotifications } from "@capacitor/push-notifications"
 
@@ -168,8 +169,8 @@ function OTPContent() {
 
       // Store token and user data
       if (data.token) {
-        localStorage.setItem("vendorToken", data.token)
-        localStorage.setItem("vendorData", JSON.stringify(data.user))
+        await setVendorAuth(data.token, data.user)
+        console.log("✅ Token saved to persistent storage successfully")
       }
 
       // Clear session storage

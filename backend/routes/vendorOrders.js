@@ -918,8 +918,32 @@ router.put("/:id/status", verifyVendorToken, packingVideoUpload.single("packingV
         })
         console.log(`🔵 [VENDOR-DEBUG] Order total: ₹${order.total}, Payment method: ${order.paymentMethod}`)
 
+        const vendorDoc = await Vendor.findById(vendorId).lean()
+        const vendorAddress =
+          vendorDoc?.address?.address1
+            ? {
+                name:
+                  vendorDoc.name ||
+                  `${vendorDoc.address.firstName || ""} ${vendorDoc.address.lastName || ""}`.trim() ||
+                  "Vendor",
+                phone: vendorDoc.phone || "",
+                address1: vendorDoc.address.address1,
+                address2: vendorDoc.address.address2 || "",
+                pincode: vendorDoc.address.postcode,
+                city: vendorDoc.address.city,
+                state: vendorDoc.address.state,
+              }
+            : null
+
+        if (!vendorAddress) {
+          throw new Error("Vendor address missing for DTDC shipment origin")
+        }
+
+        console.log(`🔵 [VENDOR-DEBUG] Using vendor pickup address:`, vendorAddress)
         console.log(`🔵 [VENDOR-DEBUG] Calling createShipmentForOrder...`)
-        const shipmentResult = await createShipmentForOrder(order)
+        const shipmentResult = await createShipmentForOrder(order, {
+          origin: vendorAddress,
+        })
         console.log(`🔵 [VENDOR-DEBUG] createShipmentForOrder returned:`, {
           hasAwbNumber: !!shipmentResult.awbNumber,
           awbNumber: shipmentResult.awbNumber,

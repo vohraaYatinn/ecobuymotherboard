@@ -1,18 +1,27 @@
 PODS:
   - Capacitor (7.4.4):
     - CapacitorCordova
+  - CapacitorBrowser (7.0.3):
+    - Capacitor
+  - CapacitorCommunityFileOpener (7.0.1):
+    - Capacitor
   - CapacitorCordova (7.4.4)
   - CapacitorFilesystem (7.1.6):
     - Capacitor
     - IONFilesystemLib (~> 1.0.1)
+  - CapacitorPreferences (7.0.0):
+    - Capacitor
   - CapacitorPushNotifications (7.0.3):
     - Capacitor
   - IONFilesystemLib (1.0.1)
 
 DEPENDENCIES:
   - "Capacitor (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorBrowser (from `../../node_modules/@capacitor/browser`)"
+  - "CapacitorCommunityFileOpener (from `../../node_modules/@capacitor-community/file-opener`)"
   - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
   - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
+  - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
   - "CapacitorPushNotifications (from `../../node_modules/@capacitor/push-notifications`)"
 
 SPEC REPOS:
@@ -22,20 +31,29 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   Capacitor:
     :path: "../../node_modules/@capacitor/ios"
+  CapacitorBrowser:
+    :path: "../../node_modules/@capacitor/browser"
+  CapacitorCommunityFileOpener:
+    :path: "../../node_modules/@capacitor-community/file-opener"
   CapacitorCordova:
     :path: "../../node_modules/@capacitor/ios"
   CapacitorFilesystem:
     :path: "../../node_modules/@capacitor/filesystem"
+  CapacitorPreferences:
+    :path: "../../node_modules/@capacitor/preferences"
   CapacitorPushNotifications:
     :path: "../../node_modules/@capacitor/push-notifications"
 
 SPEC CHECKSUMS:
   Capacitor: 09d9ff8e9618e8c4b3cab2bbee34a17215dd2fef
+  CapacitorBrowser: 66aa8ff09cdca2a327ce464b113b470e6f667753
+  CapacitorCommunityFileOpener: 9611c9d1595de7b50571717d443bb718a304b5eb
   CapacitorCordova: bf648a636f3c153f652d312ae145fb508b6ffced
   CapacitorFilesystem: 2267b9183bfecb9e5b8163b79685c9efb5ed0a09
+  CapacitorPreferences: e24a50a936f0e4f54a6b43be6121f923b4d91c27
   CapacitorPushNotifications: 729ade0d2791ec1969feaf931a15e28d929a6d70
   IONFilesystemLib: 89258b8e3e85465da93127d25d7ce37f977e8a6f
 
-PODFILE CHECKSUM: 896255e2eecd265dcb025cd6072f0085b688a401
+PODFILE CHECKSUM: 83af1336f869ba3acafbf981fa96ad787e7a44fe
 
 COCOAPODS: 1.16.2

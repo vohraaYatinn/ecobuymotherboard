@@ -35,7 +35,7 @@ import {
 import { FileText, Video, Download, Loader2, Plus, Trash2, Edit, X } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface LearningResource {
   _id: string

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { clearVendorAuth } from "@/lib/vendor-auth-storage"
 import { API_URL } from "@/lib/api-config"
 
 interface VendorUserData {
@@ -230,8 +231,7 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     try {
-      localStorage.removeItem("vendorToken")
-      localStorage.removeItem("vendorData")
+      await clearVendorAuth()
       router.push("/login")
     } catch (err) {
       console.error("Logout error:", err)

@@ -1,0 +1,18 @@
+'Log files:
+/Users/yatinvohra/Desktop/PROJECTS/ecobuymotherboard/vendor/.npm-cache/_logs/2026-01-22T04_14_46_179Z-debug-0.log
+
+# npm resolution error report
+
+While resolving: my-v0-project@0.1.0
+Found: @capacitor/core@7.4.5
+node_modules/@capacitor/core
+  dev @capacitor/core@"^7.4.4" from the root project
+
+Could not resolve dependency:
+peer @capacitor/core@">=8.0.0" from @capacitor/preferences@8.0.0
+node_modules/@capacitor/preferences
+  @capacitor/preferences@"*" from the root project
+
+Fix the upstream dependency conflict, or retry
+this command with --force or --legacy-peer-deps
+to accept an incorrect (and potentially broken) dependency resolution.

@@ -15,6 +15,7 @@ import { createRazorpayOrder, razorpayConfig, verifyRazorpaySignature, createRaz
 import jwt from "jsonwebtoken"
 import nodemailer from "nodemailer"
 import { sendCustomerOrderStageEmail } from "../services/orderCustomerEmailNotifications.js"
+import { createShipmentForOrder } from "../services/dtdcService.js"
 
 const router = express.Router()
 
@@ -316,6 +317,14 @@ const finalizeOrderAfterPayment = async (order) => {
   const inventoryResult = await adjustInventoryAndCart(order)
   await sendOrderNotifications(order)
   await sendOrderConfirmationEmail(order)
+  
+  // Send order placed notification (pending status) with beautiful email and push notification
+  try {
+    const { sendCustomerOrderStageEmail } = await import("../services/orderCustomerEmailNotifications.js")
+    await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:pending" })
+  } catch (notifError) {
+    console.error("❌ [ORDER] Error sending order placed notification:", notifError)
+  }
 
   return inventoryResult
 }
@@ -1070,6 +1079,68 @@ router.post("/:id/return", authenticate, returnUpload.array("attachments", 5), a
     }
     order.status = "return_requested"
 
+    let shipmentResult = null
+    let shipmentError = null
+    try {
+      await order.populate("shippingAddress")
+      await order.populate("customerId", "name email mobile")
+
+      const customerAddress = order.shippingAddress
+        ? {
+            name: `${order.shippingAddress.firstName || ""} ${order.shippingAddress.lastName || ""}`.trim(),
+            phone: order.shippingAddress.phone || "",
+            address1: order.shippingAddress.address1,
+            address2: order.shippingAddress.address2 || "",
+            pincode: order.shippingAddress.postcode || "",
+            city: order.shippingAddress.city || "",
+            state: order.shippingAddress.state || "",
+          }
+        : null
+
+      if (!customerAddress) {
+        throw new Error("Customer address missing for DTDC return pickup")
+      }
+
+      let vendorAddress = null
+      if (order.vendorId) {
+        const vendorDoc = await Vendor.findById(order.vendorId).lean()
+        if (vendorDoc?.address?.address1) {
+          vendorAddress = {
+            name:
+              vendorDoc.name ||
+              `${vendorDoc.address.firstName || ""} ${vendorDoc.address.lastName || ""}`.trim() ||
+              "Vendor",
+            phone: vendorDoc.phone || "",
+            address1: vendorDoc.address.address1,
+            address2: vendorDoc.address.address2 || "",
+            pincode: vendorDoc.address.postcode,
+            city: vendorDoc.address.city,
+            state: vendorDoc.address.state,
+          }
+        }
+      }
+
+      if (!vendorAddress) {
+        throw new Error("Vendor address missing for DTDC return pickup")
+      }
+
+      shipmentResult = await createShipmentForOrder(order, {
+        origin: customerAddress,
+        destination: vendorAddress,
+        direction: "reverse",
+        referenceNumber: `${order.orderNumber}-RET`,
+      })
+
+      if (shipmentResult?.awbNumber) {
+        order.returnAwbNumber = shipmentResult.awbNumber
+        order.returnDtdcTrackingData = shipmentResult.trackingData || null
+        order.returnTrackingLastUpdated = new Date()
+      }
+    } catch (shipErr) {
+      shipmentError = shipErr
+      console.error(`❌ [RETURN REQUEST] DTDC pickup creation failed for order ${order.orderNumber}:`, shipErr)
+    }
+
     await order.save()
 
     // Create notification for customer
@@ -1123,11 +1194,15 @@ router.post("/:id/return", authenticate, returnUpload.array("attachments", 5), a
 
     res.json({
       success: true,
-      message: "Return request submitted successfully",
+      message: shipmentError
+        ? "Return request submitted. Pickup creation failed - please schedule manually."
+        : "Return request submitted successfully",
       data: {
         orderId: order._id,
         orderNumber: order.orderNumber,
         returnRequest: order.returnRequest,
+        returnAwbNumber: order.returnAwbNumber || null,
+        shipmentError: shipmentError ? shipmentError.message : null,
       },
     })
   } catch (error) {

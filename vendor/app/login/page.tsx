@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { API_URL } from "@/lib/api-config"
+import { getVendorToken } from "@/lib/vendor-auth-storage"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,38 +19,14 @@ export default function LoginPage() {
   // Check if user is already logged in
   useEffect(() => {
     const checkAuth = async () => {
-      const token = localStorage.getItem("vendorToken")
+      const token = await getVendorToken()
       
-      if (!token) {
-        setIsCheckingAuth(false)
-        return
-      }
-
-      try {
-        // Verify token by fetching profile
-        const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
-
-        const data = await response.json()
-
-        if (response.ok && data.success) {
-          // Token is valid, redirect to dashboard
-          router.push("/dashboard")
-        } else {
-          // Token is invalid, clear it
-          localStorage.removeItem("vendorToken")
-          localStorage.removeItem("vendorData")
-          setIsCheckingAuth(false)
-        }
-      } catch (error) {
-        // Error checking auth, clear token and show login
-        console.error("Error checking auth:", error)
-        localStorage.removeItem("vendorToken")
-        localStorage.removeItem("vendorData")
+      if (token) {
+        // Token exists - redirect to dashboard
+        // Token validation will happen on actual API calls (which handle 401 correctly)
+        // This ensures user stays logged in even if server is temporarily unavailable
+        router.push("/dashboard")
+      } else {
         setIsCheckingAuth(false)
       }
     }

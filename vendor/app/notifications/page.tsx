@@ -254,7 +254,8 @@ export default function NotificationsPage() {
                     markAsRead(notification._id)
                   }
                   // Navigate based on notification type
-                  if (notification.type === "new_order_available") {
+                  // For new order notifications, always redirect to accept-orders page
+                  if (notification.type === "new_order_available" || notification.type === "order_placed") {
                     router.push("/accept-orders")
                   } else if (notification.orderId?._id) {
                     setSelectedOrderId(notification.orderId._id)

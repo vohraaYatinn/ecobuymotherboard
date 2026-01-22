@@ -10,8 +10,8 @@ const router = express.Router()
 
 // MessageCentral Configuration
 const MESSAGE_CENTRAL_CONFIG = {
-  authToken: process.env.MESSAGE_CENTRAL_AUTH_TOKEN || "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJDLUYwQkMyRUNBNENGOTQ5QiIsImlhdCI6MTc1MDAwNjAxOSwiZXhwIjoxOTA3Njg2MDE5fQ.hLwCqVSAWYUSXfgUWPc7IFpokBRAt502A82r9QugbeGbqM0D0Ny34mfky5fiiAErqBs0xIVP4NbzS01-WGbs8g",
-  customerId: process.env.MESSAGE_CENTRAL_CUSTOMER_ID || "C-F0BC2ECA4CF949B",
+  authToken: process.env.MESSAGE_CENTRAL_AUTH_TOKEN || "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJDLTNGMEI1MUQzRTBCNzQ1MCIsImlhdCI6MTc2ODk3NjAzOCwiZXhwIjoxOTI2NjU2MDM4fQ.ssUp02it6DsK5El9tmtDrWYyDXnbj3C5ZZQ6llSTuoDPYi1BaNoQf0BEJALe4vRQvQCIrBVFmycyQqIejXq24w",
+  customerId: process.env.MESSAGE_CENTRAL_CUSTOMER_ID || "C-3F0B51D3E0B7450",
   baseUrl: "https://cpaas.messagecentral.com/verification/v3",
 }
 

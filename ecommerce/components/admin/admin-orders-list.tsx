@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface OrderItem {
   productId?: {
@@ -102,6 +102,8 @@ interface Order {
   shipping: number
   awbNumber?: string | null
   dtdcStatus?: string | null
+  returnAwbNumber?: string | null
+  returnDtdcStatus?: string | null
   returnRequest?: ReturnRequest
   createdAt: string
 }
@@ -195,6 +197,10 @@ const getRefundStatusColor = (status: string | null | undefined) => {
 const formatRefundStatus = (status: string | null | undefined) => {
   if (!status) return "N/A"
   return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+const getDTDCTrackingUrl = (awb: string) => {
+  return `https://www.dtdc.com/track-your-shipment/?awb=${encodeURIComponent(awb)}`
 }
 
 const getReturnPickupInfo = (order: Order): { label: string; className: string } | null => {
@@ -1288,6 +1294,27 @@ export function AdminOrdersList() {
                                   {formatDtdcStatus(order.dtdcStatus)}
                                 </Badge>
                                 <p className="text-xs text-muted-foreground mt-1">AWB: {order.awbNumber}</p>
+                              </div>
+                            </div>
+                          )}
+                          {order.returnAwbNumber && (
+                            <div>
+                              <span className="text-muted-foreground">Return AWB:</span>
+                              <div className="mt-1 space-y-1">
+                                {order.returnDtdcStatus && (
+                                  <Badge className={getDtdcStatusColor(order.returnDtdcStatus)}>
+                                    {formatDtdcStatus(order.returnDtdcStatus)}
+                                  </Badge>
+                                )}
+                                <p className="text-xs text-muted-foreground">AWB: {order.returnAwbNumber}</p>
+                                <a
+                                  href={getDTDCTrackingUrl(order.returnAwbNumber)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary underline"
+                                >
+                                  Track return in DTDC
+                                </a>
                               </div>
                             </div>
                           )}

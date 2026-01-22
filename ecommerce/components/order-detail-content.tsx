@@ -22,7 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface OrderItem {
   productId: {
@@ -171,6 +171,8 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
         return "bg-gray-500"
       case "cancelled":
         return "bg-red-500"
+      case "admin_review_required":
+        return "bg-amber-500"
       default:
         return "bg-gray-500"
     }
@@ -217,7 +219,11 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
   const getEffectiveOrderStatus = (order: Order): string => {
     const s = (order.status || "").toLowerCase()
     // Keep special flows as-is
-    if (s === "cancelled" || s.startsWith("return_") || s === "admin_review_required") return s
+    if (s === "cancelled" || s.startsWith("return_")) return s
+
+    // For admin review, keep customer-facing flow at "processing"
+    // so tracking shows realistic progress while admin reassigns vendor
+    if (s === "admin_review_required") return "processing"
 
     const inferred = inferForwardStageFromDtdc(order)
     if (inferred) return inferred
@@ -475,7 +481,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
   const trackingSteps = generateTrackingSteps(order)
   const orderDate = new Date(order.createdAt)
-  const effectiveStatusForBadge = getEffectiveOrderStatus(order)
+  const badgeStatus = (order.status || "").toLowerCase()
 
   // Check if order can be cancelled
   const isPaymentPending = order.paymentStatus?.toLowerCase() === "pending"
@@ -702,8 +708,8 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
           <p className="text-sm sm:text-base text-muted-foreground">
             Order Number: <span className="font-semibold text-foreground">{order.orderNumber}</span>
           </p>
-          <Badge className={`${getStatusColor(effectiveStatusForBadge)} w-fit text-xs`}>
-            {formatStatus(effectiveStatusForBadge)}
+          <Badge className={`${getStatusColor(badgeStatus)} w-fit text-xs`}>
+            {formatStatus(badgeStatus)}
           </Badge>
         </div>
         <p className="text-xs sm:text-sm text-muted-foreground mt-1">

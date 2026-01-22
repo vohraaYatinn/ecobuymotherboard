@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Textarea } from "@/components/ui/textarea"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface OrderItem {
   name: string
@@ -100,6 +100,8 @@ interface Order {
   dtdcStatus?: string | null
   returnDtdcStatus?: string | null
   returnRequest?: ReturnRequest
+  // DTDC tracking data for forward shipment (shape from backend; use 'any' for flexibility)
+  dtdcTrackingData?: any
   packingVideo?: {
     url: string | null
     originalName?: string | null
@@ -110,6 +112,8 @@ interface Order {
   deliveredAt?: string
   createdAt: string
   updatedAt: string
+  // Optional invoice number for downloads
+  invoiceNumber?: string
 }
 
 interface TrackingStep {
@@ -551,7 +555,10 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const getEffectiveOrderStatus = (order: Order): string => {
     const s = (order.status || "").toLowerCase()
     // Keep special flows as-is
-    if (s === "cancelled" || s.startsWith("return_") || s === "admin_review_required") return s
+    if (s === "cancelled" || s.startsWith("return_")) return s
+
+    // For admin review, keep customer-facing / timeline flow at "processing"
+    if (s === "admin_review_required") return "processing"
 
     const inferred = inferForwardStageFromDtdc(order)
     if (inferred) return inferred
@@ -795,6 +802,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
         return "bg-red-100 text-red-800"
       case "return_picked_up":
         return "bg-blue-100 text-blue-800"
+      case "admin_review_required":
+        return "bg-amber-100 text-amber-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
@@ -917,6 +926,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const customer = getCustomerInfo()
   const shippingAddress = getShippingAddress()
   const vendor = getVendorInfo()
+  const rawStatus = (order.status || "").toLowerCase()
 
   // GST & payout helpers
   const gstTotal = (order.cgst || 0) + (order.sgst || 0) + (order.igst || 0)
@@ -935,7 +945,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const paymentGatewayCharges = payoutBeforeGateway * 0.02
   const netVendorPayout = payoutBeforeGateway - paymentGatewayCharges
 
-  const isReturnRequested = order.status === "return_requested" && order.returnRequest && order.returnRequest.type === "pending"
+  const isReturnRequested =
+    order.status === "return_requested" && order.returnRequest && order.returnRequest.type === "pending"
   const hasPackingVideo = !!order.packingVideo?.url
 
   return (
@@ -950,13 +961,36 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                 <h3 className="font-semibold text-lg mb-2">Return Requested</h3>
                 <div className="bg-white p-4 rounded-lg border border-orange-200">
                   <Label className="text-sm font-medium text-muted-foreground">Customer Reason:</Label>
-                  <p className="mt-1 text-sm">{order.returnRequest.reason}</p>
-                  {order.returnRequest.requestedAt && (
+                  <p className="mt-1 text-sm">{order.returnRequest?.reason}</p>
+                  {order.returnAwbNumber && (
+                    <div className="mt-3">
+                      <Label className="text-xs font-medium text-muted-foreground">Return AWB (DTDC):</Label>
+                      <div className="mt-1 flex items-center gap-2 flex-wrap">
+                        <span className="text-sm">{order.returnAwbNumber}</span>
+                        {order.returnDtdcStatus && (
+                          <Badge className={getDtdcStatusColor(order.returnDtdcStatus)}>
+                            {formatDtdcStatus(order.returnDtdcStatus)}
+                          </Badge>
+                        )}
+                        <a
+                          href={getDTDCTrackingUrl(order.returnAwbNumber)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Button variant="outline" size="sm">
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            Track Return
+                          </Button>
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                  {order.returnRequest?.requestedAt && (
                     <p className="text-xs text-muted-foreground mt-2">
                       Requested on: {new Date(order.returnRequest.requestedAt).toLocaleString("en-IN")}
                     </p>
                   )}
-                  {order.returnRequest.attachments && order.returnRequest.attachments.length > 0 && (
+                  {order.returnRequest?.attachments && order.returnRequest.attachments.length > 0 && (
                     <div className="mt-3">
                       <Label className="text-xs font-medium text-muted-foreground">Customer Uploads:</Label>
                       <ul className="mt-1 space-y-1 text-sm">
@@ -1003,7 +1037,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
               </div>
               <div>
                 <Label htmlFor="returnAdminNotes" className="text-sm font-medium">
-                  Admin Notes {order.returnRequest.type === "pending" && "(Required for rejection)"}
+                  Admin Notes {order.returnRequest?.type === "pending" && "(Required for rejection)"}
                 </Label>
                 <Textarea
                   id="returnAdminNotes"
@@ -1094,13 +1128,13 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   </div>
                 </div>
               )}
-              {order.returnRequest.reason && (
+              {order.returnRequest?.reason && (
                 <div className="mb-2">
                   <span className="font-medium text-sm">Customer Reason:</span>
-                  <p className="text-sm mt-1">{order.returnRequest.reason}</p>
+                  <p className="text-sm mt-1">{order.returnRequest?.reason}</p>
                 </div>
               )}
-              {order.returnRequest.attachments && order.returnRequest.attachments.length > 0 && (
+              {order.returnRequest?.attachments && order.returnRequest.attachments.length > 0 && (
                 <div className="mb-2">
                   <span className="font-medium text-sm">Customer Uploads:</span>
                   <ul className="mt-1 space-y-1 text-sm">
@@ -1122,13 +1156,13 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   </ul>
                 </div>
               )}
-              {order.returnRequest.adminNotes && (
+              {order.returnRequest?.adminNotes && (
                 <div className="mb-2">
                   <span className="font-medium text-sm">Admin Notes:</span>
-                  <p className="text-sm mt-1">{order.returnRequest.adminNotes}</p>
+                  <p className="text-sm mt-1">{order.returnRequest?.adminNotes}</p>
                 </div>
               )}
-              {order.returnRequest.reviewedAt && (
+              {order.returnRequest?.reviewedAt && (
                 <p className="text-xs text-muted-foreground mt-2">
                   Reviewed on: {new Date(order.returnRequest.reviewedAt).toLocaleString("en-IN")}
                 </p>
@@ -1165,8 +1199,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Badge className={`${getStatusColor(getEffectiveOrderStatus(order))} w-fit capitalize`}>
-            {getEffectiveOrderStatus(order).replace(/_/g, " ")}
+          <Badge className={`${getStatusColor(rawStatus)} w-fit capitalize`}>
+            {rawStatus.replace(/_/g, " ")}
           </Badge>
           {order.awbNumber && order.dtdcStatus && (
             <Badge className={getDtdcStatusColor(order.dtdcStatus)}>
@@ -1365,7 +1399,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
-                  Shipping GST {isIntraState ? "(CGST + SGST @ 9%)" : "(IGST @ 18%)"}
+                  Shipping GST {isIntraState ? "(CGST @ 9% + SGST @ 9%)" : "(IGST @ 18%)"}
                 </span>
                 <span>
                   ₹
@@ -1532,6 +1566,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   <SelectItem value="return_accepted">Return Accepted</SelectItem>
                   <SelectItem value="return_rejected">Return Rejected</SelectItem>
                   <SelectItem value="return_picked_up">Return Picked Up</SelectItem>
+                  <SelectItem value="admin_review_required">Admin Review Required</SelectItem>
                 </SelectContent>
               </Select>
             </div>

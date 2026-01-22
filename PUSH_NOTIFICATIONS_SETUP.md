@@ -143,7 +143,7 @@ NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
 NEXT_PUBLIC_FIREBASE_VAPID_KEY=your-vapid-key
 
 # Backend API URL
-NEXT_PUBLIC_API_URL=http://192.168.1.43:5000
+NEXT_PUBLIC_API_URL=https://api.elecobuy.com
 ```
 
 ### 3.2 Update Service Worker

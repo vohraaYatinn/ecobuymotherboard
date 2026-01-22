@@ -19,11 +19,12 @@ export interface NotificationData {
 }
 
 import { API_URL } from "../lib/api-config";
+import { getVendorToken } from "@/lib/vendor-auth-storage";
 
 // Helper function to send FCM token to backend
 async function sendTokenToBackend(token: string, platform: string, deviceModel?: string, appVersion?: string) {
   try {
-    const vendorToken = localStorage.getItem('vendorToken');
+    const vendorToken = await getVendorToken();
     if (!vendorToken) {
       console.log('Vendor not logged in, skipping token registration');
       return;

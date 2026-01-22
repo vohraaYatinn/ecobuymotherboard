@@ -15,12 +15,12 @@ This document contains the API endpoints and credentials being used for DTDC tra
 
 **Tracking Endpoint (JSON):**
 ```
-https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails
+http://dtdcstagingapi.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails
 ```
 
 **Authentication Endpoint:**
 ```
-https://blktracksvc.dtdc.com/dtdc-api/api/dtdc/authenticate
+http://dtdcstagingapi.dtdc.com/dtdc-api/api/dtdc/authenticate
 ```
 
 ### Staging Environment
@@ -50,7 +50,7 @@ http://dtdcstagingapi.dtdc.com/dtdc-tracking-api/dtdc-api/api/dtdc/authenticate
 
 **Example Request:**
 ```
-GET https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails?strcnno=7X109986053&TrkType=cnno&addtnIDtl=Y
+GET http://dtdcstagingapi.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails?strcnno=7X109986053&TrkType=cnno&addtnIDtl=Y
 Headers:
   Authorization: Basic R0wxMDk5MV90cmtfanNvbjo0MTFjNWQ1MjAwMjM5ZWQyMjQxYjczN2ZhMTVlZWNjMQ==
   Accept: application/json
@@ -58,7 +58,7 @@ Headers:
 
 ### Method 2: Token-Based Authentication
 - **Step 1:** Get token from authentication endpoint
-  - **Request:** `GET https://blktracksvc.dtdc.com/dtdc-api/api/dtdc/authenticate?username=GL10991_trk_json&password=411c5d5200239ed2241b737fa15eecc1`
+  - **Request:** `GET http://dtdcstagingapi.dtdc.com/dtdc-api/api/dtdc/authenticate?username=GL10991_trk_json&password=411c5d5200239ed2241b737fa15eecc1`
   - **Response:** Returns authentication token
 
 - **Step 2:** Use token in tracking request
@@ -70,12 +70,12 @@ Headers:
 
 **Example Request (Step 1 - Get Token):**
 ```
-GET https://blktracksvc.dtdc.com/dtdc-api/api/dtdc/authenticate?username=GL10991_trk_json&password=411c5d5200239ed2241b737fa15eecc1
+GET http://dtdcstagingapi.dtdc.com/dtdc-api/api/dtdc/authenticate?username=GL10991_trk_json&password=411c5d5200239ed2241b737fa15eecc1
 ```
 
 **Example Request (Step 2 - Track Consignment):**
 ```
-GET https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails?strcnno=7X109986053&TrkType=cnno&addtnIDtl=Y&apikey=<TOKEN>
+GET http://dtdcstagingapi.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails?strcnno=7X109986053&TrkType=cnno&addtnIDtl=Y&apikey=<TOKEN>
 Headers:
   Accept: application/json
 ```
@@ -126,7 +126,7 @@ Based on DTDC API documentation, the expected response should be:
 ## Questions for DTDC Support
 
 1. Are the credentials `GL10991_trk_json:411c5d5200239ed2241b737fa15eecc1` correct and active?
-2. Is the endpoint `https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails` the correct JSON tracking endpoint?
+2. Is the endpoint `http://dtdcstagingapi.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails` the correct JSON tracking endpoint?
 3. Should we use Basic Authentication or Token-based authentication?
 4. If using token-based auth, should the parameter be `apikey` or `apikev` (as per PDF documentation)?
 5. Are there any IP whitelist requirements for these API calls?

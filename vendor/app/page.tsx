@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { getVendorToken } from "@/lib/vendor-auth-storage"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export default function SplashScreen() {
   const router = useRouter()
@@ -11,7 +12,7 @@ export default function SplashScreen() {
 
   useEffect(() => {
     const checkAuthAndRedirect = async () => {
-      const token = localStorage.getItem("vendorToken")
+      const token = await getVendorToken()
 
       // If the app was opened via an in-app deep link (e.g., from a native notification),
       // don't override it by forcing a redirect to /dashboard.
@@ -29,36 +30,14 @@ export default function SplashScreen() {
       await new Promise(resolve => setTimeout(resolve, 1500))
       
       if (token) {
-        try {
-          // Verify token by fetching profile
-          const response = await fetch(`${API_URL}/api/vendor-auth/profile`, {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          })
-
-          const data = await response.json()
-
-          if (response.ok && data.success) {
-            // Token is valid, redirect to dashboard
-            router.push("/dashboard")
-            return
-          } else {
-            // Token is invalid, clear it and go to login
-            localStorage.removeItem("vendorToken")
-            localStorage.removeItem("vendorData")
-            router.push("/login")
-          }
-        } catch (error) {
-          // Error checking auth, clear token and go to login
-          console.error("Error checking auth:", error)
-          localStorage.removeItem("vendorToken")
-          localStorage.removeItem("vendorData")
-          router.push("/login")
-        }
+        // Token exists - go directly to dashboard
+        // Token validation will happen on actual API calls (which handle 401 correctly)
+        // This ensures user stays logged in even if server is temporarily unavailable
+        console.log("✅ Token found, redirecting to dashboard")
+        router.push("/dashboard")
       } else {
         // No token, go to login
+        console.log("ℹ️ No token found, redirecting to login")
         router.push("/login")
       }
       

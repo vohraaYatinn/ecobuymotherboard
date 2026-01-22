@@ -15,10 +15,10 @@ const DTDC_CONFIG = {
     serviceability: "http://dtdcstagingapi.dtdc.com/dtdc-tracking-api/dtdc-api/rest/pincode-serviceability",
   },
   production: {
-    authenticate: "https://blktracksvc.dtdc.com/dtdc-api/api/dtdc/authenticate",
-    track: "https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails",
-    trackJson: "https://blktracksvc.dtdc.com/dtdc-api/rest/JSONCnTrk/getTrackDetails",
-    serviceability: "https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails", // placeholder for pincode service
+    authenticate: "http://dtdcstagingapi.dtdc.com/dtdc-api/api/dtdc/authenticate",
+    track: "http://dtdcstagingapi.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails",
+    trackJson: "http://dtdcstagingapi.dtdc.com/dtdc-api/rest/JSONCnTrk/getTrackDetails",
+    serviceability: "http://dtdcstagingapi.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails", // placeholder for pincode service
     orderUpload: "https://dtdcapi.shipsy.io/api/customer/integration/consignment/softdata",
   },
 

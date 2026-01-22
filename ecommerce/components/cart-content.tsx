@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Trash2, Plus, Minus, ShoppingBag, Loader2 } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.43:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export function CartContent() {
   const router = useRouter()

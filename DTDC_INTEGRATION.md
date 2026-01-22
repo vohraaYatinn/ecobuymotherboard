@@ -74,8 +74,8 @@ DTDC_ENVIRONMENT=production  # Use 'staging' for testing
 ## API Endpoints
 
 ### Production Endpoints
-- Authentication: `https://blktracksvc.dtdc.com/dtdc-api/api/dtdc/authenticate`
-- Tracking: `https://blktracksvc.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails`
+- Authentication: `http://dtdcstagingapi.dtdc.com/dtdc-api/api/dtdc/authenticate`
+- Tracking: `http://dtdcstagingapi.dtdc.com/dtdc-api/rest/XMLSchemaTrk/getDetails`
 
 ### Staging Endpoints
 - Authentication: `http://dtdcstagingapi.dtdc.com/dtdc-tracking-api/dtdc-api/api/dtdc/authenticate`

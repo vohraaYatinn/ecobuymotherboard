@@ -1013,72 +1013,76 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
     let shipmentResult = null
     let shipmentError = null
     try {
-      console.log("🔵 [RETURN ACCEPT][DTDC] Preparing reverse pickup for order", order.orderNumber)
-      const customerAddress = order.shippingAddress
-        ? {
-            name: `${order.shippingAddress.firstName || ""} ${order.shippingAddress.lastName || ""}`.trim(),
-            phone: order.shippingAddress.phone || "",
-            address1: order.shippingAddress.address1,
-            address2: order.shippingAddress.address2 || "",
-            pincode: order.shippingAddress.postcode || "",
-            city: order.shippingAddress.city || "",
-            state: order.shippingAddress.state || "",
-          }
-        : undefined
-
-      let vendorAddress =
-        order.vendorId?.address && order.vendorId?.address.address1
+      if (order.returnAwbNumber) {
+        console.log("ℹ️ [RETURN ACCEPT][DTDC] Return AWB already exists. Skipping pickup creation.")
+      } else {
+        console.log("🔵 [RETURN ACCEPT][DTDC] Preparing reverse pickup for order", order.orderNumber)
+        const customerAddress = order.shippingAddress
           ? {
-              name: order.vendorId?.name || "Vendor",
-              phone: order.vendorId?.phone || "",
-              address1: order.vendorId.address.address1,
-              address2: order.vendorId.address.address2 || "",
-              pincode: order.vendorId.address.postcode,
-              city: order.vendorId.address.city,
-              state: order.vendorId.address.state,
+              name: `${order.shippingAddress.firstName || ""} ${order.shippingAddress.lastName || ""}`.trim(),
+              phone: order.shippingAddress.phone || "",
+              address1: order.shippingAddress.address1,
+              address2: order.shippingAddress.address2 || "",
+              pincode: order.shippingAddress.postcode || "",
+              city: order.shippingAddress.city || "",
+              state: order.shippingAddress.state || "",
             }
           : undefined
 
-      // Fallback: fetch vendor from DB if populated doc is missing address
-      if (!vendorAddress && order.vendorId) {
-        try {
-          const vendorDoc = await Vendor.findById(order.vendorId).lean()
-          if (vendorDoc?.address?.address1) {
-            vendorAddress = {
-              name: vendorDoc.name || "Vendor",
-              phone: vendorDoc.phone || "",
-              address1: vendorDoc.address.address1,
-              address2: vendorDoc.address.address2 || "",
-              pincode: vendorDoc.address.postcode,
-              city: vendorDoc.address.city,
-              state: vendorDoc.address.state,
+        let vendorAddress =
+          order.vendorId?.address && order.vendorId?.address.address1
+            ? {
+                name: order.vendorId?.name || "Vendor",
+                phone: order.vendorId?.phone || "",
+                address1: order.vendorId.address.address1,
+                address2: order.vendorId.address.address2 || "",
+                pincode: order.vendorId.address.postcode,
+                city: order.vendorId.address.city,
+                state: order.vendorId.address.state,
+              }
+            : undefined
+
+        // Fallback: fetch vendor from DB if populated doc is missing address
+        if (!vendorAddress && order.vendorId) {
+          try {
+            const vendorDoc = await Vendor.findById(order.vendorId).lean()
+            if (vendorDoc?.address?.address1) {
+              vendorAddress = {
+                name: vendorDoc.name || "Vendor",
+                phone: vendorDoc.phone || "",
+                address1: vendorDoc.address.address1,
+                address2: vendorDoc.address.address2 || "",
+                pincode: vendorDoc.address.postcode,
+                city: vendorDoc.address.city,
+                state: vendorDoc.address.state,
+              }
+              console.log("🔵 [RETURN ACCEPT][DTDC] Vendor address loaded via DB lookup")
             }
-            console.log("🔵 [RETURN ACCEPT][DTDC] Vendor address loaded via DB lookup")
+          } catch (lookupErr) {
+            console.error("❌ [RETURN ACCEPT][DTDC] Vendor lookup failed:", lookupErr)
           }
-        } catch (lookupErr) {
-          console.error("❌ [RETURN ACCEPT][DTDC] Vendor lookup failed:", lookupErr)
         }
-      }
 
-      if (!vendorAddress) {
-        throw new Error("Vendor address missing for DTDC reverse pickup")
-      }
+        if (!vendorAddress) {
+          throw new Error("Vendor address missing for DTDC reverse pickup")
+        }
 
-      console.log("🔵 [RETURN ACCEPT][DTDC] Origin (customer) ->", customerAddress)
-      console.log("🔵 [RETURN ACCEPT][DTDC] Destination (vendor) ->", vendorAddress)
+        console.log("🔵 [RETURN ACCEPT][DTDC] Origin (customer) ->", customerAddress)
+        console.log("🔵 [RETURN ACCEPT][DTDC] Destination (vendor) ->", vendorAddress)
 
-      shipmentResult = await createShipmentForOrder(order, {
-        origin: customerAddress,
-        destination: vendorAddress,
-        direction: "reverse",
-        referenceNumber: `${order.orderNumber}-RET`,
-      })
-      if (shipmentResult?.awbNumber) {
-        // IMPORTANT: Return shipments must have a separate AWB and must NOT overwrite the forward AWB.
-        order.returnAwbNumber = shipmentResult.awbNumber
-        order.returnDtdcTrackingData = shipmentResult.trackingData || null
-        order.returnTrackingLastUpdated = new Date()
-        console.log("✅ [RETURN ACCEPT][DTDC] Reverse pickup created. AWB:", shipmentResult.awbNumber)
+        shipmentResult = await createShipmentForOrder(order, {
+          origin: customerAddress,
+          destination: vendorAddress,
+          direction: "reverse",
+          referenceNumber: `${order.orderNumber}-RET`,
+        })
+        if (shipmentResult?.awbNumber) {
+          // IMPORTANT: Return shipments must have a separate AWB and must NOT overwrite the forward AWB.
+          order.returnAwbNumber = shipmentResult.awbNumber
+          order.returnDtdcTrackingData = shipmentResult.trackingData || null
+          order.returnTrackingLastUpdated = new Date()
+          console.log("✅ [RETURN ACCEPT][DTDC] Reverse pickup created. AWB:", shipmentResult.awbNumber)
+        }
       }
     } catch (shipErr) {
       shipmentError = shipErr

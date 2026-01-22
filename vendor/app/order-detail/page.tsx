@@ -11,6 +11,7 @@ import { useNavigation } from "@/contexts/navigation-context"
 import { useNotificationSoundContext } from "@/contexts/notification-sound-context"
 import { Capacitor } from "@capacitor/core"
 import { Filesystem, Directory } from "@capacitor/filesystem"
+import { FileOpener } from "@capacitor-community/file-opener"
 
 interface OrderItem {
   name: string
@@ -380,23 +381,30 @@ export default function OrderDetailPage() {
                 directory: Directory.Documents,
               })
 
-              // Open the saved PDF (Android: should hand off to browser/PDF viewer)
+              // Get the file URI and open it with the system file viewer
               try {
                 const { uri } = await Filesystem.getUri({
                   path: filename,
                   directory: Directory.Documents,
                 })
-                const fileUrl = Capacitor.convertFileSrc(uri)
-                window.open(fileUrl, "_blank", "noopener,noreferrer")
+                
+                // Open the file with the system's default PDF viewer
+                await FileOpener.open({
+                  filePath: uri,
+                  contentType: "application/pdf",
+                  openWithDefault: true,
+                })
               } catch (openError) {
                 console.error("Error opening saved label:", openError)
+                // If opening fails, still show success message for download
               }
 
               const folderName = platform === "android" 
                 ? "Documents folder (accessible via file manager)" 
                 : "Documents folder (accessible via Files app)"
               
-              alert(`Shipping label saved successfully!\n\nFile: ${filename}\nLocation: ${folderName}`)
+              // Show a brief success message (file is already opened)
+              alert(`Shipping label downloaded and opened!\n\nFile: ${filename}\nLocation: ${folderName}`)
             } catch (filesystemError) {
               console.error("Error saving file with Filesystem API:", filesystemError)
               alert("Error saving file. Please check app permissions or try again.")
