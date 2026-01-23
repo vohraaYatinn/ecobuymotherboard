@@ -1,14 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState, useRef } from "react"
+import { useRouter, usePathname } from "next/navigation"
 import { getVendorToken } from "@/lib/vendor-auth-storage"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export default function SplashScreen() {
   const router = useRouter()
+  const pathname = usePathname()
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const hasNavigatedRef = useRef(false)
 
   useEffect(() => {
     const checkAuthAndRedirect = async () => {
@@ -18,27 +20,92 @@ export default function SplashScreen() {
       // don't override it by forcing a redirect to /dashboard.
       // This is especially important on cold starts where the native layer may trigger
       // navigation slightly after initial render.
+      
+      // Check for native navigation flag (set by MainActivity when notification is clicked)
       if (typeof window !== "undefined") {
-        const path = window.location?.pathname || "/"
-        if (path !== "/" && path !== "/index.html") {
+        const nativeNavPending = localStorage.getItem("nativeNavigationPending")
+        const nativeNavPath = localStorage.getItem("nativeNavigationPath")
+        
+        if (nativeNavPending === "true" && nativeNavPath) {
+          console.log("📍 Native navigation pending to:", nativeNavPath, "- waiting for navigation")
+          // Clear the flag
+          localStorage.removeItem("nativeNavigationPending")
+          // Wait for navigation to complete
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          
+          // Check if navigation happened
+          const currentPath = window.location?.pathname || "/"
+          if (currentPath !== "/" && currentPath !== "/index.html") {
+            console.log("📍 Navigation completed to:", currentPath, "- skipping redirect")
+            localStorage.removeItem("nativeNavigationPath")
+            setIsCheckingAuth(false)
+            hasNavigatedRef.current = true
+            return
+          }
+          
+          // If navigation didn't happen, try to navigate manually
+          console.log("📍 Native navigation didn't complete, navigating manually to:", nativeNavPath)
+          router.push(nativeNavPath)
+          localStorage.removeItem("nativeNavigationPath")
           setIsCheckingAuth(false)
+          hasNavigatedRef.current = true
           return
         }
       }
       
-      // Wait a bit for splash screen animation
+      // Check initial pathname
+      if (typeof window !== "undefined") {
+        const path = window.location?.pathname || "/"
+        if (path !== "/" && path !== "/index.html") {
+          console.log("📍 Already on path:", path, "- skipping redirect")
+          setIsCheckingAuth(false)
+          hasNavigatedRef.current = true
+          return
+        }
+      }
+      
+      // Wait for splash screen animation and give native navigation time to complete
+      // Native navigation from MainActivity can take 2-5 seconds on cold starts
       await new Promise(resolve => setTimeout(resolve, 1500))
       
-      if (token) {
-        // Token exists - go directly to dashboard
-        // Token validation will happen on actual API calls (which handle 401 correctly)
-        // This ensures user stays logged in even if server is temporarily unavailable
-        console.log("✅ Token found, redirecting to dashboard")
-        router.push("/dashboard")
-      } else {
-        // No token, go to login
-        console.log("ℹ️ No token found, redirecting to login")
-        router.push("/login")
+      // Check again if navigation happened (native navigation might have occurred)
+      if (typeof window !== "undefined") {
+        const currentPath = window.location?.pathname || "/"
+        if (currentPath !== "/" && currentPath !== "/index.html") {
+          console.log("📍 Navigation detected to:", currentPath, "- skipping redirect")
+          setIsCheckingAuth(false)
+          hasNavigatedRef.current = true
+          return
+        }
+      }
+      
+      // Wait a bit more for native navigation (total ~3 seconds)
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      
+      // Final check - if we're still on "/", then proceed with default redirect
+      if (typeof window !== "undefined") {
+        const finalPath = window.location?.pathname || "/"
+        if (finalPath !== "/" && finalPath !== "/index.html") {
+          console.log("📍 Navigation detected to:", finalPath, "- skipping redirect")
+          setIsCheckingAuth(false)
+          hasNavigatedRef.current = true
+          return
+        }
+      }
+      
+      // Only redirect if we're still on the root path and haven't navigated
+      if (!hasNavigatedRef.current) {
+        if (token) {
+          // Token exists - go directly to dashboard
+          // Token validation will happen on actual API calls (which handle 401 correctly)
+          // This ensures user stays logged in even if server is temporarily unavailable
+          console.log("✅ Token found, redirecting to dashboard")
+          router.push("/dashboard")
+        } else {
+          // No token, go to login
+          console.log("ℹ️ No token found, redirecting to login")
+          router.push("/login")
+        }
       }
       
       setIsCheckingAuth(false)
@@ -46,6 +113,15 @@ export default function SplashScreen() {
 
     checkAuthAndRedirect()
   }, [router])
+
+  // Listen for pathname changes (Next.js router)
+  useEffect(() => {
+    if (pathname && pathname !== "/" && pathname !== "/index.html") {
+      console.log("📍 Pathname changed to:", pathname, "- stopping redirect")
+      hasNavigatedRef.current = true
+      setIsCheckingAuth(false)
+    }
+  }, [pathname])
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 px-4" style={{ paddingTop: `env(safe-area-inset-top, 0px)`, paddingBottom: `env(safe-area-inset-bottom, 0px)` }}>

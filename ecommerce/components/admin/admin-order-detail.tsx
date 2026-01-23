@@ -524,7 +524,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
 
   /**
    * Infer a more granular forward-shipment stage from DTDC tracking text.
-   * Used to show Processing -> Picked Up -> Shipped progression in timelines/badges.
+   * Used to show Processing -> packed up -> Shipped progression in timelines/badges.
    */
   const inferForwardStageFromDtdc = (order: Order): "picked_up" | "shipped" | "delivered" | null => {
     const statusText = String(order.dtdcTrackingData?.statusText || "").toLowerCase()
@@ -542,7 +542,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
       return "shipped"
     }
     if (
-      statusText.includes("picked up") ||
+      statusText.includes("packed up") ||
       statusText.includes("pickup completed") ||
       statusText.includes("pickup done")
     ) {
@@ -637,7 +637,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
           completed: true,
         })
 
-        // Return Pickup Pending (only if not picked up yet)
+        // Return Pickup Pending (only if not packed up yet)
         if (!isReturnPickedUp) {
           steps.push({
             status: "Return Pickup Pending",
@@ -645,9 +645,9 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
             completed: false,
           })
         } else {
-          // Picked Up
+          // packed up
           steps.push({
-            status: "Picked Up",
+            status: "packed up",
             date: `${formatDate(order.updatedAt)} at ${formatTime(order.updatedAt)}`,
             completed: true,
           })
@@ -715,7 +715,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
         status: status === "pending" ? "Order Placed" :
                 status === "confirmed" ? "Order Confirmed" :
                 status === "processing" ? "Processing" :
-                status === "picked_up" ? "Picked Up" :
+                status === "picked_up" ? "packed up" :
                 status === "shipped" ? "Shipped" : "Delivered",
         date,
         completed: isCompleted,
@@ -1565,7 +1565,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
                   <SelectItem value="return_requested">Return Requested</SelectItem>
                   <SelectItem value="return_accepted">Return Accepted</SelectItem>
                   <SelectItem value="return_rejected">Return Rejected</SelectItem>
-                  <SelectItem value="return_picked_up">Return Picked Up</SelectItem>
+                  <SelectItem value="return_picked_up">Return packed up</SelectItem>
                   <SelectItem value="admin_review_required">Admin Review Required</SelectItem>
                 </SelectContent>
               </Select>

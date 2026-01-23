@@ -167,9 +167,9 @@ const stageCopy = ({ stageKey, order }) => {
         }
       case "return_picked_up":
         return {
-          subject: `Return Picked Up - ${orderNumber}`,
-          title: "📦 Return Picked Up Successfully",
-          message: `Your return items have been picked up and are on their way back to us.`,
+          subject: `Return packed up - ${orderNumber}`,
+          title: "📦 Return packed up Successfully",
+          message: `Your return items have been packed up and are on their way back to us.`,
           details: `We've received your returned items. Our team will inspect them and process your refund within 5-7 business days. You'll receive a notification once the refund is initiated.`,
           icon: "📦",
           color: "#8B5CF6",
@@ -208,7 +208,7 @@ const stageCopy = ({ stageKey, order }) => {
     switch (dtdc) {
       case "booked":
         message = "Your shipment has been booked with our logistics partner."
-        details = "The shipping label has been created and your package is ready to be picked up by the courier."
+        details = "The shipping label has been created and your package is ready to be packed up by the courier."
         break
       case "in_transit":
         message = "Your package is in transit and on its way to you."

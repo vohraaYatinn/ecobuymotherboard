@@ -198,6 +198,13 @@ export function CheckoutContent() {
     setError("")
 
     try {
+      const normalizedPhone = formData.phone.replace(/\D/g, "")
+      if (normalizedPhone.length !== 10) {
+        setError("Phone number must be 10 digits")
+        setLoading(false)
+        return
+      }
+
       const token = localStorage.getItem("customerToken")
       const response = await fetch(`${API_URL}/api/addresses`, {
         method: "POST",
@@ -570,6 +577,7 @@ export function CheckoutContent() {
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
                       required
+                      minLength={10}
                       className="h-10 sm:h-11 text-sm mt-1.5"
                     />
                   </div>

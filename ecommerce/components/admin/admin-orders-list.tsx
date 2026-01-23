@@ -212,7 +212,7 @@ const getReturnPickupInfo = (order: Order): { label: string; className: string }
 
   if (isReturnPickedUp) {
     return {
-      label: "Picked Up",
+      label: "packed up",
       className: "bg-blue-100 text-blue-800 border-blue-200",
     }
   }
@@ -1483,7 +1483,7 @@ export function AdminOrdersList() {
                     <SelectItem value="return_requested">Return Requested</SelectItem>
                     <SelectItem value="return_accepted">Return Accepted</SelectItem>
                     <SelectItem value="return_rejected">Return Rejected</SelectItem>
-                    <SelectItem value="return_picked_up">Return Picked Up</SelectItem>
+                    <SelectItem value="return_picked_up">Return packed up</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

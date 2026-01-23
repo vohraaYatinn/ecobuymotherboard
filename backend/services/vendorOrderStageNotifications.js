@@ -111,9 +111,9 @@ function buildStageInfo({ stageKey, order }) {
         }
       case "return_picked_up":
         return {
-          subject: `Return Picked Up - ${orderNumber}`,
-          title: "📦 Return Picked Up",
-          message: `The return items for order ${orderNumber} have been picked up.`,
+          subject: `Return packed up - ${orderNumber}`,
+          title: "📦 Return packed up",
+          message: `The return items for order ${orderNumber} have been packed up.`,
           details: `The returned items are on their way back to you. Please inspect them upon receipt. The refund will be processed automatically.`,
           icon: "📦",
           color: "#8B5CF6",

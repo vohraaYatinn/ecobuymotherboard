@@ -143,20 +143,20 @@ export async function updateDtdcStatusForShippedOrders() {
           )
         }
 
-        // Rule 2 (Return): When order is "return_accepted" and DTDC status indicates "picked up",
+        // Rule 2 (Return): When order is "return_accepted" and DTDC status indicates "packed up",
         // update order status to "return_picked_up"
         if (isReturnLeg && order.status === "return_accepted" && newDtdcStatus === "booked") {
           // Check if the status text indicates pickup
           const statusTextLower = (statusText || "").toLowerCase()
           if (
-            statusTextLower.includes("picked up") ||
+            statusTextLower.includes("packed up") ||
             statusTextLower.includes("pickup completed") ||
             statusTextLower.includes("pickup done")
           ) {
             order.status = "return_picked_up"
             orderStatusUpdated = true
             console.log(
-              `🔄 [DtdcStatusCron] Auto-updating order status: "${oldOrderStatus}" → "return_picked_up" (DTDC status: picked up)`
+              `🔄 [DtdcStatusCron] Auto-updating order status: "${oldOrderStatus}" → "return_picked_up" (DTDC status: packed up)`
             )
           }
         }

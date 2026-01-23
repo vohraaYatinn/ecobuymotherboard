@@ -1,12 +1,39 @@
 import express from "express"
 import axios from "axios"
 import jwt from "jsonwebtoken"
+import crypto from "crypto"
 import VendorUser from "../models/VendorUser.js"
 import OtpSession from "../models/OtpSession.js"
 import Vendor from "../models/Vendor.js"
 import { verifyVendorToken } from "../middleware/auth.js"
 
 const router = express.Router()
+
+const removeFcmTokenFromOtherVendors = async ({ token, vendorUserId, vendorId }) => {
+  if (!token) return
+
+  try {
+    const vendorUserFilter = {
+      _id: { $ne: vendorUserId },
+      "pushTokens.token": token,
+    }
+    await VendorUser.updateMany(vendorUserFilter, {
+      $pull: { pushTokens: { token } },
+    })
+
+    const vendorFilter = {
+      "pushTokens.token": token,
+    }
+    if (vendorId) {
+      vendorFilter._id = { $ne: vendorId }
+    }
+    await Vendor.updateMany(vendorFilter, {
+      $pull: { pushTokens: { token } },
+    })
+  } catch (error) {
+    console.error("❌ [VENDOR AUTH] Failed to de-duplicate FCM token:", error)
+  }
+}
 
 // MessageCentral Configuration
 const MESSAGE_CENTRAL_CONFIG = {
@@ -299,9 +326,6 @@ router.post("/verify-otp", async (req, res) => {
       await vendorUser.save()
       console.log("✅ [VENDOR AUTH] New vendor user created:", vendorUser._id)
     } else {
-      // Update last login
-      vendorUser.lastLoginAt = new Date()
-      await vendorUser.save()
       console.log("✅ [VENDOR AUTH] Existing vendor user logged in:", vendorUser._id)
     }
 
@@ -381,6 +405,12 @@ router.post("/verify-otp", async (req, res) => {
           appVersion: appVersion || "0.0.0",
         })
 
+        await removeFcmTokenFromOtherVendors({
+          token: fcmToken,
+          vendorUserId: vendorUser._id,
+          vendorId: linkedVendor?._id || vendorUser.vendorId,
+        })
+
         const tokenData = {
           token: fcmToken,
           platform: platform || "web",
@@ -433,6 +463,12 @@ router.post("/verify-otp", async (req, res) => {
       console.log("⚠️  [VENDOR AUTH] No FCM token provided in request")
     }
 
+    // Rotate session so only the latest device stays logged in
+    const sessionId = crypto.randomUUID()
+    vendorUser.sessionId = sessionId
+    vendorUser.lastLoginAt = new Date()
+    await vendorUser.save()
+
     // Clean up OTP session
     await OtpSession.deleteOne({ _id: session._id })
 
@@ -442,6 +478,7 @@ router.post("/verify-otp", async (req, res) => {
         userId: vendorUser._id.toString(),
         mobile: vendorUser.mobile,
         vendorId: vendorUser.vendorId?.toString(),
+        sessionId,
       },
       process.env.JWT_SECRET || "your-secret-key-change-in-production"
       // No expiresIn - token never expires automatically
@@ -500,6 +537,19 @@ router.post("/update-fcm-token", async (req, res) => {
           message: "Vendor user not found",
         })
       }
+
+      if (!decoded.sessionId || vendorUser.sessionId !== decoded.sessionId) {
+        return res.status(401).json({
+          success: false,
+          message: "Session expired. Please log in again.",
+        })
+      }
+
+      await removeFcmTokenFromOtherVendors({
+        token: fcmToken,
+        vendorUserId: vendorUser._id,
+        vendorId: vendorUser.vendorId,
+      })
 
       // Remove existing token if it exists
       vendorUser.pushTokens = vendorUser.pushTokens.filter((pt) => pt.token !== fcmToken)

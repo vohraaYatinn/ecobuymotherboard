@@ -80,10 +80,17 @@ router.post("/", authenticate, async (req, res) => {
     const { type, firstName, lastName, phone, address1, address2, city, state, postcode, country, isDefault } = req.body
 
     // Validate required fields
-    if (!firstName || !lastName || !phone || !address1 || !city || !state || !postcode) {
+    const normalizedPhone = String(phone || "").replace(/\D/g, "")
+    if (!firstName || !lastName || !normalizedPhone || !address1 || !city || !state || !postcode) {
       return res.status(400).json({
         success: false,
         message: "All required fields must be provided",
+      })
+    }
+    if (normalizedPhone.length !== 10) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number must be 10 digits",
       })
     }
 
@@ -97,7 +104,7 @@ router.post("/", authenticate, async (req, res) => {
       type: type || "home",
       firstName,
       lastName,
-      phone,
+      phone: normalizedPhone,
       address1,
       address2: address2 || "",
       city,
@@ -140,12 +147,27 @@ router.put("/:id", authenticate, async (req, res) => {
     }
 
     const { type, firstName, lastName, phone, address1, address2, city, state, postcode, country, isDefault } = req.body
+    const normalizedPhone = phone !== undefined ? String(phone || "").replace(/\D/g, "") : null
 
     // Update fields
     if (type) address.type = type
     if (firstName) address.firstName = firstName
     if (lastName) address.lastName = lastName
-    if (phone) address.phone = phone
+    if (normalizedPhone !== null) {
+      if (!normalizedPhone) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number is required",
+        })
+      }
+      if (normalizedPhone.length !== 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number must be 10 digits",
+        })
+      }
+      address.phone = normalizedPhone
+    }
     if (address1) address.address1 = address1
     if (address2 !== undefined) address.address2 = address2
     if (city) address.city = city

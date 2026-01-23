@@ -68,6 +68,13 @@ export const verifyVendorToken = async (req, res, next) => {
       })
     }
 
+    if (!decoded.sessionId || vendorUser.sessionId !== decoded.sessionId) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired. Please log in again."
+      })
+    }
+
     // Get vendor details if linked (allow all statuses - pending, approved, etc.)
     let vendor = null
     if (vendorUser.vendorId) {

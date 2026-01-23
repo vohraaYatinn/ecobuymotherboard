@@ -66,6 +66,12 @@ export default function AcceptOrdersPage() {
   const [vendorCommission, setVendorCommission] = useState<number | null>(null)
 
   useEffect(() => {
+    // Clear any pending native navigation flags when page loads
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("nativeNavigationPending")
+      localStorage.removeItem("nativeNavigationPath")
+    }
+    
     fetchUnassignedOrders()
     fetchVendorProfile()
     // Poll for new orders every 10 seconds

@@ -82,7 +82,7 @@ order.status = "return_accepted"
 - ✅ Refund status is set to `pending` (both `returnRequest.refundStatus` and order-level `refundStatus`)
 - ✅ Order status is set to `return_accepted`
 - ✅ Refund will be processed automatically by cron job when order status changes to `return_picked_up`
-- ✅ This ensures refunds are only processed after the return item is actually picked up
+- ✅ This ensures refunds are only processed after the return item is actually packed up
 
 **Issues Identified**:
 1. ✅ **Good**: Refund processing is deferred to cron job, preventing premature refunds
@@ -90,7 +90,7 @@ order.status = "return_accepted"
 
 ---
 
-### 3. **Automatic Refund for Return Picked Up Orders** (Cron Job)
+### 3. **Automatic Refund for Return packed up Orders** (Cron Job)
 **Location**: `backend/services/refundCron.js`
 
 **Trigger**: Cron job runs every 3 hours, processes orders with status `return_picked_up`
@@ -146,7 +146,7 @@ if (order.paymentMethod === "online" && order.paymentStatus === "paid") {
 1. **Order Delivered** → Customer requests return
 2. **Return Requested** (`return_requested`) → Admin reviews
 3. **Return Accepted** (`return_accepted`) → Admin accepts, **refund status set to pending** (no refund yet)
-4. **Return Picked Up** (`return_picked_up`) → DTDC picks up item, **cron processes refund automatically**
+4. **Return packed up** (`return_picked_up`) → DTDC picks up item, **cron processes refund automatically**
 
 ---
 
@@ -252,7 +252,7 @@ if (order.paymentMethod === "online" && order.paymentStatus === "paid") {
 
 1. Test customer cancellation with online payment → verify refund is processed
 2. Test admin return acceptance → verify refund is processed
-3. Test return picked up cron → verify it doesn't double-refund
+3. Test return packed up cron → verify it doesn't double-refund
 4. Test admin delete order → verify refund is processed (after fix)
 5. Test COD orders → verify no actual refund but status is updated
 6. Test refund failure scenarios → verify order status still updates correctly

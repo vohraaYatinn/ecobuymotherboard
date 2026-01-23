@@ -310,7 +310,7 @@ export async function processRefundsForReturnPickedUpOrders() {
 
 /**
  * Cron job to process refunds for return_picked_up orders
- * Runs every 3 hours and processes refunds for orders that have been picked up
+ * Runs every 3 hours and processes refunds for orders that have been packed up
  */
 export function startRefundCron() {
   // Run every 3 hours

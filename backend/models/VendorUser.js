@@ -29,6 +29,11 @@ const vendorUserSchema = new mongoose.Schema(
     lastLoginAt: {
       type: Date,
     },
+    sessionId: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     pushTokens: [
       {
         token: {

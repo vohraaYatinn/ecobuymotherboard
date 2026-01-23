@@ -161,7 +161,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       case "delivered":
         return "bg-green-500"
       case "picked_up":
-      case "picked up":
+      case "packed up":
         return "bg-violet-500"
       case "shipped":
         return "bg-blue-500"
@@ -187,7 +187,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
   /**
    * Infer a more granular forward-shipment stage from DTDC tracking text.
-   * This lets us show Processing -> Picked Up -> Shipped progression even if
+   * This lets us show Processing -> packed up -> Shipped progression even if
    * the backend order.status is only "shipped".
    */
   const inferForwardStageFromDtdc = (order: Order): "picked_up" | "shipped" | "delivered" | null => {
@@ -206,7 +206,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       return "shipped"
     }
     if (
-      statusText.includes("picked up") ||
+      statusText.includes("packed up") ||
       statusText.includes("pickup completed") ||
       statusText.includes("pickup done")
     ) {
@@ -348,7 +348,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
           completed: true,
         })
 
-        // Return Pickup Pending (only if not picked up yet)
+        // Return Pickup Pending (only if not packed up yet)
         if (!isReturnPickedUp) {
           steps.push({
             status: "Return Pickup Pending",
@@ -356,9 +356,9 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
             completed: false,
           })
         } else {
-          // Picked Up
+          // packed up
           steps.push({
-            status: "Picked Up",
+            status: "packed up",
             date: new Date(order.updatedAt).toLocaleString("en-IN", {
               month: "short",
               day: "numeric",
@@ -446,7 +446,7 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
         status: status === "pending" ? (isPaymentPending ? "Awaiting Payment" : "Order Placed") :
                 status === "confirmed" ? "Order Confirmed" :
                 status === "processing" ? "Processing" :
-                status === "picked_up" ? "Picked Up" :
+                status === "picked_up" ? "packed up" :
                 status === "shipped" ? "Shipped" : "Delivered",
         date,
         completed: isCompleted,

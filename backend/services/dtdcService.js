@@ -559,11 +559,11 @@ export function mapDtdcStatusToEnum(statusText) {
 
   // Pickup related
   if (
-    normalized.includes("picked up") ||
+    normalized.includes("packed up") ||
     normalized.includes("pickup completed") ||
     normalized.includes("pickup done")
   ) {
-    return "booked" // For returns, "picked up" means the return shipment has been collected
+    return "booked" // For returns, "packed up" means the return shipment has been collected
   }
 
   if (

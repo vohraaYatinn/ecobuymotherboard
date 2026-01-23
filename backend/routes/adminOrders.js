@@ -1110,7 +1110,7 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
         userType: "customer",
         type: "return_accepted",
         title: "Return Request Accepted",
-        message: `Your return request for order ${order.orderNumber} has been accepted. Refund will be processed automatically once the return is picked up.`,
+        message: `Your return request for order ${order.orderNumber} has been accepted. Refund will be processed automatically once the return is packed up.`,
         orderId: order._id,
         orderNumber: order.orderNumber,
         customerId: customerId,
@@ -1131,7 +1131,7 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
       success: true,
       message: shipmentError
         ? "Return accepted. Pickup creation failed - please schedule manually."
-        : "Return request accepted successfully. Refund will be processed automatically once the return is picked up.",
+        : "Return request accepted successfully. Refund will be processed automatically once the return is packed up.",
       data: {
         orderId: order._id,
         orderNumber: order.orderNumber,

@@ -7,6 +7,32 @@ import { messaging, reinitializeFirebase } from "../config/firebase-admin.js";
 
 const router = express.Router();
 
+const removeFcmTokenFromOtherVendors = async ({ token, vendorUserId, vendorId }) => {
+  if (!token) return
+
+  try {
+    const vendorUserFilter = {
+      _id: { $ne: vendorUserId },
+      "pushTokens.token": token,
+    }
+    await VendorUser.updateMany(vendorUserFilter, {
+      $pull: { pushTokens: { token } },
+    })
+
+    const vendorFilter = {
+      "pushTokens.token": token,
+    }
+    if (vendorId) {
+      vendorFilter._id = { $ne: vendorId }
+    }
+    await Vendor.updateMany(vendorFilter, {
+      $pull: { pushTokens: { token } },
+    })
+  } catch (error) {
+    console.error("❌ [PushNotification] Failed to de-duplicate FCM token:", error)
+  }
+}
+
 // Register/Update FCM token for vendor user
 router.post("/vendor/register-token", verifyVendorToken, async (req, res) => {
   try {
@@ -37,6 +63,12 @@ router.post("/vendor/register-token", verifyVendorToken, async (req, res) => {
       lastSeenAt: new Date(),
       createdAt: new Date(),
     };
+
+    await removeFcmTokenFromOtherVendors({
+      token: fcmToken.trim(),
+      vendorUserId: vendorUserId,
+      vendorId: vendorUser.vendorId,
+    })
 
     // Remove existing token if it exists
     vendorUser.pushTokens = vendorUser.pushTokens.filter(

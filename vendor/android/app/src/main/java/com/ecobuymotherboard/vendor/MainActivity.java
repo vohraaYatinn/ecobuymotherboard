@@ -73,13 +73,20 @@ public class MainActivity extends BridgeActivity {
         }
 
         final String jsPath = path.replace("'", "\\'");
-        final String js = "window.location.href='" + jsPath + "'";
+        // Set a flag in localStorage to indicate native navigation is happening
+        // This helps the splash screen know not to redirect
+        final String setFlagJs = "localStorage.setItem('nativeNavigationPending', 'true'); localStorage.setItem('nativeNavigationPath', '" + jsPath.replace("'", "\\'") + "');";
+        final String navigateJs = "window.location.href='" + jsPath + "'";
 
         mainHandler.post(() -> {
             try {
                 Log.d(TAG, "navigateWebViewWhenReady attempt " + attempt + " -> " + path);
+                // First set the flag, then navigate
                 // Use evaluateJavascript when available; it's more reliable than loadUrl("javascript:...") on some devices
-                getBridge().getWebView().evaluateJavascript(js, null);
+                getBridge().getWebView().evaluateJavascript(setFlagJs, (result) -> {
+                    // After setting flag, navigate
+                    getBridge().getWebView().evaluateJavascript(navigateJs, null);
+                });
             } catch (Exception e) {
                 Log.w(TAG, "navigateWebViewWhenReady evaluateJavascript failed (attempt " + attempt + "): " + e.getMessage());
                 // Retry on failure
