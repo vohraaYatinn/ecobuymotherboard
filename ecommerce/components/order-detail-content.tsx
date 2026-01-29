@@ -568,7 +568,11 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
       const formData = new FormData()
       formData.append("reason", returnReason.trim())
-      returnAttachments.forEach((file) => formData.append("attachments", file))
+      returnAttachments.forEach((file) => formData.append("attachments", file, file.name))
+
+      // Avoid infinite spinner on slow/blocked uploads
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), 120_000) // 2 minutes
 
       const response = await fetch(`${API_URL}/api/orders/${orderId}/return`, {
         method: "POST",
@@ -576,22 +580,30 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
           Authorization: `Bearer ${token}`,
         },
         body: formData,
-      })
+        signal: controller.signal,
+      }).finally(() => window.clearTimeout(timeoutId))
 
-      let data
+      // Read response body ONCE (can be JSON or HTML/text)
+      const responseText = await response.text().catch(() => "")
+      let data: any = null
       try {
-        data = await response.json()
-      } catch (parseError) {
-        // If response is not JSON, handle as text error
-        const textError = await response.text()
-        throw new Error(textError || "Failed to submit return request. Server error.")
+        data = responseText ? JSON.parse(responseText) : null
+      } catch {
+        data = null
       }
 
       if (!response.ok) {
-        throw new Error(data.message || data.error || "Failed to submit return request")
+        const messageFromJson = data?.message || data?.error
+        const message =
+          messageFromJson ||
+          (response.status === 413
+            ? "Upload too large. Please try smaller files (or fewer files) and try again."
+            : responseText) ||
+          `Failed to submit return request (HTTP ${response.status}).`
+        throw new Error(message)
       }
 
-      if (data.success) {
+      if (data?.success) {
         // Refresh order data
         const orderResponse = await fetch(`${API_URL}/api/orders/${orderId}`, {
           headers: {
@@ -610,10 +622,16 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
         setReturnReason("")
         setReturnAttachments([])
         alert("Return request submitted successfully. Our team will review it shortly.")
+      } else {
+        // In case backend responds 200 but not JSON / not in expected shape
+        throw new Error(data?.message || "Unexpected server response. Please try again.")
       }
     } catch (err: any) {
       console.error("Error submitting return request:", err)
-      const errorMessage = err.message || "Failed to submit return request. Please try again."
+      const errorMessage =
+        err?.name === "AbortError"
+          ? "Upload timed out. Please check your internet connection and try again."
+          : err.message || "Failed to submit return request. Please try again."
       alert(errorMessage)
     } finally {
       setSubmittingReturn(false)
