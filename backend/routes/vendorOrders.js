@@ -1,4 +1,5 @@
 import express from "express"
+import multer from "multer"
 import Order from "../models/Order.js"
 import Customer from "../models/Customer.js"
 import Notification from "../models/Notification.js"
@@ -821,7 +822,44 @@ router.get("/analytics", verifyVendorToken, async (req, res) => {
 })
 
 // Update order status (vendor can only update to shipped or delivered)
-router.put("/:id/status", verifyVendorToken, packingVideoUpload.single("packingVideo"), async (req, res) => {
+router.put("/:id/status", verifyVendorToken, (req, res, next) => {
+  packingVideoUpload.single("packingVideo")(req, res, (err) => {
+    if (err) {
+      console.error("❌ [VENDOR ORDERS] Multer error:", err)
+      console.error("❌ [VENDOR ORDERS] Error details:", {
+        code: err.code,
+        message: err.message,
+        field: err.field,
+        name: err.name,
+      })
+      // Handle multer errors
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(413).json({
+            success: false,
+            message: "Video file size exceeds the 100MB limit. Please upload a smaller video.",
+          })
+        }
+        if (err.code === "LIMIT_UNEXPECTED_FILE") {
+          return res.status(400).json({
+            success: false,
+            message: "Unexpected file field. Please use 'packingVideo' as the field name.",
+          })
+        }
+        return res.status(400).json({
+          success: false,
+          message: err.message || "File upload error",
+        })
+      }
+      // Handle file filter errors and other upload errors
+      return res.status(400).json({
+        success: false,
+        message: err.message || "Error uploading video. Please ensure it's a valid video file and try again.",
+      })
+    }
+    next()
+  })
+}, async (req, res) => {
   try {
     const { id } = req.params
     const { status } = req.body
@@ -994,8 +1032,8 @@ router.put("/:id/status", verifyVendorToken, packingVideoUpload.single("packingV
             userId: admin._id,
             userType: "admin",
             type: "order_shipped",
-            title: "Order Shipped",
-            message: `Order ${order.orderNumber} has been shipped by ${vendor?.name || "vendor"} to the customer`,
+            title: "Order Packed",
+            message: `Order ${order.orderNumber} has been packed by ${vendor?.name || "vendor"} and is ready for shipment`,
             orderId: order._id,
             orderNumber: order.orderNumber,
             vendorId: vendorId,
@@ -1003,20 +1041,8 @@ router.put("/:id/status", verifyVendorToken, packingVideoUpload.single("packingV
           })
         }
 
-        // Notification for customer
-        if (order.customerId) {
-          await Notification.create({
-            userId: order.customerId,
-            userType: "customer",
-            type: "order_shipped",
-            title: "Order Shipped",
-            message: `Your order ${order.orderNumber} has been shipped and is on its way to you`,
-            orderId: order._id,
-            orderNumber: order.orderNumber,
-            vendorId: vendorId,
-            customerId: order.customerId,
-          })
-        }
+        // Customer will be notified via DTDC tracking updates when order is actually in transit
+        // No notification at packing stage
       } else if (status === "delivered") {
         // Notification for admin
         const admin = await Admin.findOne({ isActive: true })
@@ -1057,12 +1083,13 @@ router.put("/:id/status", verifyVendorToken, packingVideoUpload.single("packingV
     }
 
     // Email buyer (deduped)
+    // Note: Customer should NOT be notified when vendor packs the order (status:shipped)
+    // Customer will be notified via DTDC tracking updates when the order is actually in transit
     try {
-      if (status === "shipped") {
-        await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:shipped" })
-      } else if (status === "delivered") {
+      if (status === "delivered") {
         await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:delivered" })
       }
+      // Removed customer email for "shipped" status - customer will be notified via DTDC status updates
     } catch (emailErr) {
       console.error("Error sending buyer status email:", emailErr)
     }

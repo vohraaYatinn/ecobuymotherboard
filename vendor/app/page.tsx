@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { getVendorToken } from "@/lib/vendor-auth-storage"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export default function SplashScreen() {
   const router = useRouter()
@@ -12,9 +12,22 @@ export default function SplashScreen() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const hasNavigatedRef = useRef(false)
 
+  // Early return if we're not on root path - don't render splash screen
+  // This prevents the splash screen from showing when navigating to other pages
+  if (pathname && pathname !== "/" && pathname !== "/index.html") {
+    console.log("🚀 [SPLASH] Early return - not on root path:", pathname)
+    return null
+  }
+
   useEffect(() => {
     const checkAuthAndRedirect = async () => {
+      console.log("🚀 [SPLASH] Starting splash screen navigation check")
+      console.log("🚀 [SPLASH] Current pathname:", pathname)
+      console.log("🚀 [SPLASH] Window location:", typeof window !== "undefined" ? window.location?.pathname : "N/A")
+      console.log("🚀 [SPLASH] Has navigated ref:", hasNavigatedRef.current)
+      
       const token = await getVendorToken()
+      console.log("🚀 [SPLASH] Token check:", token ? "Found" : "Not found")
 
       // If the app was opened via an in-app deep link (e.g., from a native notification),
       // don't override it by forcing a redirect to /dashboard.
@@ -26,103 +39,140 @@ export default function SplashScreen() {
         const nativeNavPending = localStorage.getItem("nativeNavigationPending")
         const nativeNavPath = localStorage.getItem("nativeNavigationPath")
         
+        console.log("🚀 [SPLASH] Checking localStorage flags:")
+        console.log("🚀 [SPLASH]   - nativeNavigationPending:", nativeNavPending)
+        console.log("🚀 [SPLASH]   - nativeNavigationPath:", nativeNavPath)
+        
         if (nativeNavPending === "true" && nativeNavPath) {
-          console.log("📍 Native navigation pending to:", nativeNavPath, "- waiting for navigation")
-          // Clear the flag
-          localStorage.removeItem("nativeNavigationPending")
-          // Wait for navigation to complete
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          console.log("🚀 [SPLASH] ✅ Native navigation flag detected!")
+          console.log("🚀 [SPLASH]   - Target path:", nativeNavPath)
+          console.log("🚀 [SPLASH]   - Navigating immediately via router.push()")
           
-          // Check if navigation happened
-          const currentPath = window.location?.pathname || "/"
-          if (currentPath !== "/" && currentPath !== "/index.html") {
-            console.log("📍 Navigation completed to:", currentPath, "- skipping redirect")
-            localStorage.removeItem("nativeNavigationPath")
+          // Clear the flags immediately
+          localStorage.removeItem("nativeNavigationPending")
+          localStorage.removeItem("nativeNavigationPath")
+          console.log("🚀 [SPLASH]   - Flags cleared from localStorage")
+          
+          // Navigate immediately using Next.js router
+          // This ensures proper navigation even if window.location.href didn't work
+          try {
+            router.push(nativeNavPath)
+            console.log("🚀 [SPLASH]   - router.push() called successfully")
             setIsCheckingAuth(false)
             hasNavigatedRef.current = true
+            console.log("🚀 [SPLASH]   - Navigation state updated, returning early")
             return
+          } catch (error) {
+            console.error("🚀 [SPLASH] ❌ Error during router.push():", error)
           }
+        } else {
+          console.log("🚀 [SPLASH]   - No native navigation flags found")
+        }
+      }
+      
+      // Check initial pathname (use Next.js pathname if available, fallback to window.location)
+      const initialPath = pathname || (typeof window !== "undefined" ? window.location?.pathname : "/") || "/"
+      console.log("🚀 [SPLASH] Initial path check:", initialPath)
+      
+      if (initialPath !== "/" && initialPath !== "/index.html") {
+        console.log("🚀 [SPLASH] ✅ Already on non-root path:", initialPath, "- skipping redirect")
+        setIsCheckingAuth(false)
+        hasNavigatedRef.current = true
+        return
+      }
+      
+      // Wait a short time for any pending native navigation to set flags
+      console.log("🚀 [SPLASH] Waiting 500ms for pending native navigation...")
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      // Check again for native navigation flag (in case it was set after initial check)
+      if (typeof window !== "undefined") {
+        const nativeNavPending = localStorage.getItem("nativeNavigationPending")
+        const nativeNavPath = localStorage.getItem("nativeNavigationPath")
+        
+        console.log("🚀 [SPLASH] Re-checking localStorage flags after delay:")
+        console.log("🚀 [SPLASH]   - nativeNavigationPending:", nativeNavPending)
+        console.log("🚀 [SPLASH]   - nativeNavigationPath:", nativeNavPath)
+        
+        if (nativeNavPending === "true" && nativeNavPath) {
+          console.log("🚀 [SPLASH] ✅ Native navigation detected after delay!")
+          console.log("🚀 [SPLASH]   - Target path:", nativeNavPath)
+          console.log("🚀 [SPLASH]   - Navigating via router.push()")
           
-          // If navigation didn't happen, try to navigate manually
-          console.log("📍 Native navigation didn't complete, navigating manually to:", nativeNavPath)
-          router.push(nativeNavPath)
+          localStorage.removeItem("nativeNavigationPending")
           localStorage.removeItem("nativeNavigationPath")
-          setIsCheckingAuth(false)
-          hasNavigatedRef.current = true
-          return
+          console.log("🚀 [SPLASH]   - Flags cleared")
+          
+          try {
+            router.push(nativeNavPath)
+            console.log("🚀 [SPLASH]   - router.push() called successfully")
+            setIsCheckingAuth(false)
+            hasNavigatedRef.current = true
+            console.log("🚀 [SPLASH]   - Navigation state updated, returning early")
+            return
+          } catch (error) {
+            console.error("🚀 [SPLASH] ❌ Error during router.push():", error)
+          }
         }
       }
       
-      // Check initial pathname
-      if (typeof window !== "undefined") {
-        const path = window.location?.pathname || "/"
-        if (path !== "/" && path !== "/index.html") {
-          console.log("📍 Already on path:", path, "- skipping redirect")
-          setIsCheckingAuth(false)
-          hasNavigatedRef.current = true
-          return
-        }
-      }
+      // Check if pathname changed (native navigation might have occurred)
+      const currentPath = pathname || (typeof window !== "undefined" ? window.location?.pathname : "/") || "/"
+      console.log("🚀 [SPLASH] Current path after delay:", currentPath)
       
-      // Wait for splash screen animation and give native navigation time to complete
-      // Native navigation from MainActivity can take 2-5 seconds on cold starts
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      // Check again if navigation happened (native navigation might have occurred)
-      if (typeof window !== "undefined") {
-        const currentPath = window.location?.pathname || "/"
-        if (currentPath !== "/" && currentPath !== "/index.html") {
-          console.log("📍 Navigation detected to:", currentPath, "- skipping redirect")
-          setIsCheckingAuth(false)
-          hasNavigatedRef.current = true
-          return
-        }
-      }
-      
-      // Wait a bit more for native navigation (total ~3 seconds)
-      await new Promise(resolve => setTimeout(resolve, 1500))
-      
-      // Final check - if we're still on "/", then proceed with default redirect
-      if (typeof window !== "undefined") {
-        const finalPath = window.location?.pathname || "/"
-        if (finalPath !== "/" && finalPath !== "/index.html") {
-          console.log("📍 Navigation detected to:", finalPath, "- skipping redirect")
-          setIsCheckingAuth(false)
-          hasNavigatedRef.current = true
-          return
-        }
+      if (currentPath !== "/" && currentPath !== "/index.html") {
+        console.log("🚀 [SPLASH] ✅ Navigation detected to:", currentPath, "- skipping redirect")
+        setIsCheckingAuth(false)
+        hasNavigatedRef.current = true
+        return
       }
       
       // Only redirect if we're still on the root path and haven't navigated
+      console.log("🚀 [SPLASH] Still on root path, checking if should redirect...")
+      console.log("🚀 [SPLASH]   - hasNavigatedRef:", hasNavigatedRef.current)
+      
       if (!hasNavigatedRef.current) {
         if (token) {
           // Token exists - go directly to dashboard
           // Token validation will happen on actual API calls (which handle 401 correctly)
           // This ensures user stays logged in even if server is temporarily unavailable
-          console.log("✅ Token found, redirecting to dashboard")
+          console.log("🚀 [SPLASH] ✅ Token found, redirecting to dashboard")
           router.push("/dashboard")
         } else {
           // No token, go to login
-          console.log("ℹ️ No token found, redirecting to login")
+          console.log("🚀 [SPLASH] ℹ️ No token found, redirecting to login")
           router.push("/login")
         }
+      } else {
+        console.log("🚀 [SPLASH] ⚠️ Already navigated, skipping default redirect")
       }
       
       setIsCheckingAuth(false)
+      console.log("🚀 [SPLASH] Navigation check completed")
     }
 
     checkAuthAndRedirect()
-  }, [router])
+  }, [router, pathname])
 
   // Listen for pathname changes (Next.js router)
   useEffect(() => {
+    console.log("🚀 [SPLASH] Pathname changed:", pathname)
     if (pathname && pathname !== "/" && pathname !== "/index.html") {
-      console.log("📍 Pathname changed to:", pathname, "- stopping redirect")
+      console.log("🚀 [SPLASH] ✅ Pathname changed to non-root:", pathname, "- stopping redirect")
       hasNavigatedRef.current = true
       setIsCheckingAuth(false)
+    } else {
+      console.log("🚀 [SPLASH] Pathname is still root:", pathname)
     }
   }, [pathname])
 
+  // Don't render if we've already navigated
+  if (hasNavigatedRef.current && !isCheckingAuth) {
+    console.log("🚀 [SPLASH] Not rendering splash - already navigated")
+    return null
+  }
+
+  console.log("🚀 [SPLASH] Rendering splash screen UI (pathname:", pathname, ")")
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-primary/5 via-background to-primary/10 px-4" style={{ paddingTop: `env(safe-area-inset-top, 0px)`, paddingBottom: `env(safe-area-inset-bottom, 0px)` }}>
       <div className="flex flex-col items-center gap-6 animate-fade-in">

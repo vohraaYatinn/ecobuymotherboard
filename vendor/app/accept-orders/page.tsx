@@ -53,7 +53,60 @@ interface Order {
   paymentStatus?: string
 }
 
+// Product image component with error handling
+function ProductImage({ item, getImageUrl }: { item: OrderItem; getImageUrl: (item: OrderItem) => string | null }) {
+  const [imageError, setImageError] = useState(false)
+  const [imageLoading, setImageLoading] = useState(true)
+  const imageUrl = getImageUrl(item)
+
+  if (!imageUrl || imageError) {
+    return (
+      <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
+        <svg
+          className="h-6 w-6 text-muted-foreground"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+          />
+        </svg>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative h-12 w-12 flex-shrink-0">
+      {imageLoading && (
+        <div className="absolute inset-0 h-12 w-12 rounded-md bg-muted flex items-center justify-center">
+          <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+        </div>
+      )}
+      <img
+        src={imageUrl}
+        alt={item.name}
+        className={`h-12 w-12 rounded-md object-cover bg-muted ${imageLoading ? "opacity-0" : "opacity-100"} transition-opacity`}
+        onLoad={() => {
+          setImageLoading(false)
+        }}
+        onError={(e) => {
+          console.error("[ACCEPT-ORDERS] Image failed to load:", imageUrl, e)
+          setImageError(true)
+          setImageLoading(false)
+        }}
+      />
+    </div>
+  )
+}
+
 export default function AcceptOrdersPage() {
+  console.log("🎯 [ACCEPT-ORDERS] Component rendering/mounting")
+  console.log("🎯 [ACCEPT-ORDERS] Current URL:", typeof window !== "undefined" ? window.location.href : "N/A")
+  
   const router = useRouter()
   const { startSound, stopSound, stopAllSounds, isPlaying } = useNotificationSoundContext()
   const [orders, setOrders] = useState<Order[]>([])
@@ -64,18 +117,35 @@ export default function AcceptOrdersPage() {
   const [previousOrderIds, setPreviousOrderIds] = useState<Set<string>>(new Set())
   const [soundPlaying, setSoundPlaying] = useState(false)
   const [vendorCommission, setVendorCommission] = useState<number | null>(null)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
 
   useEffect(() => {
+    logDebug("Page mounted/updated")
+    logDebug("Current pathname:", typeof window !== "undefined" ? window.location?.pathname : "N/A")
+    
     // Clear any pending native navigation flags when page loads
     if (typeof window !== "undefined") {
+      const hadPendingNav = localStorage.getItem("nativeNavigationPending")
+      const hadNavPath = localStorage.getItem("nativeNavigationPath")
+      
+      if (hadPendingNav || hadNavPath) {
+        logDebug("Clearing native navigation flags:")
+        logDebug("  - nativeNavigationPending:", hadPendingNav)
+        logDebug("  - nativeNavigationPath:", hadNavPath)
+      }
+      
       localStorage.removeItem("nativeNavigationPending")
       localStorage.removeItem("nativeNavigationPath")
+      logDebug("✅ Native navigation flags cleared")
     }
     
+    logDebug("Starting initial data fetch...")
     fetchUnassignedOrders()
     fetchVendorProfile()
+    
     // Poll for new orders every 10 seconds
     const interval = setInterval(() => {
+      logDebug("Polling for new orders...")
       fetchUnassignedOrders()
     }, 10000)
     
@@ -86,6 +156,7 @@ export default function AcceptOrdersPage() {
     }, 500)
     
     return () => {
+      logDebug("Page unmounting, clearing intervals")
       clearInterval(interval)
       clearInterval(soundCheckInterval)
     }
@@ -145,6 +216,29 @@ export default function AcceptOrdersPage() {
       // Stop sound for removed orders
       for (const orderId of removedOrderIds) {
         await stopSound(orderId)
+      }
+      
+      // Check for NEW orders that weren't in the previous list
+      // Only trigger sounds after initial load to avoid playing sounds for all existing orders
+      if (!isInitialLoad) {
+        const newOrderIds = Array.from(currentOrderIds).filter(id => !previousOrderIds.has(id))
+        
+        // Start sound for new orders
+        for (const orderId of newOrderIds) {
+          const order = newOrders.find((o: Order) => o._id === orderId)
+          if (order) {
+            logDebug("New order detected, triggering sound", { orderId, orderNumber: order.orderNumber })
+            await startSound(
+              orderId,
+              "New Order Available",
+              `New order ${order.orderNumber} is available to accept. Total: ₹${order.total.toLocaleString("en-IN")}`
+            )
+          }
+        }
+      } else {
+        // Mark initial load as complete after first successful fetch
+        setIsInitialLoad(false)
+        logDebug("Initial load complete, future new orders will trigger sounds")
       }
       
       setPreviousOrderIds(currentOrderIds)
@@ -354,9 +448,31 @@ export default function AcceptOrdersPage() {
       imagePath = item.productId.images[0] || null
     }
 
-    if (!imagePath) return null
-    if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) return imagePath
-    if (imagePath.startsWith("/")) return `${API_URL}${imagePath}`
+    if (!imagePath) {
+      return null
+    }
+
+    // If already a full URL, return as is
+    if (imagePath.startsWith("http://") || imagePath.startsWith("https://")) {
+      return imagePath
+    }
+
+    // If starts with /uploads/, prepend API_URL
+    if (imagePath.startsWith("/uploads/")) {
+      return `${API_URL}${imagePath}`
+    }
+
+    // If starts with /, prepend API_URL
+    if (imagePath.startsWith("/")) {
+      return `${API_URL}${imagePath}`
+    }
+
+    // If starts with uploads/ (without leading /), prepend API_URL with /
+    if (imagePath.startsWith("uploads/")) {
+      return `${API_URL}/${imagePath}`
+    }
+
+    // Otherwise, assume it's a filename and prepend /uploads/
     return `${API_URL}/uploads/${imagePath}`
   }
 
@@ -554,40 +670,7 @@ export default function AcceptOrdersPage() {
                             key={idx}
                             className="flex items-center gap-3 p-2 rounded-md bg-background/50 border border-border/30"
                           >
-                            {(() => {
-                              const imageUrl = getItemImageUrl(item)
-                              return (
-                                <div className="relative h-12 w-12 flex-shrink-0">
-                                  {imageUrl ? (
-                                    <img
-                                      src={imageUrl}
-                                      alt={item.name}
-                                      className="h-12 w-12 rounded-md object-cover bg-muted"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = "none"
-                                        const placeholder = e.currentTarget.nextElementSibling as HTMLElement
-                                        if (placeholder) placeholder.style.display = "flex"
-                                      }}
-                                    />
-                                  ) : null}
-                                  <div className={`h-12 w-12 rounded-md bg-muted flex items-center justify-center absolute inset-0 ${imageUrl ? "hidden" : "flex"}`}>
-                                    <svg
-                                      className="h-6 w-6 text-muted-foreground"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
-                                      />
-                                    </svg>
-                                  </div>
-                                </div>
-                              )
-                            })()}
+                            <ProductImage item={item} getImageUrl={getItemImageUrl} />
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-medium text-foreground truncate">{item.name}</p>
                               <p className="text-[11px] text-muted-foreground mt-0.5">Qty: {item.quantity}</p>

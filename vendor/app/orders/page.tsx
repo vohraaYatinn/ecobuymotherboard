@@ -204,32 +204,69 @@ export default function OrdersPage() {
         return
       }
 
+      // Validate video file size before upload (100MB limit)
+      if (packingVideoFile instanceof File) {
+        const maxSize = 100 * 1024 * 1024 // 100MB
+        if (packingVideoFile.size > maxSize) {
+          alert(`Video file is too large. Maximum size is 100MB. Your file is ${(packingVideoFile.size / (1024 * 1024)).toFixed(2)}MB.`)
+          setUpdatingStatus(null)
+          return
+        }
+        
+        // Validate file type
+        if (!packingVideoFile.type.startsWith("video/")) {
+          alert("Please select a valid video file.")
+          setUpdatingStatus(null)
+          return
+        }
+      }
+
       const url = `${API_URL}/api/vendor/orders/${orderId}/status`
       const isPackingWithVideo = newStatus === "shipped" && packingVideoFile instanceof File
 
-      const response = await fetch(url, isPackingWithVideo
-        ? {
-            method: "PUT",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: (() => {
-              const form = new FormData()
-              form.append("status", newStatus)
-              form.append("packingVideo", packingVideoFile)
-              return form
-            })(),
-          }
-        : {
-            method: "PUT",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ status: newStatus }),
-          })
+      let response: Response
+      let data: any
 
-      const data = await response.json()
+      try {
+        response = await fetch(url, isPackingWithVideo
+          ? {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                // Don't set Content-Type header - browser will set it with boundary for FormData
+              },
+              body: (() => {
+                const form = new FormData()
+                form.append("status", newStatus)
+                form.append("packingVideo", packingVideoFile)
+                return form
+              })(),
+            }
+          : {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ status: newStatus }),
+            })
+
+        // Try to parse JSON response
+        try {
+          data = await response.json()
+        } catch (parseError) {
+          // If response is not JSON, get text instead
+          const text = await response.text()
+          throw new Error(`Server error: ${response.status} ${response.statusText}. ${text}`)
+        }
+      } catch (fetchError: any) {
+        // Handle network errors or fetch failures
+        console.error("Fetch error:", fetchError)
+        if (fetchError.message) {
+          throw new Error(fetchError.message)
+        }
+        throw new Error("Network error. Please check your internet connection and try again.")
+      }
 
       if (!response.ok || !data.success) {
         if (response.status === 401) {
@@ -238,7 +275,19 @@ export default function OrdersPage() {
           router.push("/login")
           return
         }
-        alert(data.message || "Failed to update status")
+        
+        // Handle specific error cases
+        let errorMessage = data.message || "Failed to update status"
+        
+        if (response.status === 413) {
+          errorMessage = "Video file is too large. Maximum size is 100MB."
+        } else if (response.status === 400 && data.message) {
+          errorMessage = data.message
+        } else if (response.status >= 500) {
+          errorMessage = "Server error. Please try again later."
+        }
+        
+        alert(errorMessage)
         return
       }
 
@@ -252,9 +301,15 @@ export default function OrdersPage() {
       )
       // Clear selected packing video file (if any)
       setPackingVideoFiles((prev) => ({ ...prev, [orderId]: null }))
-    } catch (err) {
+      
+      // Show success message
+      if (isPackingWithVideo) {
+        alert("Order status updated successfully! Video uploaded.")
+      }
+    } catch (err: any) {
       console.error("Error updating status:", err)
-      alert("Network error. Please try again.")
+      const errorMessage = err?.message || "Network error. Please try again."
+      alert(errorMessage)
     } finally {
       setUpdatingStatus(null)
     }

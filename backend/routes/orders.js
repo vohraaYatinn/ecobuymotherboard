@@ -1,5 +1,6 @@
 import express from "express"
 import mongoose from "mongoose"
+import multer from "multer"
 import Order from "../models/Order.js"
 import Cart from "../models/Cart.js"
 import Product from "../models/Product.js"
@@ -999,7 +1000,43 @@ router.post("/:id/cancel", authenticate, async (req, res) => {
 })
 
 // Request return for delivered order
-router.post("/:id/return", authenticate, returnUpload.array("attachments", 5), async (req, res) => {
+router.post("/:id/return", authenticate, (req, res, next) => {
+  returnUpload.array("attachments", 5)(req, res, (err) => {
+    if (err) {
+      // Handle multer errors
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            success: false,
+            message: "File size exceeds the 25MB limit. Please upload smaller files.",
+          })
+        }
+        if (err.code === "LIMIT_FILE_COUNT") {
+          return res.status(400).json({
+            success: false,
+            message: "Too many files. You can upload up to 5 files.",
+          })
+        }
+        if (err.code === "LIMIT_UNEXPECTED_FILE") {
+          return res.status(400).json({
+            success: false,
+            message: "Unexpected file field. Please use 'attachments' as the field name.",
+          })
+        }
+        return res.status(400).json({
+          success: false,
+          message: err.message || "File upload error",
+        })
+      }
+      // Handle file filter errors and other upload errors
+      return res.status(400).json({
+        success: false,
+        message: err.message || "Error uploading files. Please check file types and sizes.",
+      })
+    }
+    next()
+  })
+}, async (req, res) => {
   try {
     // Validate ObjectId format
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {

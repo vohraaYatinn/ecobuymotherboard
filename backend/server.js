@@ -50,11 +50,11 @@ const PORT = process.env.PORT || 5000
 connectDB()
 
 // Middleware - CORS configuration
-const BACKEND_URL = process.env.BACKEND_URL || "http://192.168.1.35:5000"
+const BACKEND_URL = process.env.BACKEND_URL || "https://api.elecobuy.com"
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
-  "http://192.168.1.35:5000",
+  "https://api.elecobuy.com",
   "https://elecobuy.com",
   "https://www.elecobuy.com",
   "http://192.168.1.34:3000",
@@ -88,8 +88,22 @@ if (process.env.NODE_ENV !== "production") {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "x-session-id", "Accept"],
-    exposedHeaders: ["Content-Type", "Authorization"]
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "x-session-id",
+      "Accept",
+      "Content-Length",
+      "Origin",
+      "X-Requested-With"
+    ],
+    exposedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Content-Length"
+    ],
+    maxAge: 86400 // 24 hours for preflight cache
   }))
 } else {
   // Production: only allow specific origins
@@ -128,8 +142,17 @@ if (process.env.NODE_ENV !== "production") {
       "Authorization",
       "X-Requested-With",
       "x-session-id",
-      "Accept"
-    ]
+      "Accept",
+      "Content-Length",
+      "Origin",
+      "X-Requested-With"
+    ],
+    exposedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "Content-Length"
+    ],
+    maxAge: 86400 // 24 hours for preflight cache
   }))
 }
 // Configure body parsers with increased limits for file uploads

@@ -102,7 +102,7 @@ server {
 
 Test with a large file:
 ```bash
-curl -X POST http://192.168.1.35:5000/api/learning-resources/upload \
+curl -X POST https://api.elecobuy.com/api/learning-resources/upload \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -F "file=@large-file.pdf" \
   -F "title=Test" \

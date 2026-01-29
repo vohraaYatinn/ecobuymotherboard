@@ -14,7 +14,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Check, Upload, X } from "lucide-react"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com").trim()
+
+// Debug: Log API URL (remove in production if needed)
+if (typeof window !== "undefined") {
+  console.log("Enquiry Modal API URL:", API_URL)
+}
 
 interface EnquiryModalProps {
   open: boolean
@@ -84,21 +89,57 @@ export function EnquiryModal({ open, onOpenChange, productSearched }: EnquiryMod
         submitFormData.append("image", formData.image)
       }
 
-      const response = await fetch(`${API_URL}/api/enquiries/submit`, {
+      const apiEndpoint = `${API_URL}/api/enquiries/submit`
+      console.log("Submitting enquiry to:", apiEndpoint)
+
+      const response = await fetch(apiEndpoint, {
         method: "POST",
         body: submitFormData,
       })
 
+      // Read response once - can't read it multiple times
+      let responseText: string
+      try {
+        responseText = await response.text()
+      } catch (readError) {
+        console.error("Error reading response:", readError)
+        setError("Failed to read server response. Please try again.")
+        return
+      }
+
+      // Check if response is ok
+      if (!response.ok) {
+        let errorMessage = `Server error: ${response.status} ${response.statusText}`
+        try {
+          if (responseText) {
+            const errorData = JSON.parse(responseText)
+            errorMessage = errorData.message || errorMessage
+          }
+        } catch (e) {
+          // If response is not JSON, use the text as error message
+          if (responseText) {
+            errorMessage = responseText
+          }
+        }
+        console.error("Enquiry submission failed:", errorMessage, "Status:", response.status)
+        setError(errorMessage || "Failed to submit enquiry. Please try again.")
+        return
+      }
+
+      // Parse successful response
       let data
       try {
-        data = await response.json()
+        if (!responseText) {
+          throw new Error("Empty response from server")
+        }
+        data = JSON.parse(responseText)
       } catch (parseError) {
-        console.error("Error parsing response:", parseError)
+        console.error("Error parsing response:", parseError, "Response text:", responseText)
         setError("Invalid response from server. Please try again.")
         return
       }
 
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         setError(data.message || "Failed to submit enquiry. Please try again.")
         return
       }
@@ -118,9 +159,16 @@ export function EnquiryModal({ open, onOpenChange, productSearched }: EnquiryMod
         setSuccess(false)
         onOpenChange(false)
       }, 3000)
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error submitting enquiry:", err)
-      setError("Network error. Please try again.")
+      const errorMessage = err?.message || "Network error"
+      if (errorMessage.includes("Failed to fetch") || errorMessage.includes("NetworkError")) {
+        setError(`Unable to connect to server. Please check your internet connection and try again. (${API_URL})`)
+      } else if (errorMessage.includes("CORS")) {
+        setError("CORS error: Please contact support.")
+      } else {
+        setError(`Error: ${errorMessage}. Please try again.`)
+      }
     } finally {
       setSubmitting(false)
     }

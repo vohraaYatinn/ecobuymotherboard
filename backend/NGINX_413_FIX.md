@@ -3,7 +3,7 @@
 ## Problem
 Getting `413 Request Entity Too Large` error when uploading files to:
 ```
-http://192.168.1.35:5000/api/learning-resources/upload
+https://api.elecobuy.com/api/learning-resources/upload
 ```
 
 This means **Nginx is blocking the request** before it reaches Node.js.
@@ -130,7 +130,7 @@ You should NOT see errors like:
 
 Test if the fix worked:
 ```bash
-curl -X POST http://192.168.1.35:5000/api/health/upload \
+curl -X POST https://api.elecobuy.com/api/health/upload \
   -H "Content-Type: application/json"
 ```
 

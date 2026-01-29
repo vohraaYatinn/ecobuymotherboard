@@ -35,7 +35,7 @@ import {
 import { FileText, Video, Download, Loader2, Plus, Trash2, Edit, X } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface LearningResource {
   _id: string
@@ -178,6 +178,21 @@ export function AdminLearningResources() {
         apiUrl: `${API_URL}/api/learning-resources/upload`,
       })
 
+      // Log request details before sending
+      console.log("📤 [LEARNING RESOURCES] Request details:", {
+        url: `${API_URL}/api/learning-resources/upload`,
+        method: "POST",
+        fileType: formData.type,
+        fileName: formData.file?.name,
+        fileSize: formData.file?.size,
+        fileMimeType: formData.file?.type,
+        hasToken: !!token,
+      })
+
+      // Create abort controller for timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000) // 10 minute timeout
+
       const response = await fetch(`${API_URL}/api/learning-resources/upload`, {
         method: "POST",
         headers: {
@@ -185,7 +200,23 @@ export function AdminLearningResources() {
           // Don't set Content-Type - browser will set it automatically with boundary for FormData
         },
         body: uploadFormData,
+        signal: controller.signal,
+      }).catch((fetchError) => {
+        clearTimeout(timeoutId)
+        console.error("❌ [LEARNING RESOURCES] Fetch error:", fetchError)
+        console.error("❌ [LEARNING RESOURCES] Error name:", fetchError.name)
+        console.error("❌ [LEARNING RESOURCES] Error message:", fetchError.message)
+        console.error("❌ [LEARNING RESOURCES] Error stack:", fetchError.stack)
+        
+        // Check if it's an abort (timeout)
+        if (fetchError.name === "AbortError") {
+          throw new Error("Upload timeout. The file may be too large or your connection is slow.")
+        }
+        
+        throw fetchError
       })
+      
+      clearTimeout(timeoutId)
 
       console.log("📥 [LEARNING RESOURCES] Response received:", {
         status: response.status,

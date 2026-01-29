@@ -12,7 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface ProductDetailProps {
   productId: string
@@ -305,7 +305,7 @@ export function ProductDetail({ productId }: ProductDetailProps) {
 
             <Button
               size="lg"
-              className="flex-1 sm:flex-1 h-11 sm:h-12 text-sm sm:text-base touch-manipulation"
+              className="flex-1 sm:flex-1 h-11 sm:h-12 py-3 sm:py-0 text-sm sm:text-base touch-manipulation"
               disabled={!isInStock || addingToCart}
               onClick={async () => {
                 setAddingToCart(true)

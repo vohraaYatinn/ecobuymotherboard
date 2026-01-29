@@ -34,12 +34,30 @@ const vendorDocStorage = multer.diskStorage({
   },
 })
 
+const ALLOWED_DOC_EXTENSIONS = [
+  ".pdf",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".webp",
+  ".bmp",
+  ".heic",
+  ".heif",
+]
+
 const vendorDocFileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith("image/") || file.mimetype === "application/pdf") {
-    cb(null, true)
-  } else {
-    cb(new Error("Only PDF and image files are allowed for vendor documents"), false)
+  const mime = file.mimetype || ""
+  const ext = path.extname(file.originalname || "").toLowerCase()
+
+  if (mime.startsWith("image/") || mime === "application/pdf") {
+    return cb(null, true)
   }
+  // Some browsers/OS send application/octet-stream for images or PDFs
+  if (mime === "application/octet-stream" && ALLOWED_DOC_EXTENSIONS.includes(ext)) {
+    return cb(null, true)
+  }
+  cb(new Error("Only PDF and image files are allowed for vendor documents"), false)
 }
 
 const uploadVendorDocs = multer({

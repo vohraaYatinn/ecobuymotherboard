@@ -90,16 +90,24 @@ public class OrderAlertService extends Service {
     }
 
     private void startAlert(String title, String message, String orderId) {
+        Log.d(TAG, "startAlert - Starting alert notification");
+        Log.d(TAG, "startAlert - Title: " + title);
+        Log.d(TAG, "startAlert - Message: " + message);
+        Log.d(TAG, "startAlert - OrderId: " + orderId);
+        Log.d(TAG, "startAlert - IsPlaying: " + isPlaying);
+        
         if (isPlaying) {
-            Log.d(TAG, "Alert already playing");
+            Log.d(TAG, "startAlert - ⚠️ Alert already playing, returning");
             return;
         }
 
         // Ensure notification channel exists (in case app was killed)
         createNotificationChannel();
+        Log.d(TAG, "startAlert - Notification channel ensured");
 
         isServiceRunning = true;
         isPlaying = true;
+        Log.d(TAG, "startAlert - Service state updated (running=true, playing=true)");
 
         // Create intent to open app when notification is tapped
         Intent openAppIntent = new Intent(this, MainActivity.class);
@@ -107,10 +115,17 @@ public class OrderAlertService extends Service {
         openAppIntent.putExtra("navigateTo", "accept-orders");
         openAppIntent.putExtra("orderId", orderId);
         
+        Log.d(TAG, "startAlert - Created Intent for MainActivity:");
+        Log.d(TAG, "startAlert -   navigateTo: accept-orders");
+        Log.d(TAG, "startAlert -   orderId: " + orderId);
+        Log.d(TAG, "startAlert -   Flags: FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP");
+        
         PendingIntent openAppPendingIntent = PendingIntent.getActivity(
                 this, 0, openAppIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
+        
+        Log.d(TAG, "startAlert - Created PendingIntent for notification click");
 
         // Create intent for "Accept" action
         Intent acceptIntent = new Intent(this, OrderAlertService.class);
@@ -129,6 +144,7 @@ public class OrderAlertService extends Service {
         );
 
         // Build the notification
+        Log.d(TAG, "startAlert - Building notification...");
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title != null ? title : "New Order!")
@@ -143,16 +159,25 @@ public class OrderAlertService extends Service {
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", dismissPendingIntent)
                 .setFullScreenIntent(openAppPendingIntent, true); // Show on lock screen
 
+        Log.d(TAG, "startAlert - Notification built with:");
+        Log.d(TAG, "startAlert -   ContentIntent: MainActivity (navigateTo=accept-orders)");
+        Log.d(TAG, "startAlert -   View Order action: MainActivity (navigateTo=accept-orders)");
+        Log.d(TAG, "startAlert -   FullScreenIntent: enabled");
+
         // Start as foreground service
+        Log.d(TAG, "startAlert - Starting foreground service with notification ID: " + NOTIFICATION_ID);
         startForeground(NOTIFICATION_ID, builder.build());
+        Log.d(TAG, "startAlert - ✅ Foreground service started");
 
         // Start playing sound
+        Log.d(TAG, "startAlert - Starting sound...");
         startSound();
 
         // Start vibration
+        Log.d(TAG, "startAlert - Starting vibration...");
         startVibration();
 
-        Log.d(TAG, "Alert started");
+        Log.d(TAG, "startAlert - ✅ Alert fully started - notification should be visible");
     }
 
     private void startSound() {

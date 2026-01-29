@@ -51,11 +51,11 @@ function buildStageInfo({ stageKey, order }) {
         }
       case "shipped":
         return {
-          subject: `Order Shipped - ${orderNumber}`,
-          title: "🚚 Order Shipped",
-          message: `Order ${orderNumber} has been marked as shipped.`,
-          details: `The order is now in transit. Track the shipment using the AWB number provided below.`,
-          icon: "🚚",
+          subject: `Order Packed - ${orderNumber}`,
+          title: "📦 Order Packed",
+          message: `Order ${orderNumber} has been packed and is ready for shipment.`,
+          details: `The order has been packed successfully. The shipment will be created and picked up by the courier soon. Track the shipment using the AWB number once it's available.`,
+          icon: "📦",
           color: "#3B82F6",
           showPrice: false
         }

@@ -572,17 +572,36 @@ router.get("/vendor/:vendorId", verifyAdminToken, async (req, res) => {
       .sort({ createdAt: -1 })
       .lean()
 
+    // Helper function to check if an order is returned
+    const isReturnedOrder = (order) => {
+      return (
+        order.status === "return_accepted" ||
+        order.status === "return_picked_up" ||
+        order.returnRequest?.type === "accepted" ||
+        order.returnRequest?.type === "completed"
+      )
+    }
+
+    // Helper function to check if an order is cancelled (including returned)
+    const isCancelledOrder = (order) => {
+      return order.status === "cancelled" || isReturnedOrder(order)
+    }
+
     // Calculate statistics
     const totalOrders = orders.length
     const pendingOrders = orders.filter((o) => o.status === "pending").length
     const processingOrders = orders.filter((o) => o.status === "processing").length
     const shippedOrders = orders.filter((o) => o.status === "shipped").length
-    const deliveredOrders = orders.filter((o) => o.status === "delivered").length
-    const cancelledOrders = orders.filter((o) => o.status === "cancelled").length
+    // Delivered orders should exclude returned orders
+    const deliveredOrders = orders.filter(
+      (o) => o.status === "delivered" && !isReturnedOrder(o)
+    ).length
+    // Cancelled orders include both cancelled and returned orders
+    const cancelledOrders = orders.filter((o) => isCancelledOrder(o)).length
 
-    // Calculate revenue using net payout (from delivered orders)
+    // Calculate revenue using net payout (from delivered orders that haven't been returned)
     const totalRevenue = orders
-      .filter((o) => o.status === "delivered")
+      .filter((o) => o.status === "delivered" && !isReturnedOrder(o))
       .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0)
 
     // Calculate total income using net payout (all orders regardless of status)
@@ -604,7 +623,7 @@ router.get("/vendor/:vendorId", verifyAdminToken, async (req, res) => {
         .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
       delivered: totalRevenue,
       cancelled: orders
-        .filter((o) => o.status === "cancelled")
+        .filter((o) => isCancelledOrder(o))
         .reduce((sum, o) => sum + calculateNetPayout(o, vendor), 0),
     }
 
@@ -620,7 +639,8 @@ router.get("/vendor/:vendorId", verifyAdminToken, async (req, res) => {
         ordersByDate[date] = 0
       }
 
-      if (order.status === "delivered") {
+      // Only count delivered orders that haven't been returned
+      if (order.status === "delivered" && !isReturnedOrder(order)) {
         revenueByDate[date] += calculateNetPayout(order, vendor)
       }
       ordersByDate[date]++

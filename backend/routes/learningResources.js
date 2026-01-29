@@ -100,6 +100,39 @@ router.post("/:id/download", async (req, res) => {
 })
 
 // Admin routes - Upload learning resource
+// Handle OPTIONS preflight requests first (before auth)
+// This ensures preflight requests succeed even if CORS middleware doesn't catch them
+router.options("/upload", (req, res) => {
+  console.log("📥 [LEARNING RESOURCES] OPTIONS preflight request received")
+  console.log("📥 [LEARNING RESOURCES] Preflight headers:", {
+    origin: req.headers.origin,
+    accessControlRequestMethod: req.headers['access-control-request-method'],
+    accessControlRequestHeaders: req.headers['access-control-request-headers'],
+  })
+  
+  // Set CORS headers to match what the CORS middleware would send
+  const origin = req.headers.origin
+  if (origin) {
+    // Check if origin is allowed (same logic as CORS middleware)
+    const isAllowed = 
+      origin.endsWith(".elecobuy.com") ||
+      origin === "https://elecobuy.com" ||
+      origin === "https://www.elecobuy.com" ||
+      origin.startsWith("http://localhost:") ||
+      origin.startsWith("https://localhost:")
+    
+    if (isAllowed) {
+      res.header("Access-Control-Allow-Origin", origin)
+    }
+  }
+  
+  res.header("Access-Control-Allow-Methods", "POST, OPTIONS")
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Content-Length, Origin, Accept")
+  res.header("Access-Control-Allow-Credentials", "true")
+  res.header("Access-Control-Max-Age", "86400") // 24 hours
+  res.sendStatus(200)
+})
+
 router.post(
   "/upload",
   verifyAdminToken,
@@ -114,7 +147,15 @@ router.post(
       origin: req.headers['origin'],
       host: req.headers['host'],
       ip: req.ip || req.connection.remoteAddress,
+      authorization: req.headers['authorization'] ? "Present" : "Missing",
+      allHeaders: Object.keys(req.headers),
     })
+    
+    // Log if this is a preflight request
+    if (req.method === "OPTIONS") {
+      console.log("📥 [LEARNING RESOURCES] OPTIONS preflight request detected")
+      return res.status(200).end()
+    }
 
     // Set a longer timeout for file uploads (5 minutes)
     req.setTimeout(5 * 60 * 1000, () => {

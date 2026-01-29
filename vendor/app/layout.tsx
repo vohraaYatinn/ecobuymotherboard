@@ -5,6 +5,7 @@ import { PushNotificationProvider } from '@/components/push-notification-provide
 import { NavigationProvider } from '@/contexts/navigation-context'
 import { NotificationSoundProvider } from '@/contexts/notification-sound-context'
 import { Toaster } from '@/components/ui/toaster'
+import { NavigationHandler } from '@/components/navigation-handler'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -51,6 +52,7 @@ export default function RootLayout({
         <NavigationProvider>
           <NotificationSoundProvider>
             <PushNotificationProvider>
+              <NavigationHandler />
               {children}
             </PushNotificationProvider>
           </NotificationSoundProvider>

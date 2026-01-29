@@ -22,7 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 interface OrderItem {
   productId: {
@@ -481,7 +481,9 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
 
   const trackingSteps = generateTrackingSteps(order)
   const orderDate = new Date(order.createdAt)
-  const badgeStatus = (order.status || "").toLowerCase()
+  // Use effective status for badge to match tracking timeline
+  const effectiveStatus = getEffectiveOrderStatus(order)
+  const badgeStatus = effectiveStatus.toLowerCase()
 
   // Check if order can be cancelled
   const isPaymentPending = order.paymentStatus?.toLowerCase() === "pending"
@@ -576,10 +578,17 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
         body: formData,
       })
 
-      const data = await response.json()
+      let data
+      try {
+        data = await response.json()
+      } catch (parseError) {
+        // If response is not JSON, handle as text error
+        const textError = await response.text()
+        throw new Error(textError || "Failed to submit return request. Server error.")
+      }
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to submit return request")
+        throw new Error(data.message || data.error || "Failed to submit return request")
       }
 
       if (data.success) {
@@ -604,7 +613,8 @@ export function OrderDetailContent({ orderId }: { orderId: string }) {
       }
     } catch (err: any) {
       console.error("Error submitting return request:", err)
-      alert(err.message || "Failed to submit return request. Please try again.")
+      const errorMessage = err.message || "Failed to submit return request. Please try again."
+      alert(errorMessage)
     } finally {
       setSubmittingReturn(false)
     }

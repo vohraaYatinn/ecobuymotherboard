@@ -7,8 +7,82 @@ import Product from "../models/Product.js"
 const money = (n) => `₹${Number(n || 0).toLocaleString("en-IN")}`
 
 const getBuyerPortalUrl = (orderId) => {
-  const base = process.env.FRONTEND_URL || "https://elecobuy.com"
-  return `${base.replace(/\/$/, "")}/dashboard`
+  // Always use production URL for email links to ensure customers get correct links
+  // Never use localhost URLs in customer-facing emails
+  const base = "https://www.elecobuy.com"
+  
+  const cleanBase = base.replace(/\/$/, "")
+  // Link to specific order detail page if orderId is provided, otherwise just dashboard
+  if (orderId) {
+    // Convert ObjectId to string if needed
+    const orderIdStr = orderId.toString ? orderId.toString() : String(orderId)
+    return `${cleanBase}/dashboard/orders/${orderIdStr}`
+  }
+  return `${cleanBase}/dashboard`
+}
+
+/**
+ * Infer a more granular forward-shipment stage from DTDC tracking text.
+ * This matches the frontend logic to ensure consistency between email and dashboard.
+ */
+const inferForwardStageFromDtdc = (order) => {
+  const statusText = String(order.dtdcTrackingData?.statusText || "").toLowerCase()
+  if (!statusText) return null
+
+  if (statusText.includes("delivered") || statusText.includes("delivery completed")) {
+    return "delivered"
+  }
+  if (
+    statusText.includes("out for delivery") ||
+    statusText.includes("in transit") ||
+    statusText.includes("dispatched") ||
+    statusText.includes("arrived at")
+  ) {
+    return "shipped"
+  }
+  if (
+    statusText.includes("packed up") ||
+    statusText.includes("pickup completed") ||
+    statusText.includes("pickup done")
+  ) {
+    return "picked_up"
+  }
+
+  return null
+}
+
+/**
+ * Get effective order status that matches frontend display logic.
+ * This ensures email shows the same status as the dashboard.
+ */
+const getEffectiveOrderStatus = (order) => {
+  const s = (order.status || "").toLowerCase()
+  // Keep special flows as-is
+  if (s === "cancelled" || s.startsWith("return_")) return s
+
+  // For admin review, keep customer-facing flow at "processing"
+  if (s === "admin_review_required") return "processing"
+
+  const inferred = inferForwardStageFromDtdc(order)
+  if (inferred) return inferred
+  return s
+}
+
+/**
+ * Format order status for display in email (matches frontend formatStatus logic)
+ */
+const formatOrderStatus = (status) => {
+  if (!status) return "N/A"
+  
+  // Handle special cases
+  const statusLower = status.toLowerCase()
+  if (statusLower === "picked_up") return "Packed Up"
+  
+  // Format by splitting on underscores/hyphens and capitalizing
+  return status
+    .split(/[-_]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
 }
 
 /**
@@ -440,7 +514,7 @@ const renderEmailHtml = ({ customerName, title, message, details, order, stageIn
             ` : ""}
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #6B7280; font-size: 14px;">Order Status:</span>
-              <span style="color: ${color}; font-weight: 600; font-size: 14px; text-transform: capitalize;">${order.status || "N/A"}</span>
+              <span style="color: ${color}; font-weight: 600; font-size: 14px;">${formatOrderStatus(order.status)}</span>
             </div>
             ${order.paymentMethod ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
@@ -599,8 +673,14 @@ export async function sendCustomerOrderStageEmail({ orderId, stageKey }) {
     `${order.shippingAddress?.firstName || ""} ${order.shippingAddress?.lastName || ""}`.trim() ||
     "there"
 
+  // Get effective order status to match frontend display
+  const effectiveStatus = getEffectiveOrderStatus(order)
+  
+  // Create order object with effective status for email display
+  const orderForEmail = { ...order, status: effectiveStatus }
+
   // Send email
-  const html = renderEmailHtml({ customerName, title, message, details, order, stageInfo })
+  const html = renderEmailHtml({ customerName, title, message, details, order: orderForEmail, stageInfo })
   const sendResult = await sendEmail({ to: customer.email, subject, html })
 
   if (!sendResult.sent) {

@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Save, SettingsIcon, Phone, Building, Truck, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 export function AdminSettings() {
   const router = useRouter()
