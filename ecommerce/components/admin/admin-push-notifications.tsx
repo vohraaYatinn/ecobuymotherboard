@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, Send, Users, AlertCircle, CheckCircle2, XCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.1.35:5000"
 
 interface Vendor {
   _id: string
