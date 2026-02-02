@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { formatDistanceToNow } from "date-fns"
 import { API_URL } from "@/lib/api-config"
 import { useNavigation } from "@/contexts/navigation-context"
+import { PullToRefresh } from "@/components/pull-to-refresh"
 
 interface Notification {
   _id: string
@@ -217,8 +218,9 @@ export default function NotificationsPage() {
       </div>
 
       {/* Notifications List */}
-      <div className="px-4 py-4 space-y-2">
-        {loading ? (
+      <PullToRefresh onRefresh={fetchNotifications} disabled={loading}>
+        <div className="px-4 py-4 space-y-2">
+          {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -299,7 +301,8 @@ export default function NotificationsPage() {
             )
           })
         )}
-      </div>
+        </div>
+      </PullToRefresh>
 
       <BottomNav />
     </div>

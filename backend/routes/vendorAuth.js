@@ -395,6 +395,32 @@ router.post("/verify-otp", async (req, res) => {
       })
     }
 
+    // Check vendor status - only approved vendors can login
+    if (linkedVendor.status !== "approved") {
+      let message = ""
+      let statusCode = 403
+
+      switch (linkedVendor.status) {
+        case "pending":
+          message = "Your request is under review. You will receive an email notification once your vendor account is approved."
+          break
+        case "rejected":
+          message = "Your vendor account has been rejected. Please contact support for more information."
+          break
+        case "suspended":
+          message = "Your vendor account has been suspended. Please contact support for more information."
+          break
+        default:
+          message = "Your vendor account is not approved. Please contact support for more information."
+      }
+
+      return res.status(statusCode).json({
+        success: false,
+        message,
+        vendorStatus: linkedVendor.status,
+      })
+    }
+
     // Store FCM token if provided
     if (fcmToken) {
       try {

@@ -16,6 +16,7 @@ function OTPContent() {
   const [otp, setOtp] = useState(["", "", "", ""])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [vendorStatus, setVendorStatus] = useState<string | null>(null)
   const [timer, setTimer] = useState(30)
   const [fcmToken, setFcmToken] = useState<string | null>(null)
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
@@ -112,6 +113,7 @@ function OTPContent() {
     e.preventDefault()
     setIsLoading(true)
     setError("")
+    setVendorStatus(null)
 
     try {
       const otpValue = otp.join("")
@@ -163,6 +165,12 @@ function OTPContent() {
 
       if (!response.ok || !data.success) {
         setError(data.message || "Invalid OTP. Please try again.")
+        // Set vendor status if provided in response
+        if (data.vendorStatus) {
+          setVendorStatus(data.vendorStatus)
+        } else {
+          setVendorStatus(null)
+        }
         setIsLoading(false)
         return
       }
@@ -189,6 +197,7 @@ function OTPContent() {
   const handleResend = async () => {
     setTimer(30)
     setError("")
+    setVendorStatus(null)
     setIsLoading(true)
 
     try {
@@ -302,8 +311,39 @@ function OTPContent() {
 
       {/* Error Message */}
       {error && (
-        <div className="mb-4 rounded-md bg-destructive/10 border border-destructive/20 p-3">
-          <p className="text-sm text-destructive">{error}</p>
+        <div className={`mb-4 rounded-md border p-4 ${
+          vendorStatus === "pending" 
+            ? "bg-orange-50 border-orange-200 dark:bg-orange-950/20 dark:border-orange-800"
+            : vendorStatus === "rejected" || vendorStatus === "suspended"
+            ? "bg-destructive/10 border-destructive/20"
+            : "bg-destructive/10 border-destructive/20"
+        }`}>
+          <div className="flex items-start gap-3">
+            {vendorStatus === "pending" && (
+              <svg className="h-5 w-5 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            {(vendorStatus === "rejected" || vendorStatus === "suspended") && (
+              <svg className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            )}
+            <div className="flex-1">
+              <p className={`text-sm font-medium ${
+                vendorStatus === "pending"
+                  ? "text-orange-800 dark:text-orange-200"
+                  : "text-destructive"
+              }`}>
+                {error}
+              </p>
+              {vendorStatus === "pending" && (
+                <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                  We'll notify you via email once your account is reviewed.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

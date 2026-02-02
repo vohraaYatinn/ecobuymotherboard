@@ -13,6 +13,7 @@ import { useUnassignedOrdersCount } from "@/hooks/use-unassigned-orders-count"
 import { PendingOrdersPill } from "@/components/pending-orders-pill"
 import { useUnreadNotificationsCount } from "@/hooks/use-unread-notifications-count"
 import { NotificationBellButton } from "@/components/notification-bell-button"
+import { PullToRefresh } from "@/components/pull-to-refresh"
 
 interface DashboardStats {
   totals: {
@@ -57,6 +58,9 @@ export default function DashboardPage() {
     fetchVendorProfile()
   }, [])
 
+  const handleRefresh = async () => {
+    await Promise.all([fetchDashboardStats(), fetchVendorProfile()])
+  }
 
   const fetchDashboardStats = async () => {
     try {
@@ -361,8 +365,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8 space-y-5" style={{ paddingBottom: `calc(7rem + env(safe-area-inset-bottom, 0px))` }}>
-        {/* Vendor Status Notices */}
+      <PullToRefresh onRefresh={handleRefresh} disabled={loading}>
+        <div className="flex-1 overflow-y-auto px-4 pt-6 pb-8 space-y-5" style={{ paddingBottom: `calc(7rem + env(safe-area-inset-bottom, 0px))` }}>
+          {/* Vendor Status Notices */}
         {stats.vendorNotLinked && (
           <Card className="border-orange-200 bg-orange-50/50">
             <CardContent className="p-4">
@@ -542,8 +547,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Recent Orders */}
-    
-      </div>
+        </div>
+      </PullToRefresh>
 
       <BottomNav />
     </div>

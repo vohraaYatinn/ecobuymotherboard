@@ -15,6 +15,7 @@ import { useUnassignedOrdersCount } from "@/hooks/use-unassigned-orders-count"
 import { PendingOrdersPill } from "@/components/pending-orders-pill"
 import { useUnreadNotificationsCount } from "@/hooks/use-unread-notifications-count"
 import { NotificationBellButton } from "@/components/notification-bell-button"
+import { PullToRefresh } from "@/components/pull-to-refresh"
 
 interface OrderItem {
   name: string
@@ -712,8 +713,9 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      <div className="px-4 py-4 space-y-3">
-        {loading ? (
+      <PullToRefresh onRefresh={fetchOrders} disabled={loading}>
+        <div className="px-4 py-4 space-y-3">
+          {loading ? (
           <div className="flex items-center justify-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -905,7 +907,8 @@ export default function OrdersPage() {
             )
           })
         )}
-      </div>
+        </div>
+      </PullToRefresh>
 
       <BottomNav />
     </div>

@@ -75,12 +75,42 @@ export const verifyVendorToken = async (req, res, next) => {
       })
     }
 
-    // Get vendor details if linked (allow all statuses - pending, approved, etc.)
+    // Get vendor details if linked
     let vendor = null
     if (vendorUser.vendorId) {
       vendor = await Vendor.findById(vendorUser.vendorId)
-      // Don't reject based on status - allow pending vendors to access
-      // Individual endpoints can check status if needed
+    }
+
+    // Require vendor to be linked and approved for access
+    if (!vendor) {
+      return res.status(403).json({
+        success: false,
+        message: "No vendor account found. Please register as a vendor first.",
+      })
+    }
+
+    // Check vendor status - only approved vendors can access protected routes
+    if (vendor.status !== "approved") {
+      let message = ""
+      switch (vendor.status) {
+        case "pending":
+          message = "Your request is under review. You will receive an email notification once your vendor account is approved."
+          break
+        case "rejected":
+          message = "Your vendor account has been rejected. Please contact support for more information."
+          break
+        case "suspended":
+          message = "Your vendor account has been suspended. Please contact support for more information."
+          break
+        default:
+          message = "Your vendor account is not approved. Please contact support for more information."
+      }
+
+      return res.status(403).json({
+        success: false,
+        message,
+        vendorStatus: vendor.status,
+      })
     }
 
     req.vendorUser = {
@@ -91,14 +121,14 @@ export const verifyVendorToken = async (req, res, next) => {
       vendorId: vendorUser.vendorId,
     }
 
-    req.vendor = vendor ? {
+    req.vendor = {
       id: vendor._id,
       name: vendor.name,
       email: vendor.email,
       phone: vendor.phone,
       status: vendor.status,
       isActive: vendor.isActive,
-    } : null
+    }
 
     next()
   } catch (error) {

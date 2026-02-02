@@ -10,6 +10,7 @@ import { API_URL } from "@/lib/api-config"
 import { useNotificationSoundContext } from "@/contexts/notification-sound-context"
 import { useUnreadNotificationsCount } from "@/hooks/use-unread-notifications-count"
 import { NotificationBellButton } from "@/components/notification-bell-button"
+import { PullToRefresh } from "@/components/pull-to-refresh"
 
 interface OrderItem {
   name: string
@@ -542,8 +543,9 @@ export default function AcceptOrdersPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ paddingBottom: `calc(5rem + env(safe-area-inset-bottom, 0px))` }}>
-        {error && (
+      <PullToRefresh onRefresh={fetchUnassignedOrders} disabled={loading}>
+        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ paddingBottom: `calc(5rem + env(safe-area-inset-bottom, 0px))` }}>
+          {error && (
           <Card className="border-destructive/50 bg-destructive/10">
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
@@ -726,7 +728,8 @@ export default function AcceptOrdersPage() {
             </Card>
           )
         })}
-      </div>
+        </div>
+      </PullToRefresh>
 
       <BottomNav />
 
