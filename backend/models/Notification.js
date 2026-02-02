@@ -33,6 +33,7 @@ const notificationSchema = new mongoose.Schema(
         "refund_failed",
         "support_request_resolved",
         "support_request_closed",
+        "vendor_payment_received",
       ],
       required: true,
     },

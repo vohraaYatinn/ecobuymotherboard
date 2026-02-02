@@ -11,6 +11,10 @@ import { API_URL } from "@/lib/api-config"
 import { useNavigation } from "@/contexts/navigation-context"
 import { Capacitor } from "@capacitor/core"
 import { Filesystem, Directory, Encoding } from "@capacitor/filesystem"
+import { useUnassignedOrdersCount } from "@/hooks/use-unassigned-orders-count"
+import { PendingOrdersPill } from "@/components/pending-orders-pill"
+import { useUnreadNotificationsCount } from "@/hooks/use-unread-notifications-count"
+import { NotificationBellButton } from "@/components/notification-bell-button"
 
 interface OrderItem {
   name: string
@@ -70,6 +74,8 @@ export default function OrdersPage() {
   const [vendorCommission, setVendorCommission] = useState<number | null>(null)
   const [downloadingStatement, setDownloadingStatement] = useState(false)
   const [packingVideoFiles, setPackingVideoFiles] = useState<Record<string, File | null>>({})
+  const { count: pendingCount } = useUnassignedOrdersCount({ pollIntervalMs: 15000 })
+  const { count: unreadNotifications } = useUnreadNotificationsCount({ pollIntervalMs: 30000 })
 
   useEffect(() => {
     fetchOrders()
@@ -636,6 +642,10 @@ export default function OrdersPage() {
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">Orders</h1>
               <p className="text-xs text-muted-foreground mt-0.5">Manage your order history</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <PendingOrdersPill count={pendingCount} />
+              <NotificationBellButton count={unreadNotifications} />
             </div>
           </div>
 

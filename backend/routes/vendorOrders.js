@@ -943,6 +943,8 @@ router.put("/:id/status", verifyVendorToken, (req, res, next) => {
         // Ensure required relations are populated for shipment creation
         await order.populate("shippingAddress")
         await order.populate("customerId", "name email mobile")
+        // Ensure product names/brands are available for DTDC "Product Description"
+        await order.populate("items.productId", "name brand sku")
 
         console.log(`🔵 [VENDOR-DEBUG] Order populated. Shipping address:`, {
           name: order.shippingAddress?.firstName + " " + order.shippingAddress?.lastName,

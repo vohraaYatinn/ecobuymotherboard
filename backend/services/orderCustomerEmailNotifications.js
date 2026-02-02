@@ -198,11 +198,37 @@ const stageCopy = ({ stageKey, order }) => {
           showPrice: false
         }
       case "cancelled":
+        // Determine who cancelled the order (customer vs admin vs vendor/other).
+        // Historically this has been stored as a string (e.g. "customer"). Support object shapes too.
+        const cancelledByRaw = order?.paymentMeta?.cancelledBy
+        const cancelledBy =
+          typeof cancelledByRaw === "string"
+            ? cancelledByRaw
+            : typeof cancelledByRaw === "object" && cancelledByRaw
+              ? cancelledByRaw.role || cancelledByRaw.type || cancelledByRaw.by || cancelledByRaw.source
+              : null
+
+        const isAdminCancelled = String(cancelledBy || "").toLowerCase() === "admin"
+        const isCustomerCancelled = String(cancelledBy || "").toLowerCase() === "customer"
+
+        const refundHint =
+          order.paymentMethod === "online"
+            ? order.paymentStatus === "refunded" || order.refundStatus === "completed"
+              ? "We've processed your refund. You may see it reflected in your account within 5-7 business days depending on your bank."
+              : "If you made a payment, we've initiated your refund immediately. You'll receive a separate notification once the refund status updates."
+            : order.paymentMethod === "cod"
+              ? "Since this is a Cash on Delivery order, no refund is required."
+              : "If you made a payment, your refund will be processed according to our refund policy."
+
         return {
           subject: `Order Cancelled - ${orderNumber}`,
           title: "❌ Order Cancelled",
-          message: `Your order has been cancelled as requested.`,
-          details: `If you made a payment, your refund will be processed according to our refund policy. You'll receive a separate notification once the refund is initiated. If you have any questions, please contact our support team.`,
+          message: isAdminCancelled
+            ? `Your order was cancelled by our admin team.`
+            : isCustomerCancelled
+              ? `Your order has been cancelled as requested.`
+              : `Your order has been cancelled.`,
+          details: `${refundHint}\n\nIf you have any questions, please contact our support team.`,
           icon: "❌",
           color: "#EF4444",
           showPrice: false
@@ -223,8 +249,8 @@ const stageCopy = ({ stageKey, order }) => {
           title: "✅ Return Request Accepted",
           message: `Your return request has been accepted! We'll arrange a pickup for your items.`,
           details: order.returnAwbNumber
-            ? `A reverse pickup has been scheduled. You can track the pickup using the return AWB number provided below. Once we receive the items, your refund will be processed.`
-            : `A reverse pickup will be scheduled soon. You'll receive pickup details via SMS and email. Once we receive the items, your refund will be processed.`,
+            ? `A reverse pickup has been scheduled. You can track the pickup using the return AWB number provided below. Once we receive the items, your refund will be processed.\n\nPlease keep the item packed in the same box for pickup.`
+            : `A reverse pickup will be scheduled soon. You'll receive pickup details via SMS and email. Once we receive the items, your refund will be processed.\n\nPlease keep the item packed in the same box for pickup.`,
           icon: "✅",
           color: "#10B981",
           showPrice: true

@@ -3,6 +3,10 @@ import Settings from "../models/Settings.js"
 import { verifyAdminToken, verifyVendorToken } from "../middleware/auth.js"
 import Order from "../models/Order.js"
 import Vendor from "../models/Vendor.js"
+import VendorUser from "../models/VendorUser.js"
+import Notification from "../models/Notification.js"
+import { sendEmail } from "../services/mailer.js"
+import { renderVendorEmailHtml } from "../services/vendorOrderStageNotifications.js"
 
 const router = express.Router()
 
@@ -88,6 +92,77 @@ router.put("/admin/:vendorId", verifyAdminToken, async (req, res) => {
     // Mark the value field as modified so Mongoose detects the nested object changes
     setting.markModified('value')
     await setting.save()
+
+    // Notify vendor(s) if an actual payment was recorded (paidNumber > 0)
+    // Notes-only updates should not trigger a payout notification.
+    if (paidNumber > 0) {
+      try {
+        const vendor = await Vendor.findById(vendorId).select("name email").lean()
+        const vendorUsers = await VendorUser.find({ vendorId, isActive: true })
+          .select("_id email mobile name")
+          .lean()
+
+        const vendorName = vendor?.name || "Vendor"
+        const amountText = `₹${paidNumber.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        const totalText = `₹${newTotalPaid.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        const cleanNotes = typeof notes === "string" ? notes.trim() : ""
+
+        const title = "Payout recorded"
+        const message =
+          `Payment of ${amountText} has been recorded for you.` +
+          ` Total paid till date: ${totalText}.` +
+          (cleanNotes ? ` Notes: ${cleanNotes}` : "")
+
+        if (vendorUsers.length > 0) {
+          await Notification.insertMany(
+            vendorUsers.map((vu) => ({
+              userId: vu._id,
+              userType: "vendor",
+              type: "vendor_payment_received",
+              title,
+              message,
+              vendorId,
+              isRead: false,
+              metadata: {
+                amount: paidNumber,
+                totalPaid: newTotalPaid,
+                notes: cleanNotes,
+                recordedByAdminId: req.admin?.id,
+              },
+            }))
+          )
+        }
+
+        // Email notification (best-effort)
+        const toEmail = vendor?.email || vendorUsers?.[0]?.email
+        if (toEmail) {
+          const subject = `Payout recorded: ${amountText}`
+          const detailsLines = [
+            `Payout Amount: ${amountText}`,
+            `Total Paid Till Date: ${totalText}`,
+            cleanNotes ? `Notes: ${cleanNotes}` : null,
+            `Recorded At: ${new Date().toLocaleString("en-IN")}`,
+          ].filter(Boolean)
+
+          const html = renderVendorEmailHtml({
+            vendorName,
+            title: "💸 Payout Recorded",
+            message: `A payment of <strong>${amountText}</strong> has been recorded for your account.`,
+            details: detailsLines.join("\n"),
+            order: null, // payout emails are not order-specific
+            stageInfo: {
+              icon: "💸",
+              color: "#10B981",
+              showPrice: false,
+              subject,
+            },
+          })
+          await sendEmail({ to: toEmail, subject, html })
+        }
+      } catch (notifyError) {
+        console.error("⚠️ Vendor payout notification failed (non-blocking):", notifyError)
+      }
+    }
 
     res.json({
       success: true,

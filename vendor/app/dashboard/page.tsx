@@ -9,6 +9,10 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { API_URL } from "@/lib/api-config"
 import { useNavigation } from "@/contexts/navigation-context"
+import { useUnassignedOrdersCount } from "@/hooks/use-unassigned-orders-count"
+import { PendingOrdersPill } from "@/components/pending-orders-pill"
+import { useUnreadNotificationsCount } from "@/hooks/use-unread-notifications-count"
+import { NotificationBellButton } from "@/components/notification-bell-button"
 
 interface DashboardStats {
   totals: {
@@ -44,46 +48,14 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [vendorCommission, setVendorCommission] = useState<number | null>(null)
+  const { count: pendingCount } = useUnassignedOrdersCount({ pollIntervalMs: 15000 })
+  const { count: unreadNotifications } = useUnreadNotificationsCount({ pollIntervalMs: 30000 })
 
   useEffect(() => {
     fetchDashboardStats()
-    fetchUnreadNotifications()
     fetchVendorProfile()
-    
-    // Refresh notifications every 30 seconds
-    const interval = setInterval(fetchUnreadNotifications, 30000)
-    
-    return () => {
-      clearInterval(interval)
-    }
   }, [])
-
-  const fetchUnreadNotifications = async () => {
-    try {
-      const token = localStorage.getItem("vendorToken")
-      if (!token) return
-
-      const response = await fetch(`${API_URL}/api/notifications/vendor?unreadOnly=true&limit=1`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        setUnreadNotifications(data.data.unreadCount || 0)
-      } else if (response.status === 401) {
-        // Token expired or invalid - silently fail, don't redirect
-        console.warn("Notification fetch unauthorized - token may be invalid")
-      }
-    } catch (err) {
-      // Silently fail for notifications - don't disrupt the dashboard
-      console.error("Error fetching unread notifications:", err)
-    }
-  }
 
 
   const fetchDashboardStats = async () => {
@@ -215,6 +187,10 @@ export default function DashboardPage() {
               <h1 className="text-lg font-bold tracking-tight text-foreground">Dashboard</h1>
               <p className="text-xs text-muted-foreground">Welcome back</p>
             </div>
+            <div className="flex items-center gap-2">
+              <PendingOrdersPill count={pendingCount} />
+              <NotificationBellButton count={unreadNotifications} />
+            </div>
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center">
@@ -233,6 +209,10 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-lg font-bold tracking-tight text-foreground">Dashboard</h1>
               <p className="text-xs text-muted-foreground">Welcome back</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <PendingOrdersPill count={pendingCount} />
+              <NotificationBellButton count={unreadNotifications} />
             </div>
           </div>
         </div>
@@ -286,7 +266,7 @@ export default function DashboardPage() {
       iconColor: "text-chart-5",
     },
     {
-      title: "Paid Amount",
+      title: "Received Amount",
       value: formatCurrency(stats.totals.paidAmount || 0),
       change: "Marked paid in ledger",
       trend: stats.totals.paidAmount > 0 ? "up" : "down",
@@ -300,9 +280,9 @@ export default function DashboardPage() {
       iconColor: "text-chart-3",
     },
     {
-      title: "Balance Left",
+      title: "Receivable",
       value: formatCurrency(stats.totals.balanceAmount || 0),
-      change: "Remaining to be paid",
+      change: "Remaining to be receivable",
       trend: stats.totals.balanceAmount > 0 ? "up" : "down",
       href: "/orders",
       icon: (
@@ -374,23 +354,10 @@ export default function DashboardPage() {
               <p className="text-xs text-muted-foreground">Welcome back</p>
             </div>
           </div>
-          <Link href="/notifications" className="relative">
-            <button className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-secondary to-secondary/80 hover:from-secondary/90 hover:to-secondary/70 transition-all hover:scale-105 shadow-lg border border-border/50">
-              <svg className="h-5 w-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                />
-              </svg>
-              {unreadNotifications > 0 && (
-                <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-gradient-to-br from-destructive to-destructive/80 text-white text-[10px] font-bold flex items-center justify-center shadow-lg">
-                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                </span>
-              )}
-            </button>
-          </Link>
+          <div className="flex items-center gap-2">
+            <PendingOrdersPill count={pendingCount} />
+            <NotificationBellButton count={unreadNotifications} />
+          </div>
         </div>
       </div>
 

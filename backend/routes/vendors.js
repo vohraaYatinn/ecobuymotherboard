@@ -964,6 +964,12 @@ router.get("/export/csv", verifyAdminToken, async (req, res) => {
     // Get all vendors matching filters
     const vendors = await Vendor.find(filter).sort({ createdAt: -1 }).lean()
 
+    const toCsvValue = (value) => {
+      if (value === null || value === undefined) return '""'
+      const str = String(value)
+      return `"${str.replace(/"/g, '""').replace(/\r?\n/g, " ")}"`
+    }
+
     // Generate CSV
     const csvRows = []
 
@@ -976,12 +982,23 @@ router.get("/export/csv", verifyAdminToken, async (req, res) => {
       "Phone",
       "Status",
       "Commission (%)",
+      "GST Number",
+      "PAN",
+      "TAN",
+      "Bank Account Number",
+      "IFSC Code",
+      "Referral Code",
+      "Contact First Name",
+      "Contact Last Name",
+      "Address Line 1",
+      "Address Line 2",
       "Total Products",
       "Orders Fulfilled",
       "City",
       "State",
       "Country",
       "Postcode",
+      "Documents Count",
       "Joined Date",
     ].join(","))
 
@@ -989,20 +1006,31 @@ router.get("/export/csv", verifyAdminToken, async (req, res) => {
     vendors.forEach((vendor) => {
       const address = vendor.address || {}
       csvRows.push([
-        vendor._id.toString(),
-        `"${(vendor.name || "").replace(/"/g, '""')}"`,
-        `"${(vendor.username || "").replace(/"/g, '""')}"`,
-        `"${(vendor.email || "").replace(/"/g, '""')}"`,
-        `"${(vendor.phone || "").replace(/"/g, '""')}"`,
-        vendor.status || "",
-        vendor.commission || 0,
-        vendor.totalProducts || 0,
-        vendor.ordersFulfilled || 0,
-        `"${(address.city || "").replace(/"/g, '""')}"`,
-        `"${(address.state || "").replace(/"/g, '""')}"`,
-        `"${(address.country || "").replace(/"/g, '""')}"`,
-        `"${(address.postcode || "").replace(/"/g, '""')}"`,
-        new Date(vendor.createdAt).toISOString().split("T")[0],
+        toCsvValue(vendor._id?.toString?.() || ""),
+        toCsvValue(vendor.name || ""),
+        toCsvValue(vendor.username || ""),
+        toCsvValue(vendor.email || ""),
+        toCsvValue(vendor.phone || ""),
+        toCsvValue(vendor.status || ""),
+        toCsvValue(vendor.commission ?? 0),
+        toCsvValue(vendor.gstNumber || ""),
+        toCsvValue(vendor.pan || ""),
+        toCsvValue(vendor.tan || ""),
+        toCsvValue(vendor.bankAccountNumber || ""),
+        toCsvValue(vendor.ifscCode || ""),
+        toCsvValue(vendor.referralCode || ""),
+        toCsvValue(address.firstName || ""),
+        toCsvValue(address.lastName || ""),
+        toCsvValue(address.address1 || ""),
+        toCsvValue(address.address2 || ""),
+        toCsvValue(vendor.totalProducts ?? 0),
+        toCsvValue(vendor.ordersFulfilled ?? 0),
+        toCsvValue(address.city || ""),
+        toCsvValue(address.state || ""),
+        toCsvValue(address.country || ""),
+        toCsvValue(address.postcode || ""),
+        toCsvValue(Array.isArray(vendor.documents) ? vendor.documents.length : 0),
+        toCsvValue(vendor.createdAt ? new Date(vendor.createdAt).toISOString().split("T")[0] : ""),
       ].join(","))
     })
 

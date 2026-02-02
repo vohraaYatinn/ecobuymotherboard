@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Loader2, CheckCircle } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const VENDOR_USERNAME_PREFIX = "Elecobuy "
 
 export function VendorRegistrationForm() {
   const { toast } = useToast()
@@ -29,7 +30,7 @@ export function VendorRegistrationForm() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formData, setFormData] = useState({
-    username: "",
+    username: VENDOR_USERNAME_PREFIX,
     email: "",
     firstName: "",
     lastName: "",
@@ -49,12 +50,26 @@ export function VendorRegistrationForm() {
   })
   const [documents, setDocuments] = useState<File[]>([])
 
+  const normalizeVendorUsername = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return VENDOR_USERNAME_PREFIX
+    if (trimmed.toLowerCase() === VENDOR_USERNAME_PREFIX.trim().toLowerCase()) return VENDOR_USERNAME_PREFIX
+    if (trimmed.toLowerCase().startsWith(VENDOR_USERNAME_PREFIX.trim().toLowerCase())) {
+      // Ensure exactly one trailing space after prefix.
+      const remainder = trimmed.slice(VENDOR_USERNAME_PREFIX.trim().length).trimStart()
+      return `${VENDOR_USERNAME_PREFIX}${remainder}`
+    }
+    return `${VENDOR_USERNAME_PREFIX}${trimmed}`
+  }
+
   // Validate form fields
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
     
-    if (!formData.username.trim()) {
-      newErrors.username = "Username is required"
+    const normalizedUsername = normalizeVendorUsername(formData.username)
+    const usernameRemainder = normalizedUsername.slice(VENDOR_USERNAME_PREFIX.length).trim()
+    if (!usernameRemainder) {
+      newErrors.username = `Please enter your name after "${VENDOR_USERNAME_PREFIX.trim()}"`
     }
     if (!formData.email.trim()) {
       newErrors.email = "Email is required"
@@ -137,8 +152,13 @@ export function VendorRegistrationForm() {
     setIsLoading(true)
 
     try {
+      const normalizedFormData = {
+        ...formData,
+        username: normalizeVendorUsername(formData.username),
+      }
+
       const payload = new FormData()
-      Object.entries(formData).forEach(([key, value]) => {
+      Object.entries(normalizedFormData).forEach(([key, value]) => {
         payload.append(key, value)
       })
       documents.forEach((file) => payload.append("documents", file))
@@ -169,7 +189,7 @@ export function VendorRegistrationForm() {
         })
         // Reset form
         setFormData({
-          username: "",
+          username: VENDOR_USERNAME_PREFIX,
           email: "",
           firstName: "",
           lastName: "",
@@ -222,11 +242,11 @@ export function VendorRegistrationForm() {
               id="username"
               value={formData.username}
               onChange={(e) => {
-                setFormData({ ...formData, username: e.target.value })
+                setFormData({ ...formData, username: normalizeVendorUsername(e.target.value) })
                 if (errors.username) setErrors({ ...errors, username: "" })
               }}
               className={`mt-2 ${errors.username ? "border-red-500 focus-visible:ring-red-500" : ""}`}
-              placeholder="Choose a unique username"
+              placeholder='e.g. "Elecobuy Mahesh"'
             />
             {errors.username && <p className="text-sm text-red-500 mt-1">{errors.username}</p>}
           </div>
@@ -561,7 +581,7 @@ export function VendorRegistrationForm() {
               Are you sure you want to submit your vendor registration? Please review your details before confirming.
               <br />
               <br />
-              <strong>Username:</strong> {formData.username}
+              <strong>Username:</strong> {normalizeVendorUsername(formData.username)}
               <br />
               <strong>Email:</strong> {formData.email}
               <br />

@@ -32,6 +32,16 @@ const supportRequestSchema = new mongoose.Schema(
       required: [true, "Message is required"],
       trim: true,
     },
+    // Optional image attachment (used by "new_product_request" enquiries from search)
+    image: {
+      type: String,
+      trim: true,
+    },
+    imageMeta: {
+      originalName: { type: String, trim: true },
+      mimeType: { type: String, trim: true },
+      size: { type: Number },
+    },
     status: {
       type: String,
       enum: ["pending", "in_progress", "resolved", "closed"],

@@ -261,6 +261,34 @@ function sanitizeAscii(value, fallback = "") {
   return finalVal.slice(0, 120) // keep within a reasonable length
 }
 
+// Build a compact product description for DTDC labels.
+// DTDC prints this field as "Product Description" on the shipping label.
+function buildConsignmentDescription(order) {
+  const orderNo = order?.orderNumber ? String(order.orderNumber) : ""
+  const items = Array.isArray(order?.items) ? order.items : []
+
+  const parts = []
+  for (const item of items) {
+    const qty = Number(item?.quantity || 1)
+    const rawName = item?.productId?.name || item?.name || ""
+    const rawBrand = item?.productId?.brand || ""
+    const title = [rawBrand, rawName].filter(Boolean).join(" ").trim()
+    if (!title) continue
+
+    parts.push(`${title}${qty > 1 ? ` x${qty}` : ""}`)
+  }
+
+  const MAX_PARTS = 3
+  const shown = parts.slice(0, MAX_PARTS).join(", ")
+  const moreCount = Math.max(parts.length - MAX_PARTS, 0)
+  const moreSuffix = moreCount > 0 ? ` +${moreCount} more` : ""
+
+  const base = shown ? `${shown}${moreSuffix}` : `Order ${orderNo}`.trim()
+  const withOrder = orderNo ? `${base} (${orderNo})` : base
+
+  return sanitizeAscii(withOrder, `Order ${orderNo}`.trim())
+}
+
 // Auto-sync shipment creation for DTDC Order Upload API (B2C / Express)
 export async function createShipmentForOrder(order, options = {}) {
   console.log(`🔵 [DTDC-DEBUG] ========================================`)
@@ -349,7 +377,7 @@ export async function createShipmentForOrder(order, options = {}) {
           customer_code: process.env.DTDC_CUSTOMER_CODE || "", // You may need to set this
           service_type_id: "B2C PRIORITY",
           load_type: "NON-DOCUMENT",
-          description: `Order ${order.orderNumber}`,
+          description: buildConsignmentDescription(order),
           dimension_unit: "cm",
           length: "70.0",
           width: "70.0",

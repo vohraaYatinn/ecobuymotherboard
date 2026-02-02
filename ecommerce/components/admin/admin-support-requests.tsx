@@ -28,6 +28,12 @@ interface SupportRequest {
   orderID?: string
   category: string
   message: string
+  image?: string
+  imageMeta?: {
+    originalName?: string
+    mimeType?: string
+    size?: number
+  }
   status: "pending" | "in_progress" | "resolved" | "closed"
   adminNotes?: string
   resolvedAt?: string
@@ -82,7 +88,17 @@ const categoryLabels: Record<string, string> = {
   shipping: "Shipping & Delivery",
   payment: "Payment Issues",
   return: "Returns & Refunds",
+  new_product_request: "New Product Request",
   other: "Other",
+}
+
+const getAssetUrl = (maybePath?: string) => {
+  if (!maybePath) return ""
+  const val = maybePath.trim()
+  if (!val) return ""
+  if (val.startsWith("http://") || val.startsWith("https://") || val.startsWith("data:")) return val
+  if (val.startsWith("/")) return `${API_URL}${val}`
+  return `${API_URL}/${val}`
 }
 
 const formatDate = (dateString: string) => {
@@ -446,6 +462,34 @@ export function AdminSupportRequests() {
                 <div>
                   <Label className="text-muted-foreground">Resolved By</Label>
                   <p className="font-medium">{selectedRequest.resolvedBy.name}</p>
+                </div>
+              )}
+              {selectedRequest.image && (
+                <div>
+                  <Label className="text-muted-foreground">Uploaded Image</Label>
+                  <div className="mt-2 space-y-2">
+                    <a
+                      href={getAssetUrl(selectedRequest.image)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-primary underline"
+                    >
+                      Open image in new tab
+                    </a>
+                    <div className="rounded-md border overflow-hidden bg-muted">
+                      <img
+                        src={getAssetUrl(selectedRequest.image)}
+                        alt={selectedRequest.imageMeta?.originalName || "Uploaded image"}
+                        className="w-full max-h-[420px] object-contain bg-black/5"
+                        loading="lazy"
+                      />
+                    </div>
+                    {selectedRequest.imageMeta?.originalName && (
+                      <p className="text-xs text-muted-foreground">
+                        {selectedRequest.imageMeta.originalName}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

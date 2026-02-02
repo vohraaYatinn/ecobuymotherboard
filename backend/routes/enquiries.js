@@ -123,6 +123,8 @@ router.post("/submit", (req, res, next) => {
         note ? `Customer note: ${note}` : null,
       ].filter(Boolean)
 
+      const publicImagePath = req.file ? `/uploads/enquiries/${req.file.filename}` : undefined
+
       supportRequest = new SupportRequest({
         name,
         email,
@@ -132,6 +134,14 @@ router.post("/submit", (req, res, next) => {
           messageParts.join("\n\n") ||
           "New product request submitted from the product search form.",
         status: "pending",
+        ...(publicImagePath ? {
+          image: publicImagePath,
+          imageMeta: {
+            originalName: req.file?.originalname,
+            mimeType: req.file?.mimetype,
+            size: req.file?.size,
+          },
+        } : {}),
       })
 
       await supportRequest.save()

@@ -2,10 +2,14 @@ import PDFDocument from "pdfkit"
 import Order from "../models/Order.js"
 import Customer from "../models/Customer.js"
 import CustomerAddress from "../models/CustomerAddress.js"
+import fs from "fs"
+import path from "path"
+import { fileURLToPath } from "url"
 
 // Company information (can be moved to environment variables or database)
 const COMPANY_INFO = {
   name: "Elecobuy",
+  legalName: "Ekran Fix Private Limited",
   address: "H N O 3-122/6, Chengicherla Road, Besides Growel Feed Supplements and Mineral Mixtures, Boudha Nagar, Hyderabad, Medchal Malkajgiri, Telangana, 500098",
   city: "Hyderabad",
   state: "Telangana",
@@ -13,6 +17,10 @@ const COMPANY_INFO = {
   phone: "86399 79558",
   gstin: "36AAHCE5719J1ZD",
 }
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const ELECOBUY_LOGO_PATH = path.resolve(__dirname, "../../ecommerce/public/logo.png")
 
 /**
  * Generate invoice PDF for an order
@@ -36,8 +44,27 @@ export async function generateInvoicePDF(order) {
       doc.fontSize(20).font("Helvetica-Bold").text("INVOICE", { align: "center" })
       doc.moveDown(0.8)
 
-      // Company Name
-      doc.fontSize(16).font("Helvetica-Bold").text(COMPANY_INFO.name.toUpperCase(), { align: "center" })
+      // Company Logo (fallback to text if logo missing/unreadable)
+      const logoY = doc.y
+      const logoWidth = 200
+      let logoRendered = false
+      try {
+        if (fs.existsSync(ELECOBUY_LOGO_PATH)) {
+          const img = doc.openImage(ELECOBUY_LOGO_PATH)
+          const ratio = logoWidth / img.width
+          const logoHeight = img.height * ratio
+          const logoX = (doc.page.width - logoWidth) / 2
+          doc.image(img, logoX, logoY, { width: logoWidth })
+          doc.y = logoY + logoHeight + 6
+          logoRendered = true
+        }
+      } catch (e) {
+        // ignore and fallback to text below
+      }
+
+      if (!logoRendered) {
+        doc.fontSize(16).font("Helvetica-Bold").text(COMPANY_INFO.name.toUpperCase(), { align: "center" })
+      }
       doc.moveDown(1)
 
       // Calculate positions with proper spacing
@@ -96,7 +123,7 @@ export async function generateInvoicePDF(order) {
       doc.font("Helvetica").fontSize(9)
       
       // Build From text with proper line breaks
-      const fromText = `${COMPANY_INFO.name}\n${COMPANY_INFO.address}\n${COMPANY_INFO.city} ${COMPANY_INFO.pincode}\n${COMPANY_INFO.state}\n${COMPANY_INFO.phone}\n${COMPANY_INFO.gstin}`
+      const fromText = `${COMPANY_INFO.name}\n${COMPANY_INFO.legalName}\n${COMPANY_INFO.address}\n${COMPANY_INFO.city} ${COMPANY_INFO.pincode}\n${COMPANY_INFO.state}\n${COMPANY_INFO.phone}\n${COMPANY_INFO.gstin}`
       
       // Draw From with wrapping and calculate actual height
       doc.y = fromY + 15

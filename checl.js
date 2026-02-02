@@ -2924,7 +2924,7 @@ app.get('/api/updates/check', (req, res) => {
     res.json({
       updateAvailable,
       version: latestVersion.version,
-      url: `${process.env.BASE_URL || 'http://10.236.128.10:3001'}/uploads/${latestVersion.filename}`,
+      url: `${process.env.BASE_URL || 'http://192.168.1.3:3001'}/uploads/${latestVersion.filename}`,
       changelog: latestVersion.changelog,
       mandatory: latestVersion.mandatory || false,
       createdAt: latestVersion.createdAt

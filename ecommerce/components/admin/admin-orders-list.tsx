@@ -443,11 +443,13 @@ export function AdminOrdersList() {
       const token = localStorage.getItem("adminToken")
       if (!token) return
 
-      const response = await fetch(`${API_URL}/api/admin/orders/${orderId}`, {
-        method: "DELETE",
+      const response = await fetch(`${API_URL}/api/admin/orders/${orderId}/cancel`, {
+        method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({}),
       })
 
       const data = await response.json()
@@ -1006,6 +1008,9 @@ export function AdminOrdersList() {
                       const vendor = getVendorInfo(order)
                       const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)
                       const returnPickupInfo = getReturnPickupInfo(order)
+                      const canCancel =
+                        !["cancelled", "shipped", "delivered"].includes((order.status || "").toLowerCase()) &&
+                        !order.awbNumber
                       return (
                         <TableRow key={order._id} className="hover:bg-muted/30 transition-colors">
                           <TableCell>
@@ -1187,6 +1192,21 @@ export function AdminOrdersList() {
                                 <Filter className="h-4 w-4" />
                                 Edit
                               </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-2 text-red-600 hover:text-red-700"
+                                onClick={() => handleDeleteOrder(order._id)}
+                                disabled={!canCancel}
+                                title={
+                                  canCancel
+                                    ? "Cancel order as admin (refund attempted immediately)"
+                                    : "Cannot cancel shipped/delivered/cancelled orders (or orders with shipment created)"
+                                }
+                              >
+                                <XCircle className="h-4 w-4" />
+                                Cancel
+                              </Button>
                               {order.returnRequest && order.returnRequest.type === "pending" && (
                                 <Button
                                   variant="ghost"
@@ -1215,6 +1235,8 @@ export function AdminOrdersList() {
                   const vendor = getVendorInfo(order)
                   const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)
                   const returnPickupInfo = getReturnPickupInfo(order)
+                  const canCancel =
+                    !["cancelled", "shipped", "delivered"].includes((order.status || "").toLowerCase()) && !order.awbNumber
                   return (
                     <div key={order._id} className="p-4 hover:bg-muted/30 transition-colors">
                       <div className="space-y-3">
@@ -1395,6 +1417,16 @@ export function AdminOrdersList() {
                           >
                             <Filter className="h-4 w-4" />
                             Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => handleDeleteOrder(order._id)}
+                            disabled={!canCancel}
+                          >
+                            <XCircle className="h-4 w-4" />
+                            Cancel
                           </Button>
                           {order.returnRequest && order.returnRequest.type === "pending" && (
                             <Button

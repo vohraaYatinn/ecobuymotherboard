@@ -192,9 +192,11 @@ function buildStageInfo({ stageKey, order }) {
 /**
  * Render beautiful HTML email template for vendors
  */
-const renderVendorEmailHtml = ({ vendorName, title, message, details, order, stageInfo }) => {
+export const renderVendorEmailHtml = ({ vendorName, title, message, details, order, stageInfo }) => {
   const { icon = "📋", color = "#6B7280", showPrice = false } = stageInfo || {}
-  const orderDate = order.createdAt ? new Date(order.createdAt).toLocaleDateString("en-IN", { 
+  const safeOrder = order || {}
+  const hasOrderDetails = !!safeOrder?.orderNumber
+  const orderDate = safeOrder.createdAt ? new Date(safeOrder.createdAt).toLocaleDateString("en-IN", { 
     year: "numeric", 
     month: "long", 
     day: "numeric",
@@ -203,7 +205,7 @@ const renderVendorEmailHtml = ({ vendorName, title, message, details, order, sta
   }) : ""
 
   // Format order items for display
-  const itemsHtml = order.items && order.items.length > 0 ? order.items.map(item => `
+  const itemsHtml = Array.isArray(safeOrder.items) && safeOrder.items.length > 0 ? safeOrder.items.map(item => `
     <tr style="border-bottom: 1px solid #e5e7eb;">
       <td style="padding: 12px 8px; vertical-align: top;">
         <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">${item.name || "Product"}</div>
@@ -256,6 +258,7 @@ const renderVendorEmailHtml = ({ vendorName, title, message, details, order, sta
         </div>
         ` : ""}
 
+        ${hasOrderDetails ? `
         <!-- Order Summary Card -->
         <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin: 24px 0;">
           <div style="font-size: 18px; font-weight: 700; color: #111827; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 2px solid #e5e7eb;">
@@ -265,7 +268,7 @@ const renderVendorEmailHtml = ({ vendorName, title, message, details, order, sta
           <div style="margin-bottom: 16px;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #6B7280; font-size: 14px;">Order Number:</span>
-              <span style="color: #111827; font-weight: 600; font-size: 14px;">${order.orderNumber}</span>
+              <span style="color: #111827; font-weight: 600; font-size: 14px;">${safeOrder.orderNumber}</span>
             </div>
             ${orderDate ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
@@ -275,12 +278,12 @@ const renderVendorEmailHtml = ({ vendorName, title, message, details, order, sta
             ` : ""}
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #6B7280; font-size: 14px;">Order Status:</span>
-              <span style="color: ${color}; font-weight: 600; font-size: 14px; text-transform: capitalize;">${order.status || "N/A"}</span>
+              <span style="color: ${color}; font-weight: 600; font-size: 14px; text-transform: capitalize;">${safeOrder.status || "N/A"}</span>
             </div>
-            ${order.paymentMethod ? `
+            ${safeOrder.paymentMethod ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #6B7280; font-size: 14px;">Payment Method:</span>
-              <span style="color: #111827; font-weight: 600; font-size: 14px; text-transform: uppercase;">${order.paymentMethod === "cod" ? "Cash on Delivery" : order.paymentMethod}</span>
+              <span style="color: #111827; font-weight: 600; font-size: 14px; text-transform: uppercase;">${safeOrder.paymentMethod === "cod" ? "Cash on Delivery" : safeOrder.paymentMethod}</span>
             </div>
             ` : ""}
           </div>
@@ -309,67 +312,68 @@ const renderVendorEmailHtml = ({ vendorName, title, message, details, order, sta
           <div style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #e5e7eb;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #6B7280; font-size: 14px;">Subtotal:</span>
-              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(order.subtotal || 0)}</span>
+              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(safeOrder.subtotal || 0)}</span>
             </div>
-            ${order.shipping > 0 ? `
+            ${safeOrder.shipping > 0 ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #6B7280; font-size: 14px;">Shipping:</span>
-              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(order.shipping || 0)}</span>
+              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(safeOrder.shipping || 0)}</span>
             </div>
             ` : ""}
-            ${order.cgst > 0 && order.sgst > 0 ? `
+            ${safeOrder.cgst > 0 && safeOrder.sgst > 0 ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #6B7280; font-size: 14px;">CGST (9%):</span>
-              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(order.cgst || 0)}</span>
+              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(safeOrder.cgst || 0)}</span>
             </div>
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #6B7280; font-size: 14px;">SGST (9%):</span>
-              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(order.sgst || 0)}</span>
+              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(safeOrder.sgst || 0)}</span>
             </div>
-            ` : order.igst > 0 ? `
+            ` : safeOrder.igst > 0 ? `
             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
               <span style="color: #6B7280; font-size: 14px;">IGST (18%):</span>
-              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(order.igst || 0)}</span>
+              <span style="color: #111827; font-weight: 600; font-size: 14px;">${money(safeOrder.igst || 0)}</span>
             </div>
             ` : ""}
             <div style="display: flex; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 2px solid #e5e7eb;">
               <span style="color: #111827; font-weight: 700; font-size: 18px;">Total:</span>
-              <span style="color: ${color}; font-weight: 700; font-size: 18px;">${money(order.total || 0)}</span>
+              <span style="color: ${color}; font-weight: 700; font-size: 18px;">${money(safeOrder.total || 0)}</span>
             </div>
           </div>
           ` : ""}
 
           <!-- Tracking Information -->
-          ${order.awbNumber ? `
+          ${safeOrder.awbNumber ? `
           <div style="margin-top: 20px; padding: 16px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px;">
             <div style="font-size: 14px; font-weight: 600; color: #1e40af; margin-bottom: 8px;">📦 Tracking Information</div>
             <div style="font-size: 13px; color: #374151;">
-              <strong>AWB Number:</strong> <span style="font-family: monospace; background: #fff; padding: 4px 8px; border-radius: 4px;">${order.awbNumber}</span>
+              <strong>AWB Number:</strong> <span style="font-family: monospace; background: #fff; padding: 4px 8px; border-radius: 4px;">${safeOrder.awbNumber}</span>
             </div>
           </div>
           ` : ""}
-          ${order.returnAwbNumber ? `
+          ${safeOrder.returnAwbNumber ? `
           <div style="margin-top: 16px; padding: 16px; background: #f3e8ff; border: 1px solid #c4b5fd; border-radius: 8px;">
             <div style="font-size: 14px; font-weight: 600; color: #6b21a8; margin-bottom: 8px;">📦 Return Tracking</div>
             <div style="font-size: 13px; color: #374151;">
-              <strong>Return AWB:</strong> <span style="font-family: monospace; background: #fff; padding: 4px 8px; border-radius: 4px;">${order.returnAwbNumber}</span>
+              <strong>Return AWB:</strong> <span style="font-family: monospace; background: #fff; padding: 4px 8px; border-radius: 4px;">${safeOrder.returnAwbNumber}</span>
             </div>
           </div>
           ` : ""}
         </div>
+        ` : ""}
 
         <!-- Shipping Address -->
-        ${order.shippingAddress ? `
+        ${safeOrder.shippingAddress ? `
         <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin: 24px 0;">
           <div style="font-size: 16px; font-weight: 600; color: #111827; margin-bottom: 12px;">📍 Shipping Address</div>
           <div style="font-size: 14px; color: #374151; line-height: 1.8;">
             <div style="font-weight: 600; color: #111827; margin-bottom: 4px;">
-              ${order.shippingAddress.firstName || ""} ${order.shippingAddress.lastName || ""}
+              ${safeOrder.shippingAddress.firstName || ""} ${safeOrder.shippingAddress.lastName || ""}
             </div>
-            <div>${order.shippingAddress.address1 || ""}${order.shippingAddress.address2 ? `, ${order.shippingAddress.address2}` : ""}</div>
-            <div>${order.shippingAddress.city || ""}, ${order.shippingAddress.state || ""} - ${order.shippingAddress.postcode || ""}</div>
-            ${order.shippingAddress.country ? `<div>${order.shippingAddress.country}</div>` : ""}
-            ${order.shippingAddress.phone ? `<div style="margin-top: 8px;"><strong>Phone:</strong> ${order.shippingAddress.phone}</div>` : ""}
+            <div>${safeOrder.shippingAddress.address1 || ""}${safeOrder.shippingAddress.address2 ? `, ${safeOrder.shippingAddress.address2}` : ""}</div>
+            <div>${safeOrder.shippingAddress.city || ""}, ${safeOrder.shippingAddress.state || ""} - ${safeOrder.shippingAddress.postcode || ""}</div>
+            ${safeOrder.shippingAddress.country ? `<div>${safeOrder.shippingAddress.country}</div>` : ""}
+            ${safeOrder.shippingAddress.phone ? `<div style="margin-top: 8px;"><strong>Phone:</strong> ${safeOrder.shippingAddress.phone}</div>` : ""}
           </div>
         </div>
         ` : ""}

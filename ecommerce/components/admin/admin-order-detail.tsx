@@ -129,6 +129,7 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [saving, setSaving] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [pushingToVendors, setPushingToVendors] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState("")
   const [selectedVendor, setSelectedVendor] = useState("")
@@ -312,6 +313,47 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
       alert("Failed to save changes")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleAdminCancelOrder = async () => {
+    if (!order) return
+
+    const confirmCancel = confirm(
+      "Cancel this order as admin? If the payment was completed online, a refund will be attempted immediately."
+    )
+    if (!confirmCancel) return
+
+    try {
+      setCancelling(true)
+      const token = localStorage.getItem("adminToken")
+      if (!token) {
+        alert("Not authenticated. Please login again.")
+        return
+      }
+
+      const response = await fetch(`${API_URL}/api/admin/orders/${orderId}/cancel`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      })
+
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        alert(data.message || "Failed to cancel order")
+        return
+      }
+
+      alert(data.message || "Order cancelled successfully")
+      await fetchOrder()
+    } catch (err) {
+      console.error("Error cancelling order:", err)
+      alert("Network error. Please try again.")
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -927,6 +969,8 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
   const shippingAddress = getShippingAddress()
   const vendor = getVendorInfo()
   const rawStatus = (order.status || "").toLowerCase()
+  const canCancel =
+    !["cancelled", "shipped", "delivered"].includes(rawStatus) && !order.awbNumber
 
   // GST & payout helpers
   const gstTotal = (order.cgst || 0) + (order.sgst || 0) + (order.igst || 0)
@@ -1797,6 +1841,23 @@ export function AdminOrderDetail({ orderId }: { orderId: string }) {
         </Button>
         
         <div className="flex gap-3">
+          {canCancel && (
+            <Button
+              variant="destructive"
+              onClick={handleAdminCancelOrder}
+              disabled={cancelling}
+              title="Cancel order as admin and attempt refund immediately"
+            >
+              {cancelling ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Cancelling...
+                </>
+              ) : (
+                "Cancel Order"
+              )}
+            </Button>
+          )}
           <Link href="/admin/orders">
             <Button variant="outline">Cancel</Button>
           </Link>

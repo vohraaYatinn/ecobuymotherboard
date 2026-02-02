@@ -4,14 +4,183 @@ import Order from "../models/Order.js"
 import Customer from "../models/Customer.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
+import Product from "../models/Product.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 import { createShipmentForOrder } from "../services/dtdcService.js"
 import Vendor from "../models/Vendor.js"
 import VendorUser from "../models/VendorUser.js"
 import { sendCustomerOrderStageEmail } from "../services/orderCustomerEmailNotifications.js"
 import { notifyVendorsForOrderStage } from "../services/vendorOrderStageNotifications.js"
+import { createRazorpayRefund } from "../services/razorpayService.js"
 
 const router = express.Router()
+
+async function cancelOrderAndRefundAsAdmin({ order, adminId, reason }) {
+  if (!order) {
+    return { ok: false, status: 404, message: "Order not found" }
+  }
+
+  if (order.status === "cancelled") {
+    return { ok: false, status: 400, message: "Order is already cancelled" }
+  }
+
+  // Prevent cancelling shipped/delivered orders and orders with shipments already created.
+  if (["shipped", "delivered"].includes(order.status)) {
+    return { ok: false, status: 400, message: `Cannot cancel order in status: ${order.status}` }
+  }
+  if (order.awbNumber) {
+    return {
+      ok: false,
+      status: 400,
+      message: "Shipment already created for this order. Please handle shipment cancellation separately.",
+    }
+  }
+
+  // Align with customer cancellation rules + allow admin review state.
+  const cancellableStatuses = ["pending", "confirmed", "processing", "admin_review_required"]
+  if (!cancellableStatuses.includes(order.status)) {
+    return { ok: false, status: 400, message: `Cannot cancel order with status: ${order.status}` }
+  }
+
+  let refundResult = null
+  let refundError = null
+
+  // Attempt immediate refund for paid online orders (avoid double-refunds).
+  const alreadyRefunded =
+    order.paymentStatus === "refunded" || order.refundStatus === "completed" || !!order.refundTransactionId
+
+  if (order.paymentMethod === "online" && order.paymentStatus === "paid" && order.paymentTransactionId && !alreadyRefunded) {
+    try {
+      const paymentId = order.paymentMeta?.razorpayPaymentId || order.paymentTransactionId
+      const amountInPaise = Math.round(order.total * 100)
+
+      console.log(`🔄 [ADMIN ORDER CANCEL] Initiating refund for order ${order.orderNumber}`, {
+        orderId: order._id?.toString?.() || String(order._id),
+        paymentId,
+        amount: order.total,
+        amountInPaise,
+        adminId,
+      })
+
+      refundResult = await createRazorpayRefund({
+        paymentId,
+        amountInPaise,
+        notes: {
+          orderId: order._id.toString(),
+          orderNumber: order.orderNumber,
+          reason: "order_cancelled_by_admin",
+          cancelledAt: new Date().toISOString(),
+          adminId: adminId ? String(adminId) : undefined,
+        },
+      })
+
+      console.log(`✅ [ADMIN ORDER CANCEL] Refund successful for order ${order.orderNumber}`, {
+        refundId: refundResult?.id,
+        amount: refundResult?.amount,
+        status: refundResult?.status,
+      })
+
+      order.paymentStatus = "refunded"
+      order.refundStatus = "completed"
+      order.refundTransactionId = refundResult.id
+      order.paymentMeta = {
+        ...(order.paymentMeta || {}),
+        refund: refundResult,
+        refundedAt: new Date().toISOString(),
+        refundProcessedBy: "admin_cancellation",
+      }
+    } catch (err) {
+      refundError = err
+      console.error(`❌ [ADMIN ORDER CANCEL] Refund failed for order ${order.orderNumber}:`, err)
+      order.refundStatus = "failed"
+      order.paymentMeta = {
+        ...(order.paymentMeta || {}),
+        refundError: err?.message || String(err),
+        refundAttemptedAt: new Date().toISOString(),
+        refundProcessedBy: "admin_cancellation",
+      }
+    }
+  }
+
+  // Restore inventory if it was adjusted.
+  try {
+    if (order.inventoryAdjusted) {
+      for (const item of order.items || []) {
+        await Product.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } })
+      }
+      order.inventoryAdjusted = false
+    }
+  } catch (invErr) {
+    console.error(`❌ [ADMIN ORDER CANCEL] Inventory restore failed for ${order.orderNumber}:`, invErr)
+    // Continue; cancellation should still proceed.
+  }
+
+  // Set cancellation metadata
+  order.status = "cancelled"
+  order.paymentMeta = {
+    ...(order.paymentMeta || {}),
+    cancelledAt: new Date().toISOString(),
+    cancelledBy: "admin",
+    cancelledByAdminId: adminId ? String(adminId) : undefined,
+    cancellationReason: reason ? String(reason).trim().slice(0, 300) : "admin_action",
+    refundError: refundError ? (refundError?.message || String(refundError)) : null,
+  }
+
+  await order.save()
+
+  // Customer in-app notification (best-effort)
+  try {
+    const customerId = typeof order.customerId === "object" && order.customerId?._id ? order.customerId._id : order.customerId
+    const refundText =
+      order.paymentMethod === "online"
+        ? order.paymentStatus === "refunded" || order.refundStatus === "completed"
+          ? " Refund has been initiated."
+          : refundError
+            ? " Refund could not be processed automatically; our team will assist."
+            : " Refund will be processed shortly."
+        : ""
+
+    await Notification.create({
+      userId: customerId,
+      userType: "customer",
+      type: "order_cancelled",
+      title: "Order Cancelled by Admin",
+      message: `Your order ${order.orderNumber} was cancelled by admin.${refundText}`,
+      orderId: order._id,
+      orderNumber: order.orderNumber,
+      customerId: customerId,
+      metadata: {
+        cancelledBy: "admin",
+        adminId: adminId ? String(adminId) : undefined,
+      },
+    })
+  } catch (notifErr) {
+    console.error("❌ [ADMIN ORDER CANCEL] Error creating customer notification:", notifErr)
+  }
+
+  // Email buyer + refund email (deduped)
+  try {
+    await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: "status:cancelled" })
+    if (order.refundStatus) {
+      await sendCustomerOrderStageEmail({ orderId: order._id, stageKey: `refund:${order.refundStatus}` })
+    }
+  } catch (emailErr) {
+    console.error("❌ [ADMIN ORDER CANCEL] Error sending cancellation/refund email:", emailErr)
+  }
+
+  // Notify vendor (best-effort)
+  try {
+    await notifyVendorsForOrderStage({ orderId: order._id, stageKey: "status:cancelled" })
+  } catch (vendorErr) {
+    console.error("❌ [ADMIN ORDER CANCEL] Error notifying vendor:", vendorErr)
+  }
+
+  return {
+    ok: true,
+    refundResult,
+    refundError,
+  }
+}
 
 // Get all orders with filters and pagination (Admin only)
 router.get("/", verifyAdminToken, async (req, res) => {
@@ -295,6 +464,38 @@ router.put("/:id/status", verifyAdminToken, async (req, res) => {
 
     const oldStatus = order.status
 
+    // Special handling: admin cancellation should trigger immediate refund + correct customer email copy.
+    if (status === "cancelled" && oldStatus !== "cancelled") {
+      const result = await cancelOrderAndRefundAsAdmin({
+        order,
+        adminId: req.admin?.id,
+        reason: req.body?.reason,
+      })
+
+      if (!result.ok) {
+        return res
+          .status(result.status || 400)
+          .json({ success: false, message: result.message || "Failed to cancel order" })
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: result.refundError
+          ? "Order cancelled. Refund failed - manual intervention required."
+          : result.refundResult
+            ? "Order cancelled and refund initiated successfully"
+            : "Order cancelled successfully",
+        data: {
+          orderId: order._id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          refundStatus: order.refundStatus || null,
+          refundTransactionId: order.refundTransactionId || null,
+        },
+      })
+    }
+
     // Set deliveredAt when order is marked delivered for the first time
     if (status === "delivered" && order.status !== "delivered" && !order.deliveredAt) {
       order.deliveredAt = new Date()
@@ -410,6 +611,37 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
     }
 
     const oldStatus = order.status
+
+    // Special handling: if admin sets status to cancelled via full update, run cancellation flow.
+    if (status === "cancelled" && oldStatus !== "cancelled") {
+      const result = await cancelOrderAndRefundAsAdmin({
+        order,
+        adminId: req.admin?.id,
+        reason: req.body?.reason,
+      })
+
+      if (!result.ok) {
+        return res
+          .status(result.status || 400)
+          .json({ success: false, message: result.message || "Failed to cancel order" })
+      }
+
+      // Populate before returning
+      await order.populate("customerId", "name mobile email")
+      await order.populate("shippingAddress")
+      await order.populate("vendorId", "name email phone address")
+      await order.populate("items.productId", "name brand sku images")
+
+      return res.status(200).json({
+        success: true,
+        message: result.refundError
+          ? "Order cancelled. Refund failed - manual intervention required."
+          : result.refundResult
+            ? "Order cancelled and refund initiated successfully"
+            : "Order cancelled successfully",
+        data: order,
+      })
+    }
 
     if (status) {
       const validStatuses = ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled", "admin_review_required", "return_requested", "return_accepted", "return_rejected", "return_picked_up"]
@@ -843,13 +1075,33 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
       })
     }
 
-    // Soft delete - set status to cancelled
-    order.status = "cancelled"
-    await order.save()
+    const result = await cancelOrderAndRefundAsAdmin({
+      order,
+      adminId: req.admin?.id,
+      reason: req.body?.reason,
+    })
+
+    if (!result.ok) {
+      return res
+        .status(result.status || 400)
+        .json({ success: false, message: result.message || "Failed to cancel order" })
+    }
 
     res.status(200).json({
       success: true,
-      message: "Order cancelled successfully",
+      message: result.refundError
+        ? "Order cancelled. Refund failed - manual intervention required."
+        : result.refundResult
+          ? "Order cancelled and refund initiated successfully"
+          : "Order cancelled successfully",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        refundStatus: order.refundStatus || null,
+        refundTransactionId: order.refundTransactionId || null,
+      },
     })
   } catch (error) {
     console.error("Delete order error:", error)
@@ -860,6 +1112,56 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
       })
     }
     res.status(500).json({
+      success: false,
+      message: "Error cancelling order",
+      error: error.message,
+    })
+  }
+})
+
+// Cancel order (Admin only) - cancels + attempts immediate refund and sends correct customer email.
+router.post("/:id/cancel", verifyAdminToken, async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid order ID format" })
+    }
+
+    const order = await Order.findById(req.params.id)
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" })
+    }
+
+    const result = await cancelOrderAndRefundAsAdmin({
+      order,
+      adminId: req.admin?.id,
+      reason: req.body?.reason,
+    })
+
+    if (!result.ok) {
+      return res
+        .status(result.status || 400)
+        .json({ success: false, message: result.message || "Failed to cancel order" })
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: result.refundError
+        ? "Order cancelled. Refund failed - manual intervention required."
+        : result.refundResult
+          ? "Order cancelled and refund initiated successfully"
+          : "Order cancelled successfully",
+      data: {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        refundStatus: order.refundStatus || null,
+        refundTransactionId: order.refundTransactionId || null,
+      },
+    })
+  } catch (error) {
+    console.error("Admin cancel order error:", error)
+    return res.status(500).json({
       success: false,
       message: "Error cancelling order",
       error: error.message,

@@ -8,6 +8,8 @@ import { ChevronDown, ChevronUp, Check, Loader2, AlertCircle, Volume2, VolumeX }
 import { Button } from "@/components/ui/button"
 import { API_URL } from "@/lib/api-config"
 import { useNotificationSoundContext } from "@/contexts/notification-sound-context"
+import { useUnreadNotificationsCount } from "@/hooks/use-unread-notifications-count"
+import { NotificationBellButton } from "@/components/notification-bell-button"
 
 interface OrderItem {
   name: string
@@ -110,6 +112,7 @@ export default function AcceptOrdersPage() {
   const router = useRouter()
   const { startSound, stopSound, stopAllSounds, isPlaying } = useNotificationSoundContext()
   const [orders, setOrders] = useState<Order[]>([])
+  const [pendingCount, setPendingCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [acceptingOrderId, setAcceptingOrderId] = useState<string | null>(null)
@@ -118,6 +121,7 @@ export default function AcceptOrdersPage() {
   const [soundPlaying, setSoundPlaying] = useState(false)
   const [vendorCommission, setVendorCommission] = useState<number | null>(null)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const { count: unreadNotifications } = useUnreadNotificationsCount({ pollIntervalMs: 30000 })
 
   useEffect(() => {
     logDebug("Page mounted/updated")
@@ -208,6 +212,7 @@ export default function AcceptOrdersPage() {
 
       const newOrders = (data.data || []).filter((order: Order) => order.paymentStatus === "paid")
       setOrders(newOrders)
+      setPendingCount(typeof data?.pagination?.total === "number" ? data.pagination.total : newOrders.length)
 
       // Check for orders that were removed (accepted by someone else or cancelled)
       const currentOrderIds = new Set(newOrders.map((o: Order) => o._id))
@@ -483,6 +488,7 @@ export default function AcceptOrdersPage() {
           <div className="px-4 py-3">
             <div className="flex items-center justify-between">
               <h1 className="text-xl font-bold tracking-tight text-foreground">Accept Orders</h1>
+              <NotificationBellButton count={unreadNotifications} />
             </div>
           </div>
         </div>
@@ -528,8 +534,9 @@ export default function AcceptOrdersPage() {
               )}
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20">
                 <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                <span className="text-xs font-semibold text-primary">{orders.length} pending</span>
+                <span className="text-xs font-semibold text-primary">{pendingCount} pending</span>
               </div>
+              <NotificationBellButton count={unreadNotifications} />
             </div>
           </div>
         </div>
