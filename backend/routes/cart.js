@@ -83,19 +83,28 @@ router.get("/", async (req, res) => {
       })
     }
 
-    // Format response
-    const items = cart.items.map((item) => ({
-      _id: item._id,
-      product: {
-        _id: item.productId._id,
-        name: item.productId.name,
-        brand: item.productId.brand,
-        price: item.productId.price,
-        images: item.productId.images,
-      },
-      quantity: item.quantity,
-      price: item.price,
-    }))
+    // Remove orphaned items (product was deleted) so they don't cause errors on next fetch
+    const hadOrphans = cart.items.some((item) => item.productId == null)
+    if (hadOrphans) {
+      cart.items = cart.items.filter((item) => item.productId != null)
+      await cart.save()
+    }
+
+    // Format response (filter out items whose product was deleted and is now null after populate)
+    const items = cart.items
+      .filter((item) => item.productId != null)
+      .map((item) => ({
+        _id: item._id,
+        product: {
+          _id: item.productId._id,
+          name: item.productId.name,
+          brand: item.productId.brand,
+          price: item.productId.price,
+          images: item.productId.images,
+        },
+        quantity: item.quantity,
+        price: item.price,
+      }))
 
     res.json({
       success: true,
