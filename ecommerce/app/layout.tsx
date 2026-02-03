@@ -1,7 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
+import { AnalyticsClient } from "@/components/analytics-client"
 import { CartProvider } from "@/lib/cart-context"
 import { WishlistProvider } from "@/lib/wishlist-context"
 import { Toaster } from "@/components/ui/toaster"
@@ -36,7 +36,7 @@ export default function RootLayout({
           </WishlistProvider>
         </CartProvider>
         <Toaster />
-        <Analytics />
+        <AnalyticsClient />
       </body>
     </html>
   )
