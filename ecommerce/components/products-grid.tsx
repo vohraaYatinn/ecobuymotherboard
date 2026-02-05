@@ -1,17 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Grid3x3, List, Star, ShoppingCart, Loader2, Heart, MessageSquare } from "lucide-react"
+import { Grid3x3, List, Star, ShoppingCart, Loader2, Heart, MessageSquare, ChevronLeft, ChevronRight } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
 import { EnquiryModal } from "@/components/enquiry-modal"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const PAGE_SIZE = 24
 
 interface Product {
   _id: string
@@ -26,9 +27,18 @@ interface Product {
   stock: number
 }
 
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  pages: number
+}
+
 export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; category?: string }) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
   const [products, setProducts] = useState<Product[]>([])
+  const [pagination, setPagination] = useState<PaginationInfo>({ page: 1, limit: PAGE_SIZE, total: 0, pages: 0 })
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [sortBy, setSortBy] = useState("best-selling")
@@ -37,13 +47,23 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
   const [isEnquiryModalOpen, setIsEnquiryModalOpen] = useState(false)
   const { addToCart } = useCart()
   const { isFavorite, addToWishlist, removeFromWishlist } = useWishlist()
+  const prevFiltersRef = useRef({ sortBy, searchQuery, category })
 
   useEffect(() => {
     const fetchProducts = async () => {
+      const filtersChanged =
+        prevFiltersRef.current.sortBy !== sortBy ||
+        prevFiltersRef.current.searchQuery !== searchQuery ||
+        prevFiltersRef.current.category !== category
+      const pageToFetch = filtersChanged ? 1 : page
+      if (filtersChanged) {
+        setPage(1)
+        prevFiltersRef.current = { sortBy, searchQuery, category }
+      }
+
       setLoading(true)
       setError("")
       try {
-        // Always use products endpoint
         let sortParam = "createdAt"
         let sortOrder = "desc"
 
@@ -59,27 +79,32 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
         }
 
         const params = new URLSearchParams()
-        params.append("status", "in-stock")
+        params.append("status", "available")
         params.append("sortBy", sortParam)
         params.append("sortOrder", sortOrder)
-        params.append("limit", "50")
-        
-        // Add search parameter if provided
+        params.append("page", String(pageToFetch))
+        params.append("limit", String(PAGE_SIZE))
+
         if (searchQuery && searchQuery.trim().length > 0) {
           params.append("search", searchQuery.trim())
         }
-        
-        // Add category filter if provided (can be slug or ObjectId)
         if (category) {
           params.append("category", category)
         }
-        
-        const response = await fetch(`${API_URL}/api/products?${params.toString()}`)
 
+        const response = await fetch(`${API_URL}/api/products?${params.toString()}`)
         const data = await response.json()
 
         if (data.success) {
           setProducts(data.data)
+          if (data.pagination) {
+            setPagination({
+              page: data.pagination.page,
+              limit: data.pagination.limit,
+              total: data.pagination.total,
+              pages: data.pagination.pages,
+            })
+          }
         } else {
           setError("Failed to load products")
         }
@@ -92,7 +117,7 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
     }
 
     fetchProducts()
-  }, [sortBy, searchQuery, category])
+  }, [page, sortBy, searchQuery, category])
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -111,6 +136,22 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
     if (!imageUrl) return "/placeholder.svg"
     if (imageUrl.startsWith("http")) return imageUrl
     return `${API_URL}${imageUrl}`
+  }
+
+  // Build page numbers to show: [1, 2, -1, 8, 9, 10] where -1 = ellipsis
+  const getPageNumbers = (current: number, totalPages: number): number[] => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
+    const pages: number[] = []
+    const showLeft = current > 3
+    const showRight = current < totalPages - 2
+    pages.push(1)
+    if (showLeft) pages.push(-1)
+    const start = Math.max(2, current - 1)
+    const end = Math.min(totalPages - 1, current + 1)
+    for (let i = start; i <= end; i++) if (!pages.includes(i)) pages.push(i)
+    if (showRight) pages.push(-1)
+    if (totalPages > 1) pages.push(totalPages)
+    return pages
   }
 
   if (loading) {
@@ -144,7 +185,7 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
                   Search Results for <span className="text-primary">"{searchQuery}"</span>
                 </>
               ) : (
-                "Television Inverter PCB Boards (LED Driver)"
+                "PCB Boards & Motherboards"
               )}
             </h1>
 
@@ -188,7 +229,9 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
           </div>
 
           <span className="text-xs sm:text-sm text-muted-foreground px-1">
-            Showing 1 - {products.length} of {products.length} items
+            {pagination.total === 0
+              ? "No items"
+              : `Showing ${(pagination.page - 1) * pagination.limit + 1} - ${Math.min(pagination.page * pagination.limit, pagination.total)} of ${pagination.total} items`}
           </span>
         </div>
       </div>
@@ -214,7 +257,7 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
         <div className={viewMode === "grid" ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" : "space-y-3 sm:space-y-4"}>
           {products.map((product) => {
             const discount = getDiscountPercentage(product.price, product.comparePrice)
-            const isInStock = product.status === "in-stock" && product.stock > 0
+            const isPurchasable = (product.status === "in-stock" || product.status === "low-stock") && product.stock > 0
 
             return (
               <div
@@ -225,6 +268,9 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
                   <Link href={`/products/${product._id}`} className="block relative">
                     {discount > 0 && (
                       <Badge className="absolute top-2 left-2 z-10 bg-red-500 text-xs sm:text-sm px-1.5 sm:px-2 py-0.5">{discount}% OFF</Badge>
+                    )}
+                    {product.status === "low-stock" && (
+                      <Badge className="absolute top-2 right-12 z-10 bg-amber-500 text-xs sm:text-sm px-1.5 sm:px-2 py-0.5">Low Stock</Badge>
                     )}
                     <div className="relative aspect-square overflow-hidden bg-muted">
                       <Image
@@ -300,7 +346,7 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
                   <Button
                     className="w-full h-10 sm:h-11 text-sm sm:text-base touch-manipulation"
                     size="lg"
-                    disabled={!isInStock || addingToCart === product._id}
+                    disabled={!isPurchasable || addingToCart === product._id}
                     onClick={async () => {
                       setAddingToCart(product._id)
                       try {
@@ -313,12 +359,64 @@ export function ProductsGrid({ searchQuery, category }: { searchQuery?: string; 
                     }}
                   >
                     <ShoppingCart className="h-4 w-4 mr-2" />
-                    {addingToCart === product._id ? "Adding..." : isInStock ? "Add to Cart" : "Out of Stock"}
+                    {addingToCart === product._id ? "Adding..." : isPurchasable ? "Add to Cart" : "Out of Stock"}
                   </Button>
                 </div>
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && pagination.pages > 1 && (
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <p className="text-sm text-muted-foreground order-2 sm:order-1">
+            Page {pagination.page} of {pagination.pages}
+          </p>
+          <nav className="flex items-center gap-1 order-1 sm:order-2" aria-label="Product pagination">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              disabled={pagination.page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-1 mx-1">
+              {getPageNumbers(pagination.page, pagination.pages).map((n, i) =>
+                n === -1 ? (
+                  <span key={`ellipsis-${i}`} className="px-2 text-muted-foreground">
+                    …
+                  </span>
+                ) : (
+                  <Button
+                    key={n}
+                    variant={pagination.page === n ? "default" : "outline"}
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => setPage(n)}
+                    aria-label={`Page ${n}`}
+                    aria-current={pagination.page === n ? "page" : undefined}
+                  >
+                    {n}
+                  </Button>
+                )
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              disabled={pagination.page >= pagination.pages}
+              onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </nav>
         </div>
       )}
 

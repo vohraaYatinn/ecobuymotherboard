@@ -14,6 +14,12 @@ const __dirname = path.dirname(__filename)
 
 const router = express.Router()
 
+/** Escape special regex characters in a string for safe use in $regex */
+function escapeRegex(str) {
+  if (typeof str !== "string") return ""
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 /**
  * Resolve a category value (ObjectId or slug/alias) to an active Category doc
  */
@@ -47,44 +53,48 @@ const resolveCategoryDoc = async (categoryValue) => {
 // Get all products with filters and pagination
 router.get("/", async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      search = "",
-      status = "",
-      category = "",
-      brand = "",
-      sortBy = "createdAt",
-      sortOrder = "desc",
-    } = req.query
+    const raw = req.query
+    const pageNum = Math.max(1, parseInt(raw.page, 10) || 1)
+    const limitNum = Math.min(100, Math.max(1, parseInt(raw.limit, 10) || 10))
+    const search = typeof raw.search === "string" ? raw.search.trim() : ""
+    const status = typeof raw.status === "string" ? raw.status.trim() : ""
+    const category = typeof raw.category === "string" ? raw.category.trim() : ""
+    const brand = typeof raw.brand === "string" ? raw.brand.trim() : ""
+    const sortBy = raw.sortBy || "createdAt"
+    const sortOrder = raw.sortOrder === "asc" ? "asc" : "desc"
 
     // Build filter object
     const filter = {}
 
-    // Search filter
+    // Search filter (escape regex so special chars don't break query)
     if (search) {
+      const safeSearch = escapeRegex(search)
       filter.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { sku: { $regex: search, $options: "i" } },
-        { brand: { $regex: search, $options: "i" } },
+        { name: { $regex: safeSearch, $options: "i" } },
+        { sku: { $regex: safeSearch, $options: "i" } },
+        { brand: { $regex: safeSearch, $options: "i" } },
       ]
     }
 
-    // Status filter
+    // Status filter: "available" = in-stock or low-stock (for storefront)
     if (status && status !== "all") {
-      filter.status = status
+      if (status === "available") {
+        filter.status = { $in: ["in-stock", "low-stock"] }
+      } else {
+        filter.status = status
+      }
     }
 
-    // Brand filter
+    // Brand filter (escape regex for exact/safe match)
     if (brand) {
-      filter.brand = { $regex: brand, $options: "i" }
+      filter.brand = { $regex: escapeRegex(brand), $options: "i" }
     }
 
     // Only show active products
     filter.isActive = true
 
     // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit)
+    const skip = (pageNum - 1) * limitNum
 
     // Build sort object
     const sort = {}
@@ -95,25 +105,7 @@ router.get("/", async (req, res) => {
     let total = 0
     
     if (category) {
-      // Find category
-      let categoryDoc = null
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        categoryDoc = await Category.findById(category)
-      } else {
-        categoryDoc = await Category.findOne({ slug: category, isActive: true })
-        if (!categoryDoc) {
-          // Try reverse mapping
-          const reverseMap = {
-            "tv-pcb": "television-pcb",
-            "tv-motherboard": "television-motherboard",
-            "tv-inverter": "television-inverter"
-          }
-          const newSlug = reverseMap[category]
-          if (newSlug) {
-            categoryDoc = await Category.findOne({ slug: newSlug, isActive: true })
-          }
-        }
-      }
+      const categoryDoc = await resolveCategoryDoc(category)
       
       if (categoryDoc) {
         // Get all matching products (no category filter in DB query)
@@ -153,7 +145,7 @@ router.get("/", async (req, res) => {
         })
         
         total = matchingProducts.length
-        products = matchingProducts.slice(skip, skip + parseInt(limit))
+        products = matchingProducts.slice(skip, skip + limitNum)
       } else {
         products = []
         total = 0
@@ -163,7 +155,7 @@ router.get("/", async (req, res) => {
       products = await Product.find(filter)
         .sort(sort)
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(limitNum)
         .lean()
       
       total = await Product.countDocuments(filter)
@@ -236,10 +228,10 @@ router.get("/", async (req, res) => {
       success: true,
       data: products,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
-        pages: Math.ceil(total / parseInt(limit)),
+        pages: Math.ceil(total / limitNum),
       },
     })
   } catch (error) {

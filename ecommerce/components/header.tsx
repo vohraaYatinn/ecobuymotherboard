@@ -17,7 +17,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
-import { Menu, ShoppingCart, Heart, MapPin, User, Globe, Package, LogOut, LayoutDashboard, Bell, Home, Info, Mail, Store, X } from "lucide-react"
+import { Menu, ShoppingCart, Heart, MapPin, User, Globe, Package, LogOut, LayoutDashboard, Bell, Home, Info, Mail, Store, X, ChevronDown, ChevronRight, Headphones } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 import { useWishlist } from "@/lib/wishlist-context"
 import { SearchBar } from "@/components/search-bar"
@@ -37,6 +37,8 @@ export function Header() {
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [categories, setCategories] = useState<Category[]>([])
   const [loadingCategories, setLoadingCategories] = useState(true)
+  const [mobileProductsOpen, setMobileProductsOpen] = useState(false)
+  const [mobileCustomerServicesOpen, setMobileCustomerServicesOpen] = useState(false)
   const { cartCount } = useCart()
   const { wishlistCount } = useWishlist()
 
@@ -317,7 +319,7 @@ export function Header() {
             {/* <div className="hidden sm:block text-sm font-medium whitespace-nowrap">Rs. 0.00</div> */}
 
             {/* Mobile Menu */}
-            <Sheet open={isOpen} onOpenChange={setIsOpen}>
+            <Sheet open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) { setMobileProductsOpen(false); setMobileCustomerServicesOpen(false); } }}>
               <SheetTrigger asChild className="md:hidden">
                 <Button variant="ghost" size="icon" className="h-9 w-9">
                   <Menu className="h-5 w-5" />
@@ -357,14 +359,50 @@ export function Header() {
                       <Home className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
                       <span>Home</span>
                     </Link>
-                    <Link
-                      href="/products"
-                      className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors group"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      <Package className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                      <span>Products</span>
-                    </Link>
+                    {/* Products expandable section (mobile) */}
+                    <div className="rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => setMobileProductsOpen((prev) => !prev)}
+                        className="flex w-full items-center justify-between gap-3 px-4 py-3 rounded-lg text-base font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors group"
+                        aria-expanded={mobileProductsOpen}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Package className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <span>Products</span>
+                        </div>
+                        {mobileProductsOpen ? (
+                          <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                        )}
+                      </button>
+                      {mobileProductsOpen && (
+                        <div className="ml-4 mt-1 pl-4 border-l-2 border-border space-y-0.5">
+                          <Link
+                            href="/products"
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            All Products
+                          </Link>
+                          {loadingCategories ? (
+                            <div className="px-3 py-2.5 text-sm text-muted-foreground">Loading categories...</div>
+                          ) : (
+                            categories.map((category) => (
+                              <Link
+                                key={category._id}
+                                href={`/products?category=${category.slug}`}
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                                onClick={() => setIsOpen(false)}
+                              >
+                                {category.name}
+                              </Link>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <Link
                       href="/contact"
                       className="flex items-center gap-3 px-4 py-3 rounded-lg text-base font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors group"
@@ -373,6 +411,57 @@ export function Header() {
                       <Mail className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
                       <span>Contact</span>
                     </Link>
+                    {/* Customer Services expandable section (mobile) */}
+                    <div className="rounded-lg">
+                      <button
+                        type="button"
+                        onClick={() => setMobileCustomerServicesOpen((prev) => !prev)}
+                        className="flex w-full items-center justify-between gap-3 px-4 py-3 rounded-lg text-base font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors group"
+                        aria-expanded={mobileCustomerServicesOpen}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Headphones className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <span>Customer Services</span>
+                        </div>
+                        {mobileCustomerServicesOpen ? (
+                          <ChevronDown className="h-5 w-5 text-muted-foreground shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                        )}
+                      </button>
+                      {mobileCustomerServicesOpen && (
+                        <div className="ml-4 mt-1 pl-4 border-l-2 border-border space-y-0.5">
+                          <Link
+                            href="/privacy-policy"
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            Privacy Policy
+                          </Link>
+                          <Link
+                            href="/terms"
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            Terms & Conditions
+                          </Link>
+                          <Link
+                            href="/return-policy"
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            Refund / Return Policy
+                          </Link>
+                          <Link
+                            href="/shipping-policy"
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            Shipping Policy
+                          </Link>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Divider */}
@@ -543,6 +632,36 @@ export function Header() {
               <Link href="/contact" className="text-sm font-medium hover:text-primary whitespace-nowrap">
                 Contact Us
               </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger className="text-sm font-medium hover:text-primary whitespace-nowrap flex items-center gap-1 outline-none">
+                  Customer Services
+                  <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuItem asChild>
+                    <Link href="/privacy-policy" className="cursor-pointer">
+                      Privacy Policy
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/terms" className="cursor-pointer">
+                      Terms & Conditions
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/return-policy" className="cursor-pointer">
+                      Refund / Return Policy
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/shipping-policy" className="cursor-pointer">
+                      Shipping Policy
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </nav>
         </div>

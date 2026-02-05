@@ -15,11 +15,7 @@ export default function Home() {
               Home
             </a>
             <span className="text-muted-foreground">/</span>
-            <a href="/" className="text-muted-foreground hover:text-foreground whitespace-nowrap">
-              All Collections
-            </a>
-            <span className="text-muted-foreground">/</span>
-            <span className="text-foreground truncate">Television Inverter PCB Boards (LED Driver)</span>
+            <span className="text-foreground whitespace-nowrap">All Collections</span>
           </div>
         </div>
       </div>

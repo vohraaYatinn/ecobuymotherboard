@@ -19,9 +19,17 @@ import {
 } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Search, Eye, Plus, Edit, Loader2, Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Trash2, CheckSquare, Square } from "lucide-react"
+import { Search, Eye, Plus, Edit, Loader2, Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertCircle, Trash2, CheckSquare, Square, ChevronLeft, ChevronRight, X } from "lucide-react"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
+const PAGE_SIZE = 24
+
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  pages: number
+}
 
 interface Product {
   _id: string
@@ -63,6 +71,8 @@ interface BulkUploadResult {
 
 export function AdminProductsList() {
   const [products, setProducts] = useState<Product[]>([])
+  const [pagination, setPagination] = useState<PaginationInfo>({ page: 1, limit: PAGE_SIZE, total: 0, pages: 0 })
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
@@ -102,9 +112,34 @@ export function AdminProductsList() {
     fetchFilterOptions()
   }, [])
 
-  // Fetch products
+  const prevFiltersRef = useRef({ search, statusFilter, categoryFilter, brandFilter })
+
+  // Reset to page 1 when filters change (do not update ref here so fetch effect sees the change)
+  useEffect(() => {
+    const filtersChanged =
+      prevFiltersRef.current.search !== search ||
+      prevFiltersRef.current.statusFilter !== statusFilter ||
+      prevFiltersRef.current.categoryFilter !== categoryFilter ||
+      prevFiltersRef.current.brandFilter !== brandFilter
+    if (filtersChanged) {
+      setPage(1)
+    }
+  }, [search, statusFilter, categoryFilter, brandFilter])
+
+  // Fetch products with pagination
   useEffect(() => {
     const fetchProducts = async () => {
+      const filtersChanged =
+        prevFiltersRef.current.search !== search ||
+        prevFiltersRef.current.statusFilter !== statusFilter ||
+        prevFiltersRef.current.categoryFilter !== categoryFilter ||
+        prevFiltersRef.current.brandFilter !== brandFilter
+      const pageToFetch = filtersChanged ? 1 : page
+      if (filtersChanged) {
+        setPage(1)
+        prevFiltersRef.current = { search, statusFilter, categoryFilter, brandFilter }
+      }
+
       setLoading(true)
       setError("")
       try {
@@ -113,13 +148,22 @@ export function AdminProductsList() {
         if (statusFilter && statusFilter !== "all") params.append("status", statusFilter)
         if (categoryFilter && categoryFilter !== "all") params.append("category", categoryFilter)
         if (brandFilter && brandFilter !== "all") params.append("brand", brandFilter)
-        params.append("limit", "50")
+        params.append("page", String(pageToFetch))
+        params.append("limit", String(PAGE_SIZE))
 
         const response = await fetch(`${API_URL}/api/products?${params.toString()}`)
         const data = await response.json()
 
         if (data.success) {
           setProducts(data.data)
+          if (data.pagination) {
+            setPagination({
+              page: data.pagination.page,
+              limit: data.pagination.limit,
+              total: data.pagination.total,
+              pages: data.pagination.pages,
+            })
+          }
         } else {
           setError("Failed to load products")
         }
@@ -131,13 +175,12 @@ export function AdminProductsList() {
       }
     }
 
-    // Debounce search
     const timeoutId = setTimeout(() => {
       fetchProducts()
     }, 500)
 
     return () => clearTimeout(timeoutId)
-  }, [search, statusFilter, categoryFilter, brandFilter])
+  }, [page, search, statusFilter, categoryFilter, brandFilter])
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -145,6 +188,21 @@ export function AdminProductsList() {
       currency: "INR",
       maximumFractionDigits: 0,
     }).format(price)
+  }
+
+  const getPageNumbers = (current: number, totalPages: number): number[] => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1)
+    const pages: number[] = []
+    const showLeft = current > 3
+    const showRight = current < totalPages - 2
+    pages.push(1)
+    if (showLeft) pages.push(-1)
+    const start = Math.max(2, current - 1)
+    const end = Math.min(totalPages - 1, current + 1)
+    for (let i = start; i <= end; i++) if (!pages.includes(i)) pages.push(i)
+    if (showRight) pages.push(-1)
+    if (totalPages > 1) pages.push(totalPages)
+    return pages
   }
 
   // Download Excel template
@@ -214,13 +272,28 @@ export function AdminProductsList() {
 
       if (data.success) {
         setUploadResult(data.data)
-        // Refresh products list
+        // Refresh products list (current page, same filters)
         const params = new URLSearchParams()
-        params.append("limit", "50")
+        if (search) params.append("search", search)
+        if (statusFilter && statusFilter !== "all") params.append("status", statusFilter)
+        if (categoryFilter && categoryFilter !== "all") params.append("category", categoryFilter)
+        if (brandFilter && brandFilter !== "all") params.append("brand", brandFilter)
+        params.append("page", String(page))
+        params.append("limit", String(PAGE_SIZE))
         const productsResponse = await fetch(`${API_URL}/api/products?${params.toString()}`)
         const productsData = await productsResponse.json()
         if (productsData.success) {
           setProducts(productsData.data)
+          if (productsData.pagination) {
+            const pag = productsData.pagination
+            setPagination({
+              page: pag.page,
+              limit: pag.limit,
+              total: pag.total,
+              pages: pag.pages,
+            })
+            if (pag.pages > 0 && page > pag.pages) setPage(pag.pages)
+          }
         }
       } else {
         setUploadError(data.message || "Failed to upload file")
@@ -292,17 +365,28 @@ export function AdminProductsList() {
         alert(`Successfully deleted ${data.data.deletedCount} product(s)`)
         setSelectedProducts(new Set())
         setBulkDeleteDialogOpen(false)
-        // Refresh products list
+        // Refresh products list (stay on current page, update total)
         const params = new URLSearchParams()
         if (search) params.append("search", search)
         if (statusFilter && statusFilter !== "all") params.append("status", statusFilter)
         if (categoryFilter && categoryFilter !== "all") params.append("category", categoryFilter)
         if (brandFilter && brandFilter !== "all") params.append("brand", brandFilter)
-        params.append("limit", "50")
+        params.append("page", String(page))
+        params.append("limit", String(PAGE_SIZE))
         const productsResponse = await fetch(`${API_URL}/api/products?${params.toString()}`)
         const productsData = await productsResponse.json()
         if (productsData.success) {
           setProducts(productsData.data)
+          if (productsData.pagination) {
+            const pag = productsData.pagination
+            setPagination({
+              page: pag.page,
+              limit: pag.limit,
+              total: pag.total,
+              pages: pag.pages,
+            })
+            if (pag.pages > 0 && page > pag.pages) setPage(pag.pages)
+          }
         }
       } else {
         alert(data.message || "Failed to delete products")
@@ -562,6 +646,24 @@ export function AdminProductsList() {
               ))}
             </SelectContent>
           </Select>
+          {(search || statusFilter !== "all" || (categoryFilter && categoryFilter !== "all") || (brandFilter && brandFilter !== "all")) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setSearch("")
+                setStatusFilter("all")
+                setCategoryFilter("all")
+                setBrandFilter("all")
+                setPage(1)
+                prevFiltersRef.current = { search: "", statusFilter: "all", categoryFilter: "all", brandFilter: "all" }
+              }}
+            >
+              <X className="h-4 w-4" />
+              Clear filters
+            </Button>
+          )}
         </div>
       </div>
 
@@ -582,6 +684,58 @@ export function AdminProductsList() {
       {/* Products Grid */}
       {!loading && !error && (
         <>
+          {/* Total count and pagination info */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <p className="text-sm text-muted-foreground">
+              {pagination.total === 0
+                ? "No products"
+                : `Showing ${(pagination.page - 1) * pagination.limit + 1} - ${Math.min(pagination.page * pagination.limit, pagination.total)} of ${pagination.total} products`}
+            </p>
+            {pagination.pages > 1 && (
+              <nav className="flex items-center gap-1" aria-label="Products pagination">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  disabled={pagination.page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-1 mx-1">
+                  {getPageNumbers(pagination.page, pagination.pages).map((n, i) =>
+                    n === -1 ? (
+                      <span key={`ellipsis-${i}`} className="px-2 text-muted-foreground">…</span>
+                    ) : (
+                      <Button
+                        key={n}
+                        variant={pagination.page === n ? "default" : "outline"}
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={() => setPage(n)}
+                        aria-label={`Page ${n}`}
+                        aria-current={pagination.page === n ? "page" : undefined}
+                      >
+                        {n}
+                      </Button>
+                    )
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  disabled={pagination.page >= pagination.pages}
+                  onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </nav>
+            )}
+          </div>
+
           {products.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground">No products found</p>
@@ -697,6 +851,56 @@ export function AdminProductsList() {
                 </Card>
               ))}
               </div>
+
+              {/* Bottom pagination */}
+              {pagination.pages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Page {pagination.page} of {pagination.pages}
+                  </p>
+                  <nav className="flex items-center gap-1" aria-label="Products pagination">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9"
+                      disabled={pagination.page <= 1}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      aria-label="Previous page"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="flex items-center gap-1 mx-1">
+                      {getPageNumbers(pagination.page, pagination.pages).map((n, i) =>
+                        n === -1 ? (
+                          <span key={`ellipsis-b-${i}`} className="px-2 text-muted-foreground">…</span>
+                        ) : (
+                          <Button
+                            key={n}
+                            variant={pagination.page === n ? "default" : "outline"}
+                            size="icon"
+                            className="h-9 w-9"
+                            onClick={() => setPage(n)}
+                            aria-label={`Page ${n}`}
+                            aria-current={pagination.page === n ? "page" : undefined}
+                          >
+                            {n}
+                          </Button>
+                        )
+                      )}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9"
+                      disabled={pagination.page >= pagination.pages}
+                      onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+                      aria-label="Next page"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </nav>
+                </div>
+              )}
             </div>
           )}
         </>
