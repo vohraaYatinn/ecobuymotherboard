@@ -102,9 +102,7 @@ export function VendorRegistrationForm() {
     } else if (!/^\d{10}$/.test(formData.storePhone.replace(/\D/g, ""))) {
       newErrors.storePhone = "Phone number must be exactly 10 digits"
     }
-    if (!formData.gstNumber.trim()) {
-      newErrors.gstNumber = "GST number is required"
-    } else if (!/^[0-9A-Z]{15}$/.test(formData.gstNumber.trim().toUpperCase())) {
+    if (formData.gstNumber.trim() && !/^[0-9A-Z]{15}$/.test(formData.gstNumber.trim().toUpperCase())) {
       newErrors.gstNumber = "GST should be 15 characters (alphanumeric, uppercase)"
     }
     if (!formData.bankAccountNumber.trim()) {
@@ -412,7 +410,7 @@ export function VendorRegistrationForm() {
           </div>
 
           <div>
-            <Label htmlFor="gstNumber">GST No *</Label>
+            <Label htmlFor="gstNumber">GST No (optional)</Label>
             <Input
               id="gstNumber"
               value={formData.gstNumber}
@@ -587,8 +585,12 @@ export function VendorRegistrationForm() {
               <br />
               <strong>Store Phone:</strong> {formData.storePhone}
               <br />
-              <strong>GST:</strong> {formData.gstNumber}
-              <br />
+              {formData.gstNumber ? (
+                <>
+                  <strong>GST:</strong> {formData.gstNumber}
+                  <br />
+                </>
+              ) : null}
               <strong>PAN:</strong> {formData.pan}
               <br />
               <strong>Bank A/C:</strong> {formData.bankAccountNumber}

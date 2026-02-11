@@ -1177,16 +1177,6 @@ export function AdminOrdersList() {
                                 variant="ghost"
                                 size="sm"
                                 className="gap-2"
-                                onClick={() => openAssignVendorDialog(order)}
-                                title="Assign Vendor"
-                              >
-                                <UserPlus className="h-4 w-4" />
-                                Vendor
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="gap-2"
                                 onClick={() => openUpdateDialog(order)}
                               >
                                 <Filter className="h-4 w-4" />
@@ -1400,15 +1390,6 @@ export function AdminOrdersList() {
                               View
                             </Button>
                           </Link>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-2 bg-transparent"
-                            onClick={() => openAssignVendorDialog(order)}
-                          >
-                            <UserPlus className="h-4 w-4" />
-                            Vendor
-                          </Button>
                           <Button
                             variant="outline"
                             size="sm"

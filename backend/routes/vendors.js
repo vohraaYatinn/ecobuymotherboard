@@ -720,7 +720,7 @@ router.post("/register", handleVendorDocsUpload, async (req, res) => {
       referralCode,
     } = req.body
 
-    // Validate required fields
+    // Validate required fields (gstNumber is optional)
     if (
       !username ||
       !email ||
@@ -731,7 +731,6 @@ router.post("/register", handleVendorDocsUpload, async (req, res) => {
       !state ||
       !postcode ||
       !storePhone ||
-      !gstNumber ||
       !bankAccountNumber ||
       !ifscCode ||
       !pan
@@ -739,6 +738,15 @@ router.post("/register", handleVendorDocsUpload, async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "All required fields must be filled",
+      })
+    }
+
+    // If GST is provided, validate format (15 alphanumeric chars)
+    const gstTrimmed = (gstNumber && typeof gstNumber === "string") ? gstNumber.trim() : ""
+    if (gstTrimmed && !/^[0-9A-Z]{15}$/i.test(gstTrimmed)) {
+      return res.status(400).json({
+        success: false,
+        message: "GST should be 15 characters (alphanumeric, uppercase)",
       })
     }
 
@@ -774,7 +782,7 @@ router.post("/register", handleVendorDocsUpload, async (req, res) => {
         postcode: postcode,
         country: country || "india",
       },
-      gstNumber,
+      gstNumber: gstTrimmed || "",
       bankAccountNumber,
       ifscCode,
       pan,

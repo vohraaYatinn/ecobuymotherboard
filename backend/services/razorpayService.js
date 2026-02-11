@@ -2,12 +2,12 @@ import axios from "axios"
 import crypto from "crypto"
 
 // Hardcoded Razorpay credentials as requested
-const RAZORPAY_KEY_ID = "rzp_test_Rp4vS6I7nGmWno"
-const RAZORPAY_KEY_SECRET = "nl93rF11jwRW3n3MBxChzxVw"
+// const RAZORPAY_KEY_ID = "rzp_test_Rp4vS6I7nGmWno"
+// const RAZORPAY_KEY_SECRET = "nl93rF11jwRW3n3MBxChzxVw"
 
 //real
-// const RAZORPAY_KEY_ID = "rzp_live_RpobWbF6yCjn7p"
-// const RAZORPAY_KEY_SECRET = "Znm1sg4IUjB5UwsChm931veJ"
+const RAZORPAY_KEY_ID = "rzp_live_RpobWbF6yCjn7p"
+const RAZORPAY_KEY_SECRET = "Znm1sg4IUjB5UwsChm931veJ"
 
 const RAZORPAY_MERCHANT_ID = "RCIOtoLufeT9e8"
 
