@@ -1,59 +1,86 @@
 # Mobile App Setup Guide
 
-This guide explains how to build and run the Elecobuy Customer mobile app.
+This guide explains how to build and run the Elecobuy Customer Android app using Capacitor.
+
+## Quick start (Android)
+
+From the `ecommerce` folder:
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. If you don't have an android folder yet, add the Android platform (first time only)
+npx cap add android
+
+# 3. Build the web app for mobile (static export) and sync to Android
+npm run cap:build
+
+# 4. Open Android Studio
+npm run cap:android
+```
+
+In Android Studio: use **Run** (green play) to build and run on an emulator or connected device.
+
+To build a debug APK from the terminal:
+
+```bash
+npm run android:build
+npm run android:install   # install on connected device
+npm run android:run       # launch app
+```
 
 ## Prerequisites
 
-- Node.js (v18 or higher)
-- Android Studio (for Android development)
-- Xcode (for iOS development, macOS only)
-- Java Development Kit (JDK) for Android
+- **Node.js** v18 or higher
+- **Android Studio** (for Android) — [download](https://developer.android.com/studio)
+- **JDK 17** (usually bundled with Android Studio)
+- **Xcode** (for iOS, macOS only)
 
-## Installation
+## First-time setup
 
-1. Install dependencies:
+### 1. Install dependencies
+
 ```bash
-npm install --legacy-peer-deps
+cd ecommerce
+npm install
 ```
 
-2. Build the Next.js app:
+### 2. Add Android platform (if `android` folder doesn’t exist)
+
 ```bash
-npm run build
+# Build the app for mobile first (required for Capacitor)
+npm run build:mobile
+
+# Add Android
+npx cap add android
+
+# Sync web assets into the native project
+npx cap sync android
 ```
 
-3. Sync Capacitor:
-```bash
-npm run cap:sync
-```
+### 3. Open in Android Studio
 
-## Development Workflow
-
-### Android
-
-1. Open Android project:
 ```bash
 npm run cap:android
 ```
 
-2. Build debug APK:
-```bash
-npm run android:build
-```
+In Android Studio: wait for Gradle sync, then run the app (Run → Run 'app' or the green play button).
 
-3. Install on connected device:
-```bash
-npm run android:install
-```
+## Development workflow
 
-4. Run on device:
-```bash
-npm run android:run
-```
+### Android
 
-5. View logs:
-```bash
-npm run android:logcat
-```
+| Step | Command |
+|------|--------|
+| Build web app for mobile + sync | `npm run cap:build` |
+| Open Android Studio | `npm run cap:android` |
+| Build debug APK | `npm run android:build` |
+| Install on device | `npm run android:install` |
+| Launch app | `npm run android:run` |
+| View logs | `npm run android:logcat` |
+
+After changing the Next.js app, run `npm run cap:build` (or `npm run build:mobile && npx cap sync android`), then rebuild/run from Android Studio or `npm run android:build`.
 
 ### iOS
 
@@ -137,7 +164,7 @@ If you encounter errors about missing `generateStaticParams()` for dynamic route
 3. **Temporary Workaround**: Comment out dynamic routes temporarily, build the app, then uncomment them. The routes will work with client-side navigation in the mobile app.
 
 - Clean Android build: `npm run android:clean`
-- Rebuild everything: `npm run build && npm run cap:sync`
+- Rebuild everything: `npm run build:mobile && npx cap sync android` (or `npm run cap:build`)
 
 ### API Connection Issues
 
@@ -145,29 +172,31 @@ If you encounter errors about missing `generateStaticParams()` for dynamic route
 - Check that `NEXT_PUBLIC_API_URL` is correctly set
 - Verify network permissions in AndroidManifest.xml
 
-### Sync Issues
+### Sync issues
 
-- Always run `npm run build` before `npm run cap:sync`
-- Delete `out` folder and rebuild if sync fails
+- For mobile: run `npm run build:mobile` (or `npm run cap:build`) before opening Android Studio — **do not** use plain `npm run build` for the Android app, or the `out` folder won’t have the static export.
+- If sync fails: delete the `out` folder, run `npm run build:mobile`, then `npx cap sync android`.
 
-## Available Scripts
+## Available scripts
 
-- `npm run build` - Build Next.js app
-- `npm run cap:sync` - Sync web assets to native projects
-- `npm run cap:build` - Build and sync in one command
-- `npm run cap:android` - Open Android Studio
-- `npm run cap:ios` - Open Xcode
-- `npm run android:build` - Build debug APK
-- `npm run android:build:release` - Build release APK
-- `npm run android:install` - Install APK on device
-- `npm run android:run` - Launch app on device
-- `npm run android:clean` - Clean Android build
-- `npm run android:logcat` - View Android logs
+| Script | Description |
+|--------|-------------|
+| `npm run build:mobile` | Build Next.js with static export for Capacitor |
+| `npm run cap:build` | build:mobile + sync (use this before opening Android Studio) |
+| `npm run cap:sync` | Sync web assets to native projects (run after build:mobile) |
+| `npm run cap:android` | Open Android project in Android Studio |
+| `npm run cap:ios` | Open iOS project in Xcode |
+| `npm run android:build` | Build debug APK |
+| `npm run android:build:release` | Build release APK |
+| `npm run android:install` | Install debug APK on connected device |
+| `npm run android:run` | Launch app on device |
+| `npm run android:clean` | Clean Android build |
+| `npm run android:logcat` | Stream Android logs (filtered) |
 
 ## Notes
 
-- The app uses static export (`output: 'export'` in next.config.mjs)
-- Images are unoptimized for mobile compatibility
-- Push notifications are configured via Capacitor plugins
-- The app supports both Android and iOS platforms
+- The Android app uses **static export**: `BUILD_FOR_MOBILE=true` enables `output: 'export'` in `next.config.mjs`. Use `npm run build:mobile` or `npm run cap:build` for mobile builds.
+- Images are unoptimized for compatibility with Capacitor.
+- Splash screen and push notifications are configured in `capacitor.config.ts`.
+- App ID: `com.ecobuymotherboard.customer` — change in `capacitor.config.ts` and Android package name if needed.
 

@@ -1,0 +1,47 @@
+PODS:
+  - Capacitor (7.4.4):
+    - CapacitorCordova
+  - CapacitorCordova (7.4.4)
+  - CapacitorFilesystem (7.1.6):
+    - Capacitor
+    - IONFilesystemLib (~> 1.0.1)
+  - CapacitorPushNotifications (7.0.4):
+    - Capacitor
+  - CapacitorSplashScreen (7.0.5):
+    - Capacitor
+  - IONFilesystemLib (1.0.1)
+
+DEPENDENCIES:
+  - "Capacitor (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorCordova (from `../../node_modules/@capacitor/ios`)"
+  - "CapacitorFilesystem (from `../../node_modules/@capacitor/filesystem`)"
+  - "CapacitorPushNotifications (from `../../node_modules/@capacitor/push-notifications`)"
+  - "CapacitorSplashScreen (from `../../node_modules/@capacitor/splash-screen`)"
+
+SPEC REPOS:
+  trunk:
+    - IONFilesystemLib
+
+EXTERNAL SOURCES:
+  Capacitor:
+    :path: "../../node_modules/@capacitor/ios"
+  CapacitorCordova:
+    :path: "../../node_modules/@capacitor/ios"
+  CapacitorFilesystem:
+    :path: "../../node_modules/@capacitor/filesystem"
+  CapacitorPushNotifications:
+    :path: "../../node_modules/@capacitor/push-notifications"
+  CapacitorSplashScreen:
+    :path: "../../node_modules/@capacitor/splash-screen"
+
+SPEC CHECKSUMS:
+  Capacitor: 09d9ff8e9618e8c4b3cab2bbee34a17215dd2fef
+  CapacitorCordova: bf648a636f3c153f652d312ae145fb508b6ffced
+  CapacitorFilesystem: 2267b9183bfecb9e5b8163b79685c9efb5ed0a09
+  CapacitorPushNotifications: 57b0df89c5084a19c939e2fbe3b77446fe55a35b
+  CapacitorSplashScreen: b3d12b4324d93ce605fe57f05a199ade7f26189e
+  IONFilesystemLib: 89258b8e3e85465da93127d25d7ce37f977e8a6f
+
+PODFILE CHECKSUM: a96bf30a1fde806f67207b67dcfbb443f80c9ec3
+
+COCOAPODS: 1.16.2

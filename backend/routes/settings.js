@@ -142,5 +142,118 @@ router.put("/admin/shipping-charges", verifyAdminToken, async (req, res) => {
   }
 })
 
+// Default keys and values for site settings (company + contact)
+const SITE_SETTING_KEYS = {
+  company_brand_name: { default: "Elecobuy", description: "Brand name" },
+  company_name: { default: "Elecobuy Electronics Pvt Ltd", description: "Company legal name" },
+  company_address: { default: "123, Tech Park, Mumbai, Maharashtra - 400001", description: "Company address" },
+  contact_primary_phone: { default: "1800 123 9336", description: "Primary phone" },
+  contact_secondary_phone: { default: "+91 7396 777 600", description: "Secondary phone" },
+  contact_support_phone: { default: "+91 7396 777 300", description: "Support phone" },
+  contact_support_email: { default: "SUPPORT@ELECOBUY.COM", description: "Support email" },
+}
+
+async function getSiteSettingValue(key) {
+  const meta = SITE_SETTING_KEYS[key]
+  if (!meta) return undefined
+  const doc = await Settings.findOne({ key })
+  return doc ? doc.value : meta.default
+}
+
+// Get site settings (company + contact) for admin
+router.get("/admin/site-settings", verifyAdminToken, async (req, res) => {
+  try {
+    const data = {}
+    for (const key of Object.keys(SITE_SETTING_KEYS)) {
+      data[key] = await getSiteSettingValue(key)
+    }
+    res.json({
+      success: true,
+      data: {
+        companyInfo: {
+          brandName: data.company_brand_name,
+          companyName: data.company_name,
+          address: data.company_address,
+        },
+        contactInfo: {
+          primaryPhone: data.contact_primary_phone,
+          secondaryPhone: data.contact_secondary_phone,
+          supportPhone: data.contact_support_phone,
+          supportEmail: data.contact_support_email,
+        },
+      },
+    })
+  } catch (error) {
+    console.error("Error fetching site settings:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error fetching site settings",
+    })
+  }
+})
+
+// Update site settings (company + contact) - admin only
+router.put("/admin/site-settings", verifyAdminToken, async (req, res) => {
+  try {
+    const { companyInfo, contactInfo } = req.body
+    const updates = []
+
+    if (companyInfo) {
+      if (companyInfo.brandName != null) updates.push({ key: "company_brand_name", value: String(companyInfo.brandName) })
+      if (companyInfo.companyName != null) updates.push({ key: "company_name", value: String(companyInfo.companyName) })
+      if (companyInfo.address != null) updates.push({ key: "company_address", value: String(companyInfo.address) })
+    }
+    if (contactInfo) {
+      if (contactInfo.primaryPhone != null) updates.push({ key: "contact_primary_phone", value: String(contactInfo.primaryPhone) })
+      if (contactInfo.secondaryPhone != null) updates.push({ key: "contact_secondary_phone", value: String(contactInfo.secondaryPhone) })
+      if (contactInfo.supportPhone != null) updates.push({ key: "contact_support_phone", value: String(contactInfo.supportPhone) })
+      if (contactInfo.supportEmail != null) updates.push({ key: "contact_support_email", value: String(contactInfo.supportEmail) })
+    }
+
+    for (const { key, value } of updates) {
+      const meta = SITE_SETTING_KEYS[key]
+      if (!meta) continue
+      await Settings.findOneAndUpdate(
+        { key },
+        {
+          key,
+          value,
+          description: meta.description,
+          lastUpdatedBy: req.admin.id,
+        },
+        { new: true, upsert: true }
+      )
+    }
+
+    const data = {}
+    for (const key of Object.keys(SITE_SETTING_KEYS)) {
+      data[key] = await getSiteSettingValue(key)
+    }
+    res.json({
+      success: true,
+      message: "Site settings updated successfully",
+      data: {
+        companyInfo: {
+          brandName: data.company_brand_name,
+          companyName: data.company_name,
+          address: data.company_address,
+        },
+        contactInfo: {
+          primaryPhone: data.contact_primary_phone,
+          secondaryPhone: data.contact_secondary_phone,
+          supportPhone: data.contact_support_phone,
+          supportEmail: data.contact_support_email,
+        },
+      },
+    })
+  } catch (error) {
+    console.error("Error updating site settings:", error)
+    res.status(500).json({
+      success: false,
+      message: "Error updating site settings",
+    })
+  }
+})
+
 export default router
 

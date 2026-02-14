@@ -5,6 +5,7 @@ import { AnalyticsClient } from "@/components/analytics-client"
 import { CartProvider } from "@/lib/cart-context"
 import { WishlistProvider } from "@/lib/wishlist-context"
 import { Toaster } from "@/components/ui/toaster"
+import { CustomerBottomNavWrapper } from "@/components/customer-bottom-nav-wrapper"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -32,7 +33,7 @@ export default function RootLayout({
       <body className={`font-sans antialiased`}>
         <CartProvider>
           <WishlistProvider>
-            {children}
+            <CustomerBottomNavWrapper>{children}</CustomerBottomNavWrapper>
           </WishlistProvider>
         </CartProvider>
         <Toaster />

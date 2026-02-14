@@ -11,12 +11,39 @@ import { useToast } from "@/hooks/use-toast"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
+type CompanyInfo = { brandName: string; companyName: string; address: string }
+type ContactInfo = {
+  primaryPhone: string
+  secondaryPhone: string
+  supportPhone: string
+  supportEmail: string
+}
+type AccountInfo = { name: string; email: string; phone: string }
+
+const defaultCompany: CompanyInfo = {
+  brandName: "Elecobuy",
+  companyName: "Elecobuy Electronics Pvt Ltd",
+  address: "123, Tech Park, Mumbai, Maharashtra - 400001",
+}
+const defaultContact: ContactInfo = {
+  primaryPhone: "1800 123 9336",
+  secondaryPhone: "+91 7396 777 600",
+  supportPhone: "+91 7396 777 300",
+  supportEmail: "SUPPORT@ELECOBUY.COM",
+}
+const defaultAccount: AccountInfo = { name: "Admin User", email: "admin@ecobuy.com", phone: "+91 98765 43210" }
+
 export function AdminSettings() {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingSection, setSavingSection] = useState<string | null>(null)
   const [shippingCharges, setShippingCharges] = useState<number>(150)
+  const [companyInfo, setCompanyInfo] = useState<CompanyInfo>(defaultCompany)
+  const [contactInfo, setContactInfo] = useState<ContactInfo>(defaultContact)
+  const [accountInfo, setAccountInfo] = useState<AccountInfo>(defaultAccount)
+  const [password, setPassword] = useState({ current: "", new: "", confirm: "" })
 
   useEffect(() => {
     checkAuth()
@@ -28,7 +55,12 @@ export function AdminSettings() {
       router.push("/admin-login")
       return
     }
-    fetchShippingCharges()
+    await Promise.all([
+      fetchShippingCharges(),
+      fetchSiteSettings(),
+      fetchAdminProfile(),
+    ])
+    setLoading(false)
   }
 
   const fetchShippingCharges = async () => {
@@ -37,28 +69,65 @@ export function AdminSettings() {
       if (!token) return
 
       const response = await fetch(`${API_URL}/api/settings/admin/shipping-charges`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       })
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch shipping charges")
-      }
-
+      if (!response.ok) throw new Error("Failed to fetch shipping charges")
       const data = await response.json()
       if (data.success && data.data) {
-        setShippingCharges(data.data.value || 150)
+        setShippingCharges(data.data.value ?? 150)
       }
     } catch (error) {
       console.error("Error fetching shipping charges:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load shipping charges",
-        variant: "destructive",
+      toast({ title: "Error", description: "Failed to load shipping charges", variant: "destructive" })
+    }
+  }
+
+  const fetchSiteSettings = async () => {
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) return
+
+      const response = await fetch(`${API_URL}/api/settings/admin/site-settings`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
-    } finally {
-      setLoading(false)
+      if (!response.ok) return
+      const data = await response.json()
+      if (data.success && data.data) {
+        if (data.data.companyInfo) setCompanyInfo((prev) => ({ ...prev, ...data.data.companyInfo }))
+        if (data.data.contactInfo) setContactInfo((prev) => ({ ...prev, ...data.data.contactInfo }))
+      }
+    } catch (error) {
+      console.error("Error fetching site settings:", error)
+    }
+  }
+
+  const fetchAdminProfile = async () => {
+    try {
+      const token = localStorage.getItem("adminToken")
+      if (!token) return
+
+      const response = await fetch(`${API_URL}/api/auth/admin/profile`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) return
+      const data = await response.json()
+      if (data.success && data.data) {
+        setAccountInfo({
+          name: data.data.name ?? "",
+          email: data.data.email ?? "",
+          phone: data.data.phone ?? "",
+        })
+      }
+    } catch (error) {
+      console.error("Error fetching admin profile:", error)
+    }
+  }
+
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("adminToken")
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
     }
   }
 
@@ -70,37 +139,115 @@ export function AdminSettings() {
         router.push("/admin-login")
         return
       }
-
       const response = await fetch(`${API_URL}/api/settings/admin/shipping-charges`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          shippingCharges: Number(shippingCharges),
-        }),
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ shippingCharges: Number(shippingCharges) }),
       })
-
       const data = await response.json()
-
       if (!response.ok || !data.success) {
         throw new Error(data.message || "Failed to update shipping charges")
       }
-
-      toast({
-        title: "Success",
-        description: "Shipping charges updated successfully",
-      })
+      toast({ title: "Success", description: "Shipping charges updated successfully" })
     } catch (error: any) {
       console.error("Error updating shipping charges:", error)
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update shipping charges",
-        variant: "destructive",
-      })
+      toast({ title: "Error", description: error.message || "Failed to update shipping charges", variant: "destructive" })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSaveCompany = async () => {
+    try {
+      setSavingSection("company")
+      const response = await fetch(`${API_URL}/api/settings/admin/site-settings`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ companyInfo }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Failed to update company information")
+      }
+      if (data.data?.companyInfo) setCompanyInfo((prev) => ({ ...prev, ...data.data.companyInfo }))
+      toast({ title: "Success", description: "Company information updated successfully" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to update company information", variant: "destructive" })
+    } finally {
+      setSavingSection(null)
+    }
+  }
+
+  const handleSaveContact = async () => {
+    try {
+      setSavingSection("contact")
+      const response = await fetch(`${API_URL}/api/settings/admin/site-settings`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ contactInfo }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Failed to update contact information")
+      }
+      if (data.data?.contactInfo) setContactInfo((prev) => ({ ...prev, ...data.data.contactInfo }))
+      toast({ title: "Success", description: "Contact information updated successfully" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to update contact information", variant: "destructive" })
+    } finally {
+      setSavingSection(null)
+    }
+  }
+
+  const handleSaveAccount = async () => {
+    try {
+      setSavingSection("account")
+      const response = await fetch(`${API_URL}/api/auth/admin/profile`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(accountInfo),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Failed to update account")
+      }
+      if (data.data) {
+        setAccountInfo((prev) => ({ ...prev, name: data.data.name ?? "", email: data.data.email ?? "", phone: data.data.phone ?? "" }))
+      }
+      toast({ title: "Success", description: "Account information updated successfully" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to update account", variant: "destructive" })
+    } finally {
+      setSavingSection(null)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (password.new !== password.confirm) {
+      toast({ title: "Error", description: "New password and confirm password do not match", variant: "destructive" })
+      return
+    }
+    if (password.new.length < 6) {
+      toast({ title: "Error", description: "New password must be at least 6 characters", variant: "destructive" })
+      return
+    }
+    try {
+      setSavingSection("password")
+      const response = await fetch(`${API_URL}/api/auth/admin/change-password`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ currentPassword: password.current, newPassword: password.new }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Failed to change password")
+      }
+      setPassword({ current: "", new: "", confirm: "" })
+      toast({ title: "Success", description: "Password updated successfully" })
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to change password", variant: "destructive" })
+    } finally {
+      setSavingSection(null)
     }
   }
 
@@ -182,16 +329,40 @@ export function AdminSettings() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="sm:col-span-2">
                 <Label htmlFor="brandName">Brand Name</Label>
-                <Input id="brandName" defaultValue="Elecobuy" className="mt-1.5" />
+                <Input
+                  id="brandName"
+                  value={companyInfo.brandName}
+                  onChange={(e) => setCompanyInfo((p) => ({ ...p, brandName: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
               <div className="sm:col-span-2">
                 <Label htmlFor="companyName">Company Name</Label>
-                <Input id="companyName" defaultValue="Elecobuy Electronics Pvt Ltd" className="mt-1.5" />
+                <Input
+                  id="companyName"
+                  value={companyInfo.companyName}
+                  onChange={(e) => setCompanyInfo((p) => ({ ...p, companyName: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
               <div className="sm:col-span-2">
                 <Label htmlFor="address">Company Address</Label>
-                <Input id="address" defaultValue="123, Tech Park, Mumbai, Maharashtra - 400001" className="mt-1.5" />
+                <Input
+                  id="address"
+                  value={companyInfo.address}
+                  onChange={(e) => setCompanyInfo((p) => ({ ...p, address: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveCompany} disabled={savingSection === "company"} className="gap-2">
+                {savingSection === "company" ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4" /> Save Company</>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -209,20 +380,49 @@ export function AdminSettings() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="phone1">Primary Phone</Label>
-                <Input id="phone1" defaultValue="1800 123 9336" className="mt-1.5" />
+                <Input
+                  id="phone1"
+                  value={contactInfo.primaryPhone}
+                  onChange={(e) => setContactInfo((p) => ({ ...p, primaryPhone: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <Label htmlFor="phone2">Secondary Phone</Label>
-                <Input id="phone2" defaultValue="+91 7396 777 600" className="mt-1.5" />
+                <Input
+                  id="phone2"
+                  value={contactInfo.secondaryPhone}
+                  onChange={(e) => setContactInfo((p) => ({ ...p, secondaryPhone: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <Label htmlFor="phone3">Support Phone</Label>
-                <Input id="phone3" defaultValue="+91 7396 777 300" className="mt-1.5" />
+                <Input
+                  id="phone3"
+                  value={contactInfo.supportPhone}
+                  onChange={(e) => setContactInfo((p) => ({ ...p, supportPhone: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <Label htmlFor="supportEmail">Support Email</Label>
-                <Input id="supportEmail" defaultValue="SUPPORT@ELECOBUY.COM" className="mt-1.5" />
+                <Input
+                  id="supportEmail"
+                  value={contactInfo.supportEmail}
+                  onChange={(e) => setContactInfo((p) => ({ ...p, supportEmail: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveContact} disabled={savingSection === "contact"} className="gap-2">
+                {savingSection === "contact" ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4" /> Save Contact</>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -240,16 +440,41 @@ export function AdminSettings() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="adminName">Admin Name</Label>
-                <Input id="adminName" defaultValue="Admin User" className="mt-1.5" />
+                <Input
+                  id="adminName"
+                  value={accountInfo.name}
+                  onChange={(e) => setAccountInfo((p) => ({ ...p, name: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <Label htmlFor="adminEmail">Admin Email</Label>
-                <Input id="adminEmail" type="email" defaultValue="admin@ecobuy.com" className="mt-1.5" />
+                <Input
+                  id="adminEmail"
+                  type="email"
+                  value={accountInfo.email}
+                  onChange={(e) => setAccountInfo((p) => ({ ...p, email: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <Label htmlFor="adminPhone">Admin Phone</Label>
-                <Input id="adminPhone" defaultValue="+91 98765 43210" className="mt-1.5" />
+                <Input
+                  id="adminPhone"
+                  value={accountInfo.phone}
+                  onChange={(e) => setAccountInfo((p) => ({ ...p, phone: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleSaveAccount} disabled={savingSection === "account"} className="gap-2">
+                {savingSection === "account" ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                ) : (
+                  <><Save className="h-4 w-4" /> Save Account</>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -264,27 +489,46 @@ export function AdminSettings() {
             <div className="grid grid-cols-1 gap-4 max-w-md">
               <div>
                 <Label htmlFor="currentPassword">Current Password</Label>
-                <Input id="currentPassword" type="password" className="mt-1.5" />
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={password.current}
+                  onChange={(e) => setPassword((p) => ({ ...p, current: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <Label htmlFor="newPassword">New Password</Label>
-                <Input id="newPassword" type="password" className="mt-1.5" />
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={password.new}
+                  onChange={(e) => setPassword((p) => ({ ...p, new: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
               <div>
                 <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                <Input id="confirmPassword" type="password" className="mt-1.5" />
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={password.confirm}
+                  onChange={(e) => setPassword((p) => ({ ...p, confirm: e.target.value }))}
+                  className="mt-1.5"
+                />
               </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={handleChangePassword} disabled={savingSection === "password"} className="gap-2">
+                {savingSection === "password" ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Updating...</>
+                ) : (
+                  <>Change Password</>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Save Button */}
-      <div className="flex justify-end">
-        <Button className="gap-2">
-          <Save className="h-4 w-4" />
-          Save All Changes
-        </Button>
       </div>
     </div>
   )

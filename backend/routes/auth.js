@@ -1,6 +1,7 @@
 import express from "express"
 import jwt from "jsonwebtoken"
 import Admin from "../models/Admin.js"
+import { verifyAdminToken } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -125,6 +126,8 @@ router.get("/admin/verify", async (req, res) => {
       admin: {
         id: admin._id,
         email: admin.email,
+        name: admin.name || "",
+        phone: admin.phone || "",
         role: admin.role
       }
     })
@@ -132,6 +135,131 @@ router.get("/admin/verify", async (req, res) => {
     res.status(401).json({
       success: false,
       message: "Invalid or expired token"
+    })
+  }
+})
+
+// Get admin profile (protected)
+router.get("/admin/profile", verifyAdminToken, async (req, res) => {
+  try {
+    const admin = await Admin.findById(req.admin.id).select("-password")
+    if (!admin || !admin.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or inactive admin"
+      })
+    }
+    res.status(200).json({
+      success: true,
+      data: {
+        id: admin._id,
+        email: admin.email,
+        name: admin.name || "",
+        phone: admin.phone || "",
+        role: admin.role
+      }
+    })
+  } catch (error) {
+    console.error("Get admin profile error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch profile"
+    })
+  }
+})
+
+// Update admin profile (name, email, phone)
+router.put("/admin/profile", verifyAdminToken, async (req, res) => {
+  try {
+    const { name, email, phone } = req.body
+    const admin = await Admin.findById(req.admin.id)
+    if (!admin || !admin.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or inactive admin"
+      })
+    }
+    if (name !== undefined) admin.name = String(name).trim()
+    if (phone !== undefined) admin.phone = String(phone).trim()
+    if (email !== undefined) {
+      const newEmail = String(email).toLowerCase().trim()
+      if (!/^\S+@\S+\.\S+$/.test(newEmail)) {
+        return res.status(400).json({
+          success: false,
+          message: "Please enter a valid email"
+        })
+      }
+      const existing = await Admin.findOne({ email: newEmail })
+      if (existing && existing._id.toString() !== admin._id.toString()) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already in use"
+        })
+      }
+      admin.email = newEmail
+    }
+    await admin.save()
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: {
+        id: admin._id,
+        email: admin.email,
+        name: admin.name || "",
+        phone: admin.phone || "",
+        role: admin.role
+      }
+    })
+  } catch (error) {
+    console.error("Update admin profile error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to update profile"
+    })
+  }
+})
+
+// Change admin password
+router.put("/admin/change-password", verifyAdminToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password and new password are required"
+      })
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters"
+      })
+    }
+    const admin = await Admin.findById(req.admin.id)
+    if (!admin || !admin.isActive) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or inactive admin"
+      })
+    }
+    const isValid = await admin.comparePassword(currentPassword)
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password is incorrect"
+      })
+    }
+    admin.password = newPassword
+    await admin.save()
+    res.status(200).json({
+      success: true,
+      message: "Password updated successfully"
+    })
+  } catch (error) {
+    console.error("Change admin password error:", error)
+    res.status(500).json({
+      success: false,
+      message: "Failed to change password"
     })
   }
 })
