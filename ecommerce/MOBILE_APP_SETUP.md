@@ -193,6 +193,20 @@ If you encounter errors about missing `generateStaticParams()` for dynamic route
 | `npm run android:clean` | Clean Android build |
 | `npm run android:logcat` | Stream Android logs (filtered) |
 
+## Pull to refresh
+
+In the native app (Android/iOS), pull down from the top of any customer page to refresh. The app calls `router.refresh()` and dispatches a `pull-to-refresh` custom event. To refetch your own data when the user pulls to refresh, listen for the event:
+
+```js
+useEffect(() => {
+  const handler = () => { /* refetch your data */ }
+  window.addEventListener('pull-to-refresh', handler)
+  return () => window.removeEventListener('pull-to-refresh', handler)
+}, [])
+```
+
+Pull-to-refresh is only active when running inside Capacitor (native app), not in the browser.
+
 ## Notes
 
 - The Android app uses **static export**: `BUILD_FOR_MOBILE=true` enables `output: 'export'` in `next.config.mjs`. Use `npm run build:mobile` or `npm run cap:build` for mobile builds.
