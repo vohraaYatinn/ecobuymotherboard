@@ -362,9 +362,6 @@ export function ProductDetail({ productId }: ProductDetailProps) {
                 <strong className="text-foreground">Model:</strong> {product.model}
               </p>
             )}
-            <p>
-              <strong className="text-foreground">Stock:</strong> {product.stock} units
-            </p>
           </div>
 
           {/* Pincode Delivery Check */}

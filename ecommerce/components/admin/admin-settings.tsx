@@ -165,11 +165,19 @@ export function AdminSettings() {
         headers: getAuthHeaders(),
         body: JSON.stringify({ companyInfo }),
       })
-      const data = await response.json()
+      let data: { success?: boolean; message?: string; data?: { companyInfo?: CompanyInfo } }
+      try {
+        data = await response.json()
+      } catch {
+        if (!response.ok) throw new Error(`Failed to update company information (${response.status})`)
+        data = { success: true }
+      }
       if (!response.ok || !data.success) {
         throw new Error(data.message || "Failed to update company information")
       }
-      if (data.data?.companyInfo) setCompanyInfo((prev) => ({ ...prev, ...data.data.companyInfo }))
+      // Update local state from response or from payload so UI reflects saved values
+      const updated = data.data?.companyInfo ?? companyInfo
+      setCompanyInfo((prev) => ({ ...prev, ...updated }))
       toast({ title: "Success", description: "Company information updated successfully" })
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to update company information", variant: "destructive" })
@@ -186,11 +194,19 @@ export function AdminSettings() {
         headers: getAuthHeaders(),
         body: JSON.stringify({ contactInfo }),
       })
-      const data = await response.json()
+      let data: { success?: boolean; message?: string; data?: { contactInfo?: ContactInfo } }
+      try {
+        data = await response.json()
+      } catch {
+        if (!response.ok) throw new Error(`Failed to update contact information (${response.status})`)
+        data = { success: true }
+      }
       if (!response.ok || !data.success) {
         throw new Error(data.message || "Failed to update contact information")
       }
-      if (data.data?.contactInfo) setContactInfo((prev) => ({ ...prev, ...data.data.contactInfo }))
+      // Update local state from response or from payload so UI reflects saved values
+      const updated = data.data?.contactInfo ?? contactInfo
+      setContactInfo((prev) => ({ ...prev, ...updated }))
       toast({ title: "Success", description: "Contact information updated successfully" })
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to update contact information", variant: "destructive" })
@@ -211,9 +227,11 @@ export function AdminSettings() {
       if (!response.ok || !data.success) {
         throw new Error(data.message || "Failed to update account")
       }
-      if (data.data) {
-        setAccountInfo((prev) => ({ ...prev, name: data.data.name ?? "", email: data.data.email ?? "", phone: data.data.phone ?? "" }))
-      }
+      // Update local state from response or from payload so UI reflects saved values
+      const updated = data.data
+        ? { name: data.data.name ?? "", email: data.data.email ?? "", phone: data.data.phone ?? "" }
+        : accountInfo
+      setAccountInfo((prev) => ({ ...prev, ...updated }))
       toast({ title: "Success", description: "Account information updated successfully" })
     } catch (error: any) {
       toast({ title: "Error", description: error.message || "Failed to update account", variant: "destructive" })
@@ -223,6 +241,10 @@ export function AdminSettings() {
   }
 
   const handleChangePassword = async () => {
+    if (!password.current?.trim()) {
+      toast({ title: "Error", description: "Please enter your current password", variant: "destructive" })
+      return
+    }
     if (password.new !== password.confirm) {
       toast({ title: "Error", description: "New password and confirm password do not match", variant: "destructive" })
       return
@@ -236,9 +258,14 @@ export function AdminSettings() {
       const response = await fetch(`${API_URL}/api/auth/admin/change-password`, {
         method: "PUT",
         headers: getAuthHeaders(),
-        body: JSON.stringify({ currentPassword: password.current, newPassword: password.new }),
+        body: JSON.stringify({ currentPassword: password.current.trim(), newPassword: password.new }),
       })
-      const data = await response.json()
+      let data: { success?: boolean; message?: string }
+      try {
+        data = await response.json()
+      } catch {
+        throw new Error(response.ok ? "Invalid response from server" : `Failed to change password (${response.status})`)
+      }
       if (!response.ok || !data.success) {
         throw new Error(data.message || "Failed to change password")
       }

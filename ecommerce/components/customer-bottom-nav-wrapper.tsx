@@ -2,7 +2,6 @@
 
 import { usePathname } from "next/navigation"
 import { BottomNav } from "@/components/bottom-nav"
-import { PullToRefresh } from "@/components/pull-to-refresh"
 
 export function CustomerBottomNavWrapper({
   children,
@@ -14,11 +13,9 @@ export function CustomerBottomNavWrapper({
 
   return (
     <>
-      <PullToRefresh>
-        <div className={isCustomerRoute ? "pb-20 lg:pb-0" : undefined}>
-          {children}
-        </div>
-      </PullToRefresh>
+      <div className={isCustomerRoute ? "pb-20 lg:pb-0" : undefined}>
+        {children}
+      </div>
       {isCustomerRoute && <BottomNav />}
     </>
   )

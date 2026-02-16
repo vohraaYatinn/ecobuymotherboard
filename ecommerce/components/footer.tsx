@@ -109,7 +109,7 @@ export function Footer() {
               </li>
               <li>
                 <Link href="/return-policy" className="text-muted-foreground transition-colors hover:text-primary">
-                  Return Policy
+                  Cancellation & Return Policy
                 </Link>
               </li>
             </ul>
