@@ -112,6 +112,11 @@ export function Footer() {
                   Cancellation & Return Policy
                 </Link>
               </li>
+              <li>
+                <Link href="/account-delete" className="text-muted-foreground transition-colors hover:text-primary">
+                  Account & Data Deletion
+                </Link>
+              </li>
             </ul>
           </div>
 

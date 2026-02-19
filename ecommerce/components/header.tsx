@@ -459,6 +459,13 @@ export function Header() {
                           >
                             Shipping Policy
                           </Link>
+                          <Link
+                            href="/account-delete"
+                            className="flex items-center gap-2 px-3 py-2.5 rounded-md text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            Account & Data Deletion
+                          </Link>
                         </div>
                       )}
                     </div>
@@ -658,6 +665,11 @@ export function Header() {
                   <DropdownMenuItem asChild>
                     <Link href="/shipping-policy" className="cursor-pointer">
                       Shipping Policy
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/account-delete" className="cursor-pointer">
+                      Account & Data Deletion
                     </Link>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
