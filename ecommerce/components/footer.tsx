@@ -55,7 +55,7 @@ export function Footer() {
             </div>
 
             <div className="flex gap-2 mt-3">
-              <a href="#" className="h-8 w-8 flex items-center justify-center rounded bg-blue-600 hover:bg-blue-700 transition-colors">
+              <a href="https://www.facebook.com/profile.php?id=61588390354394&ref=1" target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded bg-blue-600 hover:bg-blue-700 transition-colors">
                 <Facebook className="h-4 w-4 text-white" />
               </a>
               <a href="#" className="h-8 w-8 flex items-center justify-center rounded bg-green-500 hover:bg-green-600 transition-colors">
@@ -66,7 +66,7 @@ export function Footer() {
               <a href="#" className="h-8 w-8 flex items-center justify-center rounded bg-blue-800 hover:bg-blue-900 transition-colors">
                 <Linkedin className="h-4 w-4 text-white" />
               </a>
-              <a href="#" className="h-8 w-8 flex items-center justify-center rounded bg-black hover:bg-gray-800 transition-colors">
+              <a href="https://www.instagram.com/elecobuy/" target="_blank" rel="noopener noreferrer" className="h-8 w-8 flex items-center justify-center rounded bg-black hover:bg-gray-800 transition-colors">
                 <Instagram className="h-4 w-4 text-white" />
               </a>
               <a href="#" className="h-8 w-8 flex items-center justify-center rounded bg-red-600 hover:bg-red-700 transition-colors">
