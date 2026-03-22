@@ -1,7 +1,7 @@
 import express from "express"
 import mongoose from "mongoose"
 import Category from "../models/Category.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -66,7 +66,7 @@ router.get("/:identifier", async (req, res) => {
 })
 
 // Create new category (Admin only)
-router.post("/", verifyAdminToken, async (req, res) => {
+router.post("/", verifyAdminToken, requirePermission("categories:manage"), async (req, res) => {
   try {
     const { name, slug, description } = req.body
 
@@ -127,7 +127,7 @@ router.post("/", verifyAdminToken, async (req, res) => {
 })
 
 // Update category (Admin only)
-router.put("/:id", verifyAdminToken, async (req, res) => {
+router.put("/:id", verifyAdminToken, requirePermission("categories:manage"), async (req, res) => {
   try {
     const { name, slug, description, isActive } = req.body
 
@@ -199,7 +199,7 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Delete category (Admin only) - Soft delete
-router.delete("/:id", verifyAdminToken, async (req, res) => {
+router.delete("/:id", verifyAdminToken, requirePermission("categories:manage"), async (req, res) => {
   try {
     const category = await Category.findById(req.params.id)
 

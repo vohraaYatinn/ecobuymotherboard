@@ -3,7 +3,7 @@ import nodemailer from "nodemailer"
 import SupportRequest from "../models/SupportRequest.js"
 import Notification from "../models/Notification.js"
 import Customer from "../models/Customer.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -171,7 +171,7 @@ router.post("/submit", async (req, res) => {
 })
 
 // Get all support requests (admin only)
-router.get("/admin/all", verifyAdminToken, async (req, res) => {
+router.get("/admin/all", verifyAdminToken, requirePermission("support:view", "support:manage"), async (req, res) => {
   try {
     const { status, category, page = 1, limit = 50, search } = req.query
 
@@ -220,7 +220,7 @@ router.get("/admin/all", verifyAdminToken, async (req, res) => {
 })
 
 // Get single support request (admin only)
-router.get("/admin/:id", verifyAdminToken, async (req, res) => {
+router.get("/admin/:id", verifyAdminToken, requirePermission("support:view", "support:manage"), async (req, res) => {
   try {
     const supportRequest = await SupportRequest.findById(req.params.id)
       .populate("customerId", "name email mobile")
@@ -247,7 +247,7 @@ router.get("/admin/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Update support request status (admin only)
-router.patch("/admin/:id/status", verifyAdminToken, async (req, res) => {
+router.patch("/admin/:id/status", verifyAdminToken, requirePermission("support:manage"), async (req, res) => {
   try {
     const { status, adminNotes } = req.body
 

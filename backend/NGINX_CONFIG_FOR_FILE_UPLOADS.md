@@ -34,7 +34,7 @@ server {
     proxy_busy_buffers_size 8k;
 
     location / {
-        proxy_pass http://localhost:5000;  # Change port if different
+        proxy_pass https://api.elecobuy.com;  # Change port if different
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -51,7 +51,7 @@ server {
 
     # Specific location for file upload endpoints
     location /api/learning-resources/upload {
-        proxy_pass http://localhost:5000;
+        proxy_pass https://api.elecobuy.com;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

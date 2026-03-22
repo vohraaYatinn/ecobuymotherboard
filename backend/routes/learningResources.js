@@ -1,6 +1,6 @@
 import express from "express"
 import LearningResource from "../models/LearningResource.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 import learningUpload from "../middleware/learningUpload.js"
 import multer from "multer"
 import path from "path"
@@ -136,6 +136,7 @@ router.options("/upload", (req, res) => {
 router.post(
   "/upload",
   verifyAdminToken,
+  requirePermission("learning-resources:manage"),
   (req, res, next) => {
     // Log incoming request details for VPS debugging
     console.log(`📥 [LEARNING RESOURCES] Incoming upload request:`, {
@@ -391,7 +392,11 @@ router.post(
 )
 
 // Admin routes - Get all resources (including inactive)
-router.get("/admin/all", verifyAdminToken, async (req, res) => {
+router.get(
+  "/admin/all",
+  verifyAdminToken,
+  requirePermission("learning-resources:view", "learning-resources:manage"),
+  async (req, res) => {
   try {
     const { type } = req.query
     const query = {}
@@ -416,10 +421,11 @@ router.get("/admin/all", verifyAdminToken, async (req, res) => {
       message: "Error fetching learning resources",
     })
   }
-})
+}
+)
 
 // Admin routes - Update resource
-router.put("/:id", verifyAdminToken, async (req, res) => {
+router.put("/:id", verifyAdminToken, requirePermission("learning-resources:manage"), async (req, res) => {
   try {
     const { title, description, isActive } = req.body
 
@@ -457,7 +463,7 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Admin routes - Delete resource
-router.delete("/:id", verifyAdminToken, async (req, res) => {
+router.delete("/:id", verifyAdminToken, requirePermission("learning-resources:manage"), async (req, res) => {
   try {
     const resource = await LearningResource.findById(req.params.id)
 

@@ -1,7 +1,6 @@
 import express from "express"
 import Notification from "../models/Notification.js"
-import { verifyAdminToken } from "../middleware/auth.js"
-import { verifyVendorToken } from "../middleware/auth.js"
+import { verifyAdminToken, verifyVendorToken, requirePermission } from "../middleware/auth.js"
 import jwt from "jsonwebtoken"
 
 const router = express.Router()
@@ -137,7 +136,7 @@ router.get("/vendor", verifyVendorToken, async (req, res) => {
 })
 
 // Get notifications for admin
-router.get("/admin", verifyAdminToken, async (req, res) => {
+router.get("/admin", verifyAdminToken, requirePermission("notifications:view"), async (req, res) => {
   try {
     const { page = 1, limit = 20, unreadOnly = false } = req.query
 
@@ -272,7 +271,7 @@ router.put("/vendor/:id/read", verifyVendorToken, async (req, res) => {
 })
 
 // Mark notification as read - Admin
-router.put("/admin/:id/read", verifyAdminToken, async (req, res) => {
+router.put("/admin/:id/read", verifyAdminToken, requirePermission("notifications:view"), async (req, res) => {
   try {
     const notification = await Notification.findById(req.params.id)
 
@@ -361,7 +360,7 @@ router.put("/vendor/mark-all-read", verifyVendorToken, async (req, res) => {
 })
 
 // Mark all notifications as read - Admin
-router.put("/admin/mark-all-read", verifyAdminToken, async (req, res) => {
+router.put("/admin/mark-all-read", verifyAdminToken, requirePermission("notifications:view"), async (req, res) => {
   try {
     await Notification.updateMany(
       {

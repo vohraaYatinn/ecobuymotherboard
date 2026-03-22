@@ -1,6 +1,6 @@
 import express from "express"
 import Vendor from "../models/Vendor.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 import nodemailer from "nodemailer"
 import multer from "multer"
 import path from "path"
@@ -305,7 +305,7 @@ router.get("/:id", async (req, res) => {
 })
 
 // Create new vendor (Admin only)
-router.post("/", verifyAdminToken, handleVendorDocsUpload, async (req, res) => {
+router.post("/", verifyAdminToken, requirePermission("vendors:manage"), handleVendorDocsUpload, async (req, res) => {
   try {
     const {
       name,
@@ -407,7 +407,7 @@ router.post("/", verifyAdminToken, handleVendorDocsUpload, async (req, res) => {
 })
 
 // Update vendor (Admin only)
-router.put("/:id", verifyAdminToken, handleVendorDocsUpload, async (req, res) => {
+router.put("/:id", verifyAdminToken, requirePermission("vendors:manage"), handleVendorDocsUpload, async (req, res) => {
   try {
     const {
       name,
@@ -612,7 +612,7 @@ router.put("/:id", verifyAdminToken, handleVendorDocsUpload, async (req, res) =>
 })
 
 // Delete vendor (Admin only) - Soft delete
-router.delete("/:id", verifyAdminToken, async (req, res) => {
+router.delete("/:id", verifyAdminToken, requirePermission("vendors:manage"), async (req, res) => {
   try {
     const vendor = await Vendor.findById(req.params.id)
 
@@ -649,7 +649,7 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Bulk delete vendors (Admin only) - Hard delete
-router.post("/bulk-delete", verifyAdminToken, async (req, res) => {
+router.post("/bulk-delete", verifyAdminToken, requirePermission("vendors:manage"), async (req, res) => {
   try {
     const { vendorIds } = req.body
 
@@ -897,7 +897,7 @@ router.get("/:id/stats", async (req, res) => {
 })
 
 // Bulk update vendor commissions (Admin only)
-router.post("/update-commissions", verifyAdminToken, async (req, res) => {
+router.post("/update-commissions", verifyAdminToken, requirePermission("vendors:manage"), async (req, res) => {
   try {
     const { vendorIds, commission } = req.body
 
@@ -947,7 +947,11 @@ router.post("/update-commissions", verifyAdminToken, async (req, res) => {
 })
 
 // Export vendors list as CSV (Admin only)
-router.get("/export/csv", verifyAdminToken, async (req, res) => {
+router.get(
+  "/export/csv",
+  verifyAdminToken,
+  requirePermission("vendors:view", "vendors:manage"),
+  async (req, res) => {
   try {
     const { search = "", status = "" } = req.query
 
@@ -1057,10 +1061,15 @@ router.get("/export/csv", verifyAdminToken, async (req, res) => {
       message: "Error exporting vendors",
     })
   }
-})
+}
+)
 
 // Serve vendor document (Admin only)
-router.get("/:vendorId/documents/:documentIndex", verifyAdminToken, async (req, res) => {
+router.get(
+  "/:vendorId/documents/:documentIndex",
+  verifyAdminToken,
+  requirePermission("vendors:view", "vendors:manage"),
+  async (req, res) => {
   try {
     const { vendorId, documentIndex } = req.params
     const index = parseInt(documentIndex)
@@ -1157,7 +1166,8 @@ router.get("/:vendorId/documents/:documentIndex", verifyAdminToken, async (req, 
       })
     }
   }
-})
+}
+)
 
 export default router
 

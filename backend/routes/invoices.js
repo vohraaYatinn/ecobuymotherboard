@@ -1,5 +1,5 @@
 import express from "express"
-import { verifyAdminToken, verifyVendorToken } from "../middleware/auth.js"
+import { verifyAdminToken, verifyVendorToken, requirePermission } from "../middleware/auth.js"
 import { generateInvoicePDF, getOrderForInvoice } from "../services/invoiceService.js"
 import mongoose from "mongoose"
 import jwt from "jsonwebtoken"
@@ -75,7 +75,11 @@ router.get("/:orderId/download", async (req, res) => {
  * Download invoice for admin
  * GET /api/invoices/:orderId/download/admin
  */
-router.get("/:orderId/download/admin", verifyAdminToken, async (req, res) => {
+router.get(
+  "/:orderId/download/admin",
+  verifyAdminToken,
+  requirePermission("orders:view", "orders:manage"),
+  async (req, res) => {
   try {
     const { orderId } = req.params
 
@@ -113,7 +117,8 @@ router.get("/:orderId/download/admin", verifyAdminToken, async (req, res) => {
       message: error.message || "Failed to generate invoice",
     })
   }
-})
+}
+)
 
 /**
  * Download invoice for vendor

@@ -1,6 +1,6 @@
 import express from "express"
 import Settings from "../models/Settings.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -51,7 +51,11 @@ router.get("/shipping-charges", async (req, res) => {
 })
 
 // Get all settings (admin only)
-router.get("/admin/all", verifyAdminToken, async (req, res) => {
+router.get(
+  "/admin/all",
+  verifyAdminToken,
+  requirePermission("settings:view", "settings:manage"),
+  async (req, res) => {
   try {
     const settings = await Settings.find()
       .populate("lastUpdatedBy", "name email")
@@ -69,10 +73,15 @@ router.get("/admin/all", verifyAdminToken, async (req, res) => {
       message: "Error fetching settings",
     })
   }
-})
+}
+)
 
 // Get shipping charges setting (admin only)
-router.get("/admin/shipping-charges", verifyAdminToken, async (req, res) => {
+router.get(
+  "/admin/shipping-charges",
+  verifyAdminToken,
+  requirePermission("settings:view", "settings:manage"),
+  async (req, res) => {
   try {
     const setting = await getOrCreateSetting(
       "shipping_charges",
@@ -92,10 +101,11 @@ router.get("/admin/shipping-charges", verifyAdminToken, async (req, res) => {
       message: "Error fetching shipping charges",
     })
   }
-})
+}
+)
 
 // Update shipping charges (admin only)
-router.put("/admin/shipping-charges", verifyAdminToken, async (req, res) => {
+router.put("/admin/shipping-charges", verifyAdminToken, requirePermission("settings:manage"), async (req, res) => {
   try {
     const { shippingCharges } = req.body
 
@@ -161,7 +171,11 @@ async function getSiteSettingValue(key) {
 }
 
 // Get site settings (company + contact) for admin
-router.get("/admin/site-settings", verifyAdminToken, async (req, res) => {
+router.get(
+  "/admin/site-settings",
+  verifyAdminToken,
+  requirePermission("settings:view", "settings:manage"),
+  async (req, res) => {
   try {
     const data = {}
     for (const key of Object.keys(SITE_SETTING_KEYS)) {
@@ -190,10 +204,11 @@ router.get("/admin/site-settings", verifyAdminToken, async (req, res) => {
       message: "Error fetching site settings",
     })
   }
-})
+}
+)
 
 // Update site settings (company + contact) - admin only
-router.put("/admin/site-settings", verifyAdminToken, async (req, res) => {
+router.put("/admin/site-settings", verifyAdminToken, requirePermission("settings:manage"), async (req, res) => {
   try {
     const { companyInfo, contactInfo } = req.body
     const updates = []

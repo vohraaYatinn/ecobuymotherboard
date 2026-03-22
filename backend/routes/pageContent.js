@@ -1,6 +1,6 @@
 import express from "express"
 import PageContent from "../models/PageContent.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -208,7 +208,11 @@ router.get("/:slug", async (req, res) => {
 })
 
 // Get all page contents (admin only)
-router.get("/admin/all", verifyAdminToken, async (req, res) => {
+router.get(
+  "/admin/all",
+  verifyAdminToken,
+  requirePermission("page-content:view", "page-content:manage"),
+  async (req, res) => {
   try {
     const pages = await PageContent.find()
       .populate("lastUpdatedBy", "name email")
@@ -241,10 +245,15 @@ router.get("/admin/all", verifyAdminToken, async (req, res) => {
       message: "Error fetching page contents",
     })
   }
-})
+}
+)
 
 // Get single page for admin (including inactive)
-router.get("/admin/:slug", verifyAdminToken, async (req, res) => {
+router.get(
+  "/admin/:slug",
+  verifyAdminToken,
+  requirePermission("page-content:view", "page-content:manage"),
+  async (req, res) => {
   try {
     const { slug } = req.params
     
@@ -283,10 +292,11 @@ router.get("/admin/:slug", verifyAdminToken, async (req, res) => {
       message: "Error fetching page content",
     })
   }
-})
+}
+)
 
 // Create or update page content (admin only)
-router.put("/:slug", verifyAdminToken, async (req, res) => {
+router.put("/:slug", verifyAdminToken, requirePermission("page-content:manage"), async (req, res) => {
   try {
     const { slug } = req.params
     const { title, description, sections, isActive } = req.body
@@ -359,7 +369,7 @@ router.put("/:slug", verifyAdminToken, async (req, res) => {
 })
 
 // Reset page to default content (admin only)
-router.post("/:slug/reset", verifyAdminToken, async (req, res) => {
+router.post("/:slug/reset", verifyAdminToken, requirePermission("page-content:manage"), async (req, res) => {
   try {
     const { slug } = req.params
 

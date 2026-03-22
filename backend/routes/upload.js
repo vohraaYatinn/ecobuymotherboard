@@ -1,6 +1,6 @@
 import express from "express"
 import upload from "../middleware/upload.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 import path from "path"
 import { fileURLToPath } from "url"
 

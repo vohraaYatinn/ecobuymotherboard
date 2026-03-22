@@ -5,34 +5,38 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { LayoutDashboard, ShoppingBag, Users, Store, Package, Settings, Menu, LogOut, UserCircle, Bell, Send, BookOpen, BarChart3, FileText, Tag, HelpCircle } from "lucide-react"
+import { LayoutDashboard, ShoppingBag, Users, Store, Package, Settings, Menu, LogOut, UserCircle, Bell, Send, BookOpen, BarChart3, FileText, Tag, HelpCircle, Shield, UserCog } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAdminAuth } from "./admin-auth-guard"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.elecobuy.com"
 
 const menuItems = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
-  { href: "/admin/customers", label: "Customers", icon: Users },
-  { href: "/admin/vendors", label: "Vendors", icon: Store },
-  { href: "/admin/products", label: "Products", icon: Package },
-  { href: "/admin/categories", label: "Categories", icon: Tag },
-  { href: "/admin/reports", label: "Reports", icon: BarChart3 },
-  { href: "/admin/ledger", label: "Ledger", icon: FileText },
-  { href: "/admin/learning-resources", label: "Learning Resources", icon: BookOpen },
-  { href: "/admin/page-content", label: "Page Content", icon: FileText },
-  { href: "/admin/push-notifications", label: "Push Notifications", icon: Send },
-  { href: "/admin/notifications", label: "Notifications", icon: Bell, hasBadge: true },
-  { href: "/admin/support-requests", label: "Support Requests", icon: HelpCircle },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard:view" },
+  { href: "/admin/orders", label: "Orders", icon: ShoppingBag, permission: "orders:view" },
+  { href: "/admin/customers", label: "Customers", icon: Users, permission: "customers:view" },
+  { href: "/admin/vendors", label: "Vendors", icon: Store, permission: "vendors:view" },
+  { href: "/admin/products", label: "Products", icon: Package, permission: "products:view" },
+  { href: "/admin/categories", label: "Categories", icon: Tag, permission: "categories:view" },
+  { href: "/admin/reports", label: "Reports", icon: BarChart3, permission: "reports:view" },
+  { href: "/admin/ledger", label: "Ledger", icon: FileText, permission: "ledger:view" },
+  { href: "/admin/learning-resources", label: "Learning Resources", icon: BookOpen, permission: "learning-resources:view" },
+  { href: "/admin/page-content", label: "Page Content", icon: FileText, permission: "page-content:view" },
+  { href: "/admin/push-notifications", label: "Push Notifications", icon: Send, permission: "push-notifications:manage" },
+  { href: "/admin/notifications", label: "Notifications", icon: Bell, hasBadge: true, permission: "notifications:view" },
+  { href: "/admin/support-requests", label: "Support Requests", icon: HelpCircle, permission: "support:view" },
+  { href: "/admin/designations", label: "Designations", icon: Shield, permission: "designations:view" },
+  { href: "/admin/employees", label: "Employees", icon: UserCog, permission: "employees:view" },
+  { href: "/admin/settings", label: "Settings", icon: Settings, permission: "settings:view" },
 ]
 
 export function AdminSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [isOpen, setIsOpen] = useState(false)
-  const [adminData, setAdminData] = useState<{ email?: string } | null>(null)
+  const [adminData, setAdminData] = useState<{ email?: string; name?: string; type?: string; designation?: { name: string } } | null>(null)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const { userType, hasPermission } = useAdminAuth()
 
   useEffect(() => {
     // Load admin data from localStorage
@@ -91,17 +95,16 @@ export function AdminSidebar() {
         }
       }
 
-      // Clear localStorage
       localStorage.removeItem("adminToken")
       localStorage.removeItem("adminData")
+      localStorage.removeItem("adminLoginType")
 
-      // Redirect to login page
       router.push("/admin-login")
     } catch (error) {
       console.error("Logout error:", error)
-      // Still clear localStorage and redirect even if there's an error
       localStorage.removeItem("adminToken")
       localStorage.removeItem("adminData")
+      localStorage.removeItem("adminLoginType")
       router.push("/admin-login")
     }
   }
@@ -126,41 +129,47 @@ export function AdminSidebar() {
             <UserCircle className="h-6 w-6 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">Admin User</p>
+            <p className="text-sm font-medium text-foreground truncate">
+              {adminData?.name || (adminData?.type === "employee" ? "Employee" : "Admin User")}
+            </p>
             <p className="text-xs text-muted-foreground truncate">
-              {adminData?.email || "admin@ecobuy.com"}
+              {adminData?.type === "employee" && adminData?.designation
+                ? adminData.designation.name
+                : adminData?.email || "admin@ecobuy.com"}
             </p>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {menuItems.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname === item.href
-          return (
-            <Link key={item.href} href={item.href} onClick={() => setIsOpen(false)} className="relative">
-              <Button
-                variant="ghost"
-                className={cn(
-                  "w-full justify-start gap-3 text-sm font-medium",
-                  isActive
-                    ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
+      <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
+        {menuItems
+          .filter((item) => !item.permission || hasPermission(item.permission))
+          .map((item) => {
+            const Icon = item.icon
+            const isActive = pathname === item.href
+            return (
+              <Link key={item.href} href={item.href} onClick={() => setIsOpen(false)} className="relative">
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    "w-full justify-start gap-3 text-sm font-medium",
+                    isActive
+                      ? "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Button>
+                {item.hasBadge && unreadNotifications > 0 && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-destructive text-white text-xs font-bold flex items-center justify-center">
+                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                  </span>
                 )}
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </Button>
-              {item.hasBadge && unreadNotifications > 0 && (
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 rounded-full bg-destructive text-white text-xs font-bold flex items-center justify-center">
-                  {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                </span>
-              )}
-            </Link>
-          )
-        })}
+              </Link>
+            )
+          })}
       </nav>
 
       {/* Logout */}

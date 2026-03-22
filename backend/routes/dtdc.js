@@ -1,5 +1,5 @@
 import express from "express"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 import { trackConsignment, getAuthToken, checkPincodeServiceability } from "../services/dtdcService.js"
 import Order from "../models/Order.js"
 import mongoose from "mongoose"
@@ -11,7 +11,7 @@ const router = express.Router()
  * POST /api/dtdc/track
  * Body: { awbNumber: "V01197967" }
  */
-router.post("/track", verifyAdminToken, async (req, res) => {
+router.post("/track", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { awbNumber } = req.body
 
@@ -44,7 +44,7 @@ router.post("/track", verifyAdminToken, async (req, res) => {
  * PUT /api/dtdc/order/:orderId/awb
  * Body: { awbNumber: "V01197967" }
  */
-router.put("/order/:orderId/awb", verifyAdminToken, async (req, res) => {
+router.put("/order/:orderId/awb", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { orderId } = req.params
     const { awbNumber } = req.body
@@ -119,7 +119,7 @@ router.put("/order/:orderId/awb", verifyAdminToken, async (req, res) => {
  * Fetch and update tracking data for an order (Admin only)
  * POST /api/dtdc/order/:orderId/track
  */
-router.post("/order/:orderId/track", verifyAdminToken, async (req, res) => {
+router.post("/order/:orderId/track", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { orderId } = req.params
 
@@ -189,7 +189,7 @@ router.post("/order/:orderId/track", verifyAdminToken, async (req, res) => {
  * Get tracking data for an order (Admin only)
  * GET /api/dtdc/order/:orderId/tracking
  */
-router.get("/order/:orderId/tracking", verifyAdminToken, async (req, res) => {
+router.get("/order/:orderId/tracking", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { orderId } = req.params
 

@@ -4,7 +4,7 @@ import Order from "../models/Order.js"
 import CustomerAddress from "../models/CustomerAddress.js"
 import Cart from "../models/Cart.js"
 import Wishlist from "../models/Wishlist.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -17,7 +17,7 @@ const removeCustomerRelations = async (customerId) => {
 }
 
 // Bulk delete customers (Admin only) - Hard delete
-router.post("/bulk-delete", verifyAdminToken, async (req, res) => {
+router.post("/bulk-delete", verifyAdminToken, requirePermission("customers:manage"), async (req, res) => {
   try {
     const { customerIds } = req.body
 
@@ -67,7 +67,7 @@ router.post("/bulk-delete", verifyAdminToken, async (req, res) => {
 })
 
 // Get all customers with filters and pagination (Admin only)
-router.get("/", verifyAdminToken, async (req, res) => {
+router.get("/", verifyAdminToken, requirePermission("customers:view", "customers:manage"), async (req, res) => {
   try {
     const {
       page = 1,
@@ -184,7 +184,7 @@ router.get("/", verifyAdminToken, async (req, res) => {
 })
 
 // Get single customer by ID (Admin only)
-router.get("/:id", verifyAdminToken, async (req, res) => {
+router.get("/:id", verifyAdminToken, requirePermission("customers:view", "customers:manage"), async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id).select("-pushTokens").lean()
 
@@ -257,7 +257,7 @@ router.get("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Delete single customer (Admin only) - Hard delete
-router.delete("/:id", verifyAdminToken, async (req, res) => {
+router.delete("/:id", verifyAdminToken, requirePermission("customers:manage"), async (req, res) => {
   try {
     const customer = await Customer.findById(req.params.id)
 

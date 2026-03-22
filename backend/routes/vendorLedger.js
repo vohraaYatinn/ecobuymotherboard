@@ -1,6 +1,6 @@
 import express from "express"
 import Settings from "../models/Settings.js"
-import { verifyAdminToken, verifyVendorToken } from "../middleware/auth.js"
+import { verifyAdminToken, verifyVendorToken, requirePermission } from "../middleware/auth.js"
 import Order from "../models/Order.js"
 import Vendor from "../models/Vendor.js"
 import VendorUser from "../models/VendorUser.js"
@@ -30,7 +30,7 @@ const getOrCreateLedgerSettings = async () => {
   return setting
 }
 
-router.get("/admin", verifyAdminToken, async (_req, res) => {
+router.get("/admin", verifyAdminToken, requirePermission("ledger:view"), async (_req, res) => {
   try {
     const setting = await getOrCreateLedgerSettings()
 
@@ -50,7 +50,7 @@ router.get("/admin", verifyAdminToken, async (_req, res) => {
   }
 })
 
-router.put("/admin/:vendorId", verifyAdminToken, async (req, res) => {
+router.put("/admin/:vendorId", verifyAdminToken, requirePermission("ledger:view"), async (req, res) => {
   try {
     const { vendorId } = req.params
     const { paid = 0, notes = "" } = req.body || {}

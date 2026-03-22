@@ -1,7 +1,7 @@
 import express from "express"
 import Order from "../models/Order.js"
 import Vendor from "../models/Vendor.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -25,7 +25,7 @@ const calculateNetPayout = (order, vendor) => {
 }
 
 // Get full orders report
-router.get("/orders", verifyAdminToken, async (req, res) => {
+router.get("/orders", verifyAdminToken, requirePermission("reports:view"), async (req, res) => {
   try {
     const { page = 1, limit = 50, status = "", startDate = "", endDate = "" } = req.query
 
@@ -83,7 +83,7 @@ router.get("/orders", verifyAdminToken, async (req, res) => {
 })
 
 // Get summary (yesterday's or custom date range)
-router.get("/yesterday-summary", verifyAdminToken, async (req, res) => {
+router.get("/yesterday-summary", verifyAdminToken, requirePermission("reports:view"), async (req, res) => {
   try {
     const { startDate, endDate } = req.query
 
@@ -220,7 +220,7 @@ router.get("/yesterday-summary", verifyAdminToken, async (req, res) => {
 })
 
 // Get daily orders for chart (last N days)
-router.get("/daily-orders", verifyAdminToken, async (req, res) => {
+router.get("/daily-orders", verifyAdminToken, requirePermission("reports:view"), async (req, res) => {
   try {
     let startDate
     let endDate = null
@@ -295,7 +295,7 @@ router.get("/daily-orders", verifyAdminToken, async (req, res) => {
 })
 
 // Get weekly orders for chart (last N weeks)
-router.get("/weekly-orders", verifyAdminToken, async (req, res) => {
+router.get("/weekly-orders", verifyAdminToken, requirePermission("reports:view"), async (req, res) => {
   try {
     let startDate
     let endDate = null
@@ -372,7 +372,7 @@ router.get("/weekly-orders", verifyAdminToken, async (req, res) => {
 })
 
 // Get monthly orders for chart (last N months)
-router.get("/monthly-orders", verifyAdminToken, async (req, res) => {
+router.get("/monthly-orders", verifyAdminToken, requirePermission("reports:view"), async (req, res) => {
   try {
     let startDate
     let endDate = null
@@ -463,7 +463,7 @@ router.get("/monthly-orders", verifyAdminToken, async (req, res) => {
 })
 
 // Get comprehensive report summary
-router.get("/summary", verifyAdminToken, async (req, res) => {
+router.get("/summary", verifyAdminToken, requirePermission("reports:view"), async (req, res) => {
   try {
     const totalOrders = await Order.countDocuments()
 
@@ -537,7 +537,7 @@ router.get("/summary", verifyAdminToken, async (req, res) => {
 })
 
 // Get vendor analytics for a specific vendor
-router.get("/vendor/:vendorId", verifyAdminToken, async (req, res) => {
+router.get("/vendor/:vendorId", verifyAdminToken, requirePermission("reports:view"), async (req, res) => {
   try {
     const { vendorId } = req.params
     const { startDate = "", endDate = "" } = req.query
@@ -753,7 +753,7 @@ router.get("/vendor/:vendorId", verifyAdminToken, async (req, res) => {
 })
 
 // Get top 10 vendors by performance
-router.get("/vendors/top-10", verifyAdminToken, async (req, res) => {
+router.get("/vendors/top-10", verifyAdminToken, requirePermission("reports:view"), async (req, res) => {
   try {
     const { period = "all" } = req.query // all, 7d, 30d, 90d, 1y
 
@@ -880,7 +880,7 @@ router.get("/vendors/top-10", verifyAdminToken, async (req, res) => {
 })
 
 // Export vendor analytics data (CSV format)
-router.get("/vendor/:vendorId/export", verifyAdminToken, async (req, res) => {
+router.get("/vendor/:vendorId/export", verifyAdminToken, requirePermission("reports:view"), async (req, res) => {
   try {
     const { vendorId } = req.params
     const { startDate = "", endDate = "", format = "csv" } = req.query

@@ -1,6 +1,5 @@
 import express from "express";
-import { verifyVendorToken } from "../middleware/auth.js";
-import { verifyAdminToken } from "../middleware/auth.js";
+import { verifyVendorToken, verifyAdminToken, requirePermission } from "../middleware/auth.js";
 import VendorUser from "../models/VendorUser.js";
 import Vendor from "../models/Vendor.js";
 import { messaging, reinitializeFirebase } from "../config/firebase-admin.js";
@@ -121,7 +120,7 @@ router.post("/vendor/register-token", verifyVendorToken, async (req, res) => {
 });
 
 // Admin: Send push notification to all vendors or specific vendors
-router.post("/admin/send", verifyAdminToken, async (req, res) => {
+router.post("/admin/send", verifyAdminToken, requirePermission("push-notifications:manage"), async (req, res) => {
   try {
     const { title, body, data, vendorIds, sendToAll } = req.body;
 
@@ -353,7 +352,7 @@ router.post("/admin/send", verifyAdminToken, async (req, res) => {
 });
 
 // Test Firebase connection (for debugging)
-router.get("/test", verifyAdminToken, async (req, res) => {
+router.get("/test", verifyAdminToken, requirePermission("push-notifications:manage"), async (req, res) => {
   try {
     const hasProjectId = !!process.env.FIREBASE_PROJECT_ID;
     const hasClientEmail = !!process.env.FIREBASE_CLIENT_EMAIL;
@@ -384,7 +383,7 @@ router.get("/test", verifyAdminToken, async (req, res) => {
 });
 
 // Admin: Get all vendors with their push notification token status
-router.get("/admin/vendors", verifyAdminToken, async (req, res) => {
+router.get("/admin/vendors", verifyAdminToken, requirePermission("push-notifications:manage"), async (req, res) => {
   try {
     const vendors = await VendorUser.find({ isActive: true })
       .populate("vendorId", "name phone email status")

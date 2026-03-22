@@ -5,7 +5,7 @@ import Customer from "../models/Customer.js"
 import Notification from "../models/Notification.js"
 import Admin from "../models/Admin.js"
 import Product from "../models/Product.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 import { createShipmentForOrder } from "../services/dtdcService.js"
 import Vendor from "../models/Vendor.js"
 import VendorUser from "../models/VendorUser.js"
@@ -183,7 +183,7 @@ async function cancelOrderAndRefundAsAdmin({ order, adminId, reason }) {
 }
 
 // Get all orders with filters and pagination (Admin only)
-router.get("/", verifyAdminToken, async (req, res) => {
+router.get("/", verifyAdminToken, requirePermission("orders:view", "orders:manage"), async (req, res) => {
   try {
     const {
       page = 1,
@@ -391,7 +391,7 @@ router.get("/", verifyAdminToken, async (req, res) => {
 })
 
 // Get single order by ID (Admin only)
-router.get("/:id", verifyAdminToken, async (req, res) => {
+router.get("/:id", verifyAdminToken, requirePermission("orders:view", "orders:manage"), async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
@@ -434,7 +434,7 @@ router.get("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Update order status (Admin only)
-router.put("/:id/status", verifyAdminToken, async (req, res) => {
+router.put("/:id/status", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { status } = req.body
 
@@ -544,7 +544,7 @@ router.put("/:id/status", verifyAdminToken, async (req, res) => {
 })
 
 // Update order payment status (Admin only)
-router.put("/:id/payment-status", verifyAdminToken, async (req, res) => {
+router.put("/:id/payment-status", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { paymentStatus } = req.body
 
@@ -597,7 +597,7 @@ router.put("/:id/payment-status", verifyAdminToken, async (req, res) => {
 })
 
 // Update order (Admin only) - Full update
-router.put("/:id", verifyAdminToken, async (req, res) => {
+router.put("/:id", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { status, paymentStatus, paymentMethod, vendorId, createdAt, deliveredAt } = req.body
 
@@ -809,7 +809,7 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Assign vendor to order (Admin only)
-router.put("/:id/assign-vendor", verifyAdminToken, async (req, res) => {
+router.put("/:id/assign-vendor", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { vendorId } = req.body
 
@@ -874,7 +874,7 @@ router.put("/:id/assign-vendor", verifyAdminToken, async (req, res) => {
 
 // Push/broadcast an order to vendors for acceptance (Admin only)
 // This is intended for unassigned orders that should be accepted by a vendor (like "new order available").
-router.post("/:id/push-to-vendors", verifyAdminToken, async (req, res) => {
+router.post("/:id/push-to-vendors", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { excludeVendorId } = req.body || {}
 
@@ -1022,7 +1022,7 @@ router.post("/:id/push-to-vendors", verifyAdminToken, async (req, res) => {
 })
 
 // Bulk delete orders (Admin only) - Hard delete
-router.post("/bulk-delete", verifyAdminToken, async (req, res) => {
+router.post("/bulk-delete", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const { orderIds } = req.body
 
@@ -1064,7 +1064,7 @@ router.post("/bulk-delete", verifyAdminToken, async (req, res) => {
 })
 
 // Delete order (Admin only) - Soft delete by setting status to cancelled
-router.delete("/:id", verifyAdminToken, async (req, res) => {
+router.delete("/:id", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
 
@@ -1120,7 +1120,7 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Cancel order (Admin only) - cancels + attempts immediate refund and sends correct customer email.
-router.post("/:id/cancel", verifyAdminToken, async (req, res) => {
+router.post("/:id/cancel", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ success: false, message: "Invalid order ID format" })
@@ -1170,7 +1170,7 @@ router.post("/:id/cancel", verifyAdminToken, async (req, res) => {
 })
 
 // Get order statistics (Admin only)
-router.get("/stats/overview", verifyAdminToken, async (req, res) => {
+router.get("/stats/overview", verifyAdminToken, requirePermission("orders:view", "orders:manage"), async (req, res) => {
   try {
     const totalOrders = await Order.countDocuments()
     const pendingOrders = await Order.countDocuments({ status: "pending" })
@@ -1209,7 +1209,7 @@ router.get("/stats/overview", verifyAdminToken, async (req, res) => {
 })
 
 // Get all return requests (Admin only)
-router.get("/returns", verifyAdminToken, async (req, res) => {
+router.get("/returns", verifyAdminToken, requirePermission("orders:view", "orders:manage"), async (req, res) => {
   try {
     const {
       page = 1,
@@ -1260,7 +1260,7 @@ router.get("/returns", verifyAdminToken, async (req, res) => {
 })
 
 // Accept return request (Admin only)
-router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
+router.post("/:id/return/accept", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({
@@ -1463,7 +1463,7 @@ router.post("/:id/return/accept", verifyAdminToken, async (req, res) => {
 })
 
 // Deny return request (Admin only)
-router.post("/:id/return/deny", verifyAdminToken, async (req, res) => {
+router.post("/:id/return/deny", verifyAdminToken, requirePermission("orders:manage"), async (req, res) => {
   try {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({

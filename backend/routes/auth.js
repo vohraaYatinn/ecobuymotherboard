@@ -1,6 +1,7 @@
 import express from "express"
 import jwt from "jsonwebtoken"
 import Admin from "../models/Admin.js"
+import Employee from "../models/Employee.js"
 import { verifyAdminToken } from "../middleware/auth.js"
 
 const router = express.Router()
@@ -95,7 +96,7 @@ router.post("/admin/logout", async (req, res) => {
   }
 })
 
-// Verify token (for protected routes)
+// Verify token (for protected routes - supports both admin and employee tokens)
 router.get("/admin/verify", async (req, res) => {
   try {
     const token = req.headers.authorization?.split(" ")[1]
@@ -112,6 +113,43 @@ router.get("/admin/verify", async (req, res) => {
       process.env.JWT_SECRET || "your-secret-key-change-in-production"
     )
 
+    // Handle employee tokens
+    if (decoded.type === "employee") {
+      const employee = await Employee.findById(decoded.id).select("-password").populate("designation")
+
+      if (!employee || !employee.isActive) {
+        return res.status(401).json({ success: false, message: "Invalid or inactive employee" })
+      }
+
+      if (!employee.designation || !employee.designation.isActive) {
+        return res.status(403).json({ success: false, message: "Designation deactivated" })
+      }
+
+      return res.status(200).json({
+        success: true,
+        admin: {
+          id: employee._id,
+          email: employee.email,
+          name: employee.name || "",
+          phone: employee.phone || "",
+          role: "employee",
+          type: "employee",
+        },
+        employee: {
+          id: employee._id,
+          name: employee.name,
+          email: employee.email,
+          phone: employee.phone || "",
+          designation: {
+            id: employee.designation._id,
+            name: employee.designation.name,
+          },
+          permissions: employee.designation.permissions,
+        },
+      })
+    }
+
+    // Handle admin tokens
     const admin = await Admin.findById(decoded.id).select("-password")
 
     if (!admin || !admin.isActive) {

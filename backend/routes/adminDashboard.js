@@ -3,7 +3,7 @@ import Order from "../models/Order.js"
 import Customer from "../models/Customer.js"
 import Product from "../models/Product.js"
 import Vendor from "../models/Vendor.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 
 const router = express.Router()
 
@@ -91,7 +91,7 @@ const buildFinancialReport = (orders, vendorMap, gatewayRate, startDate) => {
 }
 
 // Get admin dashboard statistics
-router.get("/stats", verifyAdminToken, async (_req, res) => {
+router.get("/stats", verifyAdminToken, requirePermission("dashboard:view"), async (_req, res) => {
   try {
     const [
       totalOrders,

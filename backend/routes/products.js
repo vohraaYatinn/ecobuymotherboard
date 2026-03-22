@@ -2,7 +2,7 @@ import express from "express"
 import mongoose from "mongoose"
 import Product from "../models/Product.js"
 import Category from "../models/Category.js"
-import { verifyAdminToken } from "../middleware/auth.js"
+import { verifyAdminToken, requirePermission } from "../middleware/auth.js"
 import excelUpload from "../middleware/excelUpload.js"
 import * as XLSX from "xlsx"
 import fs from "fs"
@@ -308,7 +308,7 @@ router.get("/:id", async (req, res) => {
 })
 
 // Create new product (Admin only)
-router.post("/", verifyAdminToken, async (req, res) => {
+router.post("/", verifyAdminToken, requirePermission("products:manage"), async (req, res) => {
   try {
     const {
       name,
@@ -414,7 +414,7 @@ router.post("/", verifyAdminToken, async (req, res) => {
 })
 
 // Update product (Admin only)
-router.put("/:id", verifyAdminToken, async (req, res) => {
+router.put("/:id", verifyAdminToken, requirePermission("products:manage"), async (req, res) => {
   try {
     const {
       name,
@@ -527,7 +527,7 @@ router.put("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Delete product (Admin only) - Soft delete
-router.delete("/:id", verifyAdminToken, async (req, res) => {
+router.delete("/:id", verifyAdminToken, requirePermission("products:manage"), async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
 
@@ -562,7 +562,7 @@ router.delete("/:id", verifyAdminToken, async (req, res) => {
 })
 
 // Bulk hard delete products (Admin only)
-router.post("/bulk/delete", verifyAdminToken, async (req, res) => {
+router.post("/bulk/delete", verifyAdminToken, requirePermission("products:manage"), async (req, res) => {
   try {
     const { productIds } = req.body
 
@@ -638,7 +638,7 @@ router.get("/filters/options", async (req, res) => {
 })
 
 // Download Excel template for bulk product upload
-router.get("/bulk/template", verifyAdminToken, (req, res) => {
+router.get("/bulk/template", verifyAdminToken, requirePermission("products:manage"), (req, res) => {
   try {
     // Define template structure with sample data
     const templateData = [
@@ -753,7 +753,12 @@ router.get("/bulk/template", verifyAdminToken, (req, res) => {
 })
 
 // Bulk upload products from Excel (Admin only)
-router.post("/bulk/upload", verifyAdminToken, excelUpload.single("file"), async (req, res) => {
+router.post(
+  "/bulk/upload",
+  verifyAdminToken,
+  requirePermission("products:manage"),
+  excelUpload.single("file"),
+  async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
