@@ -35,8 +35,7 @@ const removeFcmTokenFromOtherVendors = async ({ token, vendorUserId, vendorId })
   }
 }
 
-// MessageCentral Configuration
-const MESSAGE_CENTRAL_CONFIG = {
+const getMessageCentralConfig = () => ({
   authToken:
     process.env.MESSAGE_CENTRAL_AUTH_TOKEN ||
     process.env.MESSAGE_CENTRAL_AUTHTOKEN ||
@@ -45,12 +44,12 @@ const MESSAGE_CENTRAL_CONFIG = {
     "",
   customerId: process.env.MESSAGE_CENTRAL_CUSTOMER_ID || process.env.MESSAGE_CENTRAL_CUSTOMER || "",
   baseUrl: "https://cpaas.messagecentral.com/verification/v3",
-}
+})
 
-const getMissingMessageCentralConfig = () => {
+const getMissingMessageCentralConfig = (config) => {
   const missing = []
-  if (!MESSAGE_CENTRAL_CONFIG.authToken) missing.push("MESSAGE_CENTRAL_AUTH_TOKEN")
-  if (!MESSAGE_CENTRAL_CONFIG.customerId) missing.push("MESSAGE_CENTRAL_CUSTOMER_ID")
+  if (!config.authToken) missing.push("MESSAGE_CENTRAL_AUTH_TOKEN")
+  if (!config.customerId) missing.push("MESSAGE_CENTRAL_CUSTOMER_ID")
   return missing
 }
 
@@ -85,7 +84,8 @@ const normalizePhoneForMatching = (phone) => {
 router.post("/send-otp", async (req, res) => {
   try {
     const { mobile, countryCode = "91" } = req.body
-    const missingConfig = getMissingMessageCentralConfig()
+    const messageCentralConfig = getMessageCentralConfig()
+    const missingConfig = getMissingMessageCentralConfig(messageCentralConfig)
 
     // Validate mobile number
     if (!mobile || mobile.length !== 10) {
@@ -153,17 +153,17 @@ router.post("/send-otp", async (req, res) => {
     // Production mode: Send OTP via MessageCentral
     try {
       const response = await axios.post(
-        `${MESSAGE_CENTRAL_CONFIG.baseUrl}/send`,
+        `${messageCentralConfig.baseUrl}/send`,
         null,
         {
           params: {
             countryCode: countryCode,
-            customerId: MESSAGE_CENTRAL_CONFIG.customerId,
+            customerId: messageCentralConfig.customerId,
             flowType: "SMS",
             mobileNumber: mobile,
           },
           headers: {
-            authToken: MESSAGE_CENTRAL_CONFIG.authToken,
+            authToken: messageCentralConfig.authToken,
           },
           timeout: 15000, // 15 second timeout
         }
@@ -295,16 +295,17 @@ router.post("/verify-otp", async (req, res) => {
     } else {
       // Production mode - verify with MessageCentral
       try {
-        const response = await axios.get(`${MESSAGE_CENTRAL_CONFIG.baseUrl}/validateOtp`, {
+        const messageCentralConfig = getMessageCentralConfig()
+        const response = await axios.get(`${messageCentralConfig.baseUrl}/validateOtp`, {
           params: {
             countryCode: countryCode,
             mobileNumber: mobile,
             verificationId: verificationId,
-            customerId: MESSAGE_CENTRAL_CONFIG.customerId,
+            customerId: messageCentralConfig.customerId,
             code: otp,
           },
           headers: {
-            authToken: MESSAGE_CENTRAL_CONFIG.authToken,
+            authToken: messageCentralConfig.authToken,
           },
           timeout: 10000, // 10 second timeout
         })
