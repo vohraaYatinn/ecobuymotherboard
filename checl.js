@@ -345,7 +345,7 @@ const { authenticateToken, requirePermission, requireAnyPermission } = require('
 
 // MessageCentral Configuration
 const MESSAGE_CENTRAL_CONFIG = {
-  authToken: 'eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJDLTNGMEI1MUQzRTBCNzQ1MCIsImlhdCI6MTc2ODk3NjAzOCwiZXhwIjoxOTI2NjU2MDM4fQ.ssUp02it6DsK5El9tmtDrWYyDXnbj3C5ZZQ6llSTuoDPYi1BaNoQf0BEJALe4vRQvQCIrBVFmycyQqIejXq24w',
+  authToken: 'eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJDLTNGMEI1MUQzRTBCNzQ1MCIsImlhdCI6MTc3NTY1NjI2MiwiZXhwIjoxOTMzMzM2MjYyfQ.UsARnm1Or1lKXB256hY_Ps6Ju-XjWMIn3JfAOgTIzetGc5xSoDVtHQGX0UdxOreouPqtxGOxxD9nUkpCVe9TFg',
   customerId: 'C-3F0B51D3E0B7450',
   baseUrl: 'https://cpaas.messagecentral.com/verification/v3'
 };
