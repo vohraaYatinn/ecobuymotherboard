@@ -8,9 +8,21 @@ const router = express.Router()
 
 // MessageCentral Configuration
 const MESSAGE_CENTRAL_CONFIG = {
-  authToken: process.env.MESSAGE_CENTRAL_AUTH_TOKEN || "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJDLTNGMEI1MUQzRTBCNzQ1MCIsImlhdCI6MTc3NTY1NjI2MiwiZXhwIjoxOTMzMzM2MjYyfQ.UsARnm1Or1lKXB256hY_Ps6Ju-XjWMIn3JfAOgTIzetGc5xSoDVtHQGX0UdxOreouPqtxGOxxD9nUkpCVe9TFg",
-  customerId: process.env.MESSAGE_CENTRAL_CUSTOMER_ID || "C-3F0B51D3E0B7450",
+  authToken:
+    process.env.MESSAGE_CENTRAL_AUTH_TOKEN ||
+    process.env.MESSAGE_CENTRAL_AUTHTOKEN ||
+    process.env.MESSAGE_CENTRAL_TOKEN ||
+    process.env.MESSAGE_CENTRAL_API_KEY ||
+    "",
+  customerId: process.env.MESSAGE_CENTRAL_CUSTOMER_ID || process.env.MESSAGE_CENTRAL_CUSTOMER || "",
   baseUrl: "https://cpaas.messagecentral.com/verification/v3",
+}
+
+const getMissingMessageCentralConfig = () => {
+  const missing = []
+  if (!MESSAGE_CENTRAL_CONFIG.authToken) missing.push("MESSAGE_CENTRAL_AUTH_TOKEN")
+  if (!MESSAGE_CENTRAL_CONFIG.customerId) missing.push("MESSAGE_CENTRAL_CUSTOMER_ID")
+  return missing
 }
 
 // Development mode flag
@@ -37,6 +49,7 @@ const normalizeMobile = (mobile, countryCode = "91") => {
 router.post("/send-otp", async (req, res) => {
   try {
     const { mobile, countryCode = "91", name, email } = req.body
+    const missingConfig = getMissingMessageCentralConfig()
 
     // Validate mobile number
     if (!mobile || mobile.length !== 10) {
@@ -84,6 +97,15 @@ router.post("/send-otp", async (req, res) => {
         isNewUser,
         mobile: fullMobile,
         devMode: true,
+      })
+    }
+
+    if (missingConfig.length > 0) {
+      console.error("❌ [CUSTOMER AUTH] MessageCentral config missing:", missingConfig)
+      return res.status(500).json({
+        success: false,
+        message: "OTP service is not configured",
+        error: `Missing env vars: ${missingConfig.join(", ")}`,
       })
     }
 
@@ -162,6 +184,7 @@ router.post("/send-otp", async (req, res) => {
         success: false,
         message: "Failed to send OTP",
         error: error.response?.data?.message || error.message,
+        providerResponseCode: error.response?.data?.responseCode || null,
       })
     }
   } catch (error) {
